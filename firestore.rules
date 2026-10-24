@@ -1,0 +1,407 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 100));
+    }
+
+    function isValidIntList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is int);
+    }
+
+    function isValidTask(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             (!('tags' in data) || isValidStringList(data.tags, 20)) &&
+             data.priority is string && data.priority in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] &&
+             (!('dueDateEpochDay' in data) || data.dueDateEpochDay is int) &&
+             (!('dueTimeMinutes' in data) || data.dueTimeMinutes is int) &&
+             (!('reminderAtMillis' in data) || data.reminderAtMillis is int) &&
+             (!('estimatedDurationMinutes' in data) || (data.estimatedDurationMinutes is int && data.estimatedDurationMinutes >= 0 && data.estimatedDurationMinutes <= 10080)) &&
+             data.status is string && data.status in ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED'] &&
+             (!('subtasksJson' in data) || (data.subtasksJson is string && data.subtasksJson.size() <= 5000)) &&
+             data.recurrenceRule is string && data.recurrenceRule in ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'] &&
+             (!('recurrenceIntervalDays' in data) || (data.recurrenceIntervalDays is int && data.recurrenceIntervalDays >= 0 && data.recurrenceIntervalDays <= 366)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000)) &&
+             data.inputSource is string && data.inputSource in ['MANUAL', 'VOICE', 'AI_ASSISTANT', 'RECURRING'] &&
+             (!('sortOrder' in data) || data.sortOrder is int) &&
+             (!('completedAtMillis' in data) || data.completedAtMillis is int) &&
+             (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidConsumptionEntry(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             (!('itemId' in data) || (data.itemId is string && data.itemId.size() <= 128)) &&
+             data.itemName is string && data.itemName.size() >= 1 && data.itemName.size() <= 200 &&
+             data.category is string && data.category in ['WATER', 'COFFEE', 'TEA', 'BEVERAGE', 'FOOD', 'SUPPLEMENT', 'CUSTOM'] &&
+             (data.quantity is int || data.quantity is float) && data.quantity > 0 && data.quantity <= 1000000 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 50 &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             data.localEpochDay is int &&
+             (!('linkedExpenseId' in data) || (data.linkedExpenseId is string && data.linkedExpenseId.size() <= 128)) &&
+             (!('linkedTaskId' in data) || (data.linkedTaskId is string && data.linkedTaskId.size() <= 128)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.inputSource is string && data.inputSource in ['MANUAL', 'QUICK_ADD', 'VOICE', 'AI_ASSISTANT'] &&
+             (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCustomItem(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 50 &&
+             (data.defaultQuantity is int || data.defaultQuantity is float) && data.defaultQuantity > 0 &&
+             (!('dailyTarget' in data) || ((data.dailyTarget is int || data.dailyTarget is float) && data.dailyTarget >= 0)) &&
+             (!('defaultPrice' in data) || ((data.defaultPrice is int || data.defaultPrice is float) && data.defaultPrice >= 0)) &&
+             (!('defaultCurrency' in data) || (data.defaultCurrency is string && data.defaultCurrency.size() <= 16)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExpenseEntry(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+             data.category is string && data.category in ['FOOD', 'COFFEE', 'TRANSPORT', 'SHOPPING', 'BILLS', 'HEALTH', 'OTHER'] &&
+             (data.amount is int || data.amount is float) && data.amount >= 0 && data.amount <= 1000000000000 &&
+             data.currency is string && data.currency in ['IRR', 'TOMAN', 'EUR', 'USD', 'GBP', 'AED'] &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             data.localEpochDay is int &&
+             (!('linkedConsumptionId' in data) || (data.linkedConsumptionId is string && data.linkedConsumptionId.size() <= 128)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.inputSource is string && data.inputSource in ['MANUAL', 'VOICE', 'AI_ASSISTANT'] &&
+             (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidHabit(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             data.scheduleType is string && data.scheduleType in ['DAILY', 'WEEKLY_DAYS', 'TIMES_PER_WEEK'] &&
+             (!('scheduleDays' in data) || isValidIntList(data.scheduleDays, 7)) &&
+             data.targetPerPeriod is int && data.targetPerPeriod >= 1 && data.targetPerPeriod <= 100 &&
+             (!('linkedTaskCategory' in data) || (data.linkedTaskCategory is string && data.linkedTaskCategory.size() <= 100)) &&
+             (!('reminderTimeMinutes' in data) || data.reminderTimeMinutes is int) &&
+             data.archived is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidHabitRecord(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.habitId is string && isValidId(data.habitId) &&
+             data.localEpochDay is int &&
+             data.completedCount is int && data.completedCount >= 0 && data.completedCount <= 1000 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+             data.inputSource is string && data.inputSource.size() >= 1 && data.inputSource.size() <= 50 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSleepRecord(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.sleepStartMillis is int && data.sleepStartMillis > 0 &&
+             data.wakeUpMillis is int && data.wakeUpMillis >= data.sleepStartMillis &&
+             data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 1800 &&
+             data.localEpochDay is int &&
+             data.qualityRating is int && data.qualityRating >= 1 && data.qualityRating <= 5 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.inputSource is string && data.inputSource in ['MANUAL', 'VOICE', 'AI_ASSISTANT'] &&
+             (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExerciseRecord(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.activityType is string && data.activityType.size() >= 1 && data.activityType.size() <= 150 &&
+             data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 1440 &&
+             (!('distanceMeters' in data) || ((data.distanceMeters is int || data.distanceMeters is float) && data.distanceMeters >= 0)) &&
+             data.intensity is string && data.intensity in ['LOW', 'MODERATE', 'HIGH'] &&
+             (!('repetitions' in data) || (data.repetitions is int && data.repetitions >= 0)) &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             data.localEpochDay is int &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.inputSource is string && data.inputSource in ['MANUAL', 'VOICE', 'AI_ASSISTANT'] &&
+             (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidActivityEvent(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             data.eventType is string && data.eventType.size() >= 1 && data.eventType.size() <= 100 &&
+             data.entityType is string && data.entityType.size() >= 1 && data.entityType.size() <= 100 &&
+             data.entityId is string && data.entityId.size() >= 1 && data.entityId.size() <= 128 &&
+             data.inputSource is string && data.inputSource.size() >= 1 && data.inputSource.size() <= 50 &&
+             data.operationStatus is string && data.operationStatus in ['PROPOSED', 'CONFIRMED', 'EXECUTED', 'REJECTED', 'FAILED'] &&
+             data.verificationSource is string && data.verificationSource == 'CLIENT_RECORDED' &&
+             data.correlationId is string && data.correlationId.size() >= 1 && data.correlationId.size() <= 128 &&
+             (!('beforeSummary' in data) || (data.beforeSummary is string && data.beforeSummary.size() <= 2000)) &&
+             (!('afterSummary' in data) || (data.afterSummary is string && data.afterSummary.size() <= 2000)) &&
+             data.humanSummary is string && data.humanSummary.size() >= 1 && data.humanSummary.size() <= 1000 &&
+             (!('recognizedTranscript' in data) || (data.recognizedTranscript is string && data.recognizedTranscript.size() <= 2000)) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidConversationTurn(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.role is string && data.role in ['USER', 'ASSISTANT'] &&
+             data.messageText is string && data.messageText.size() >= 1 && data.messageText.size() <= 8000 &&
+             (!('structuredActionJson' in data) || (data.structuredActionJson is string && data.structuredActionJson.size() <= 10000)) &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidUserPreferencesDoc(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.language is string && data.language in ['fa', 'en'] &&
+             data.darkTheme is bool &&
+             data.weekStartDay is int && data.weekStartDay >= 1 && data.weekStartDay <= 7 &&
+             data.calendarDisplay is string && data.calendarDisplay in ['JALALI', 'GREGORIAN'] &&
+             data.defaultCurrency is string && data.defaultCurrency in ['TOMAN', 'IRR', 'EUR', 'USD', 'GBP', 'AED'] &&
+             data.dailyWaterTargetMl is int && data.dailyWaterTargetMl >= 0 && data.dailyWaterTargetMl <= 20000 &&
+             (!('dailySleepTargetMinutes' in data) || (data.dailySleepTargetMinutes is int && data.dailySleepTargetMinutes >= 0 && data.dailySleepTargetMinutes <= 1440)) &&
+             (!('dailyExerciseTargetMinutes' in data) || (data.dailyExerciseTargetMinutes is int && data.dailyExerciseTargetMinutes >= 0 && data.dailyExerciseTargetMinutes <= 1440)) &&
+             (!('retainVoiceTranscripts' in data) || data.retainVoiceTranscripts is bool) &&
+             (!('retainConversations' in data) || data.retainConversations is bool) &&
+             (!('notificationsEnabled' in data) || data.notificationsEnabled is bool) &&
+             data.onboardingCompleted is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    match /users/{userId} {
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'category', 'priority', 'status', 'recurrenceRule', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'description', 'category', 'tags', 'priority', 'dueDateEpochDay', 'dueTimeMinutes', 'reminderAtMillis', 'estimatedDurationMinutes', 'status', 'subtasksJson', 'recurrenceRule', 'recurrenceIntervalDays', 'notes', 'inputSource', 'sortOrder', 'completedAtMillis', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         isValidTask(incoming());
+        allow update: if isSignedIn() &&
+                         isValidTask(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'tags', 'priority', 'dueDateEpochDay', 'dueTimeMinutes', 'reminderAtMillis', 'estimatedDurationMinutes', 'status', 'subtasksJson', 'recurrenceRule', 'recurrenceIntervalDays', 'notes', 'inputSource', 'sortOrder', 'completedAtMillis', 'idempotencyKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(taskId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /consumptionEntries/{entryId} {
+        allow get: if isOwner(userId) && isValidId(entryId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(entryId) &&
+                         incoming().keys().hasAll(['userId', 'itemName', 'category', 'quantity', 'unit', 'timestampMillis', 'localEpochDay', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'itemId', 'itemName', 'category', 'quantity', 'unit', 'timestampMillis', 'localEpochDay', 'linkedExpenseId', 'linkedTaskId', 'notes', 'inputSource', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         isValidConsumptionEntry(incoming());
+        allow update: if isSignedIn() &&
+                         isValidConsumptionEntry(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(entryId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['itemId', 'itemName', 'category', 'quantity', 'unit', 'timestampMillis', 'localEpochDay', 'linkedExpenseId', 'linkedTaskId', 'notes', 'inputSource', 'idempotencyKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(entryId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /customItems/{itemId} {
+        allow get: if isOwner(userId) && isValidId(itemId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(itemId) &&
+                         incoming().keys().hasAll(['userId', 'name', 'category', 'unit', 'defaultQuantity', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'category', 'unit', 'defaultQuantity', 'dailyTarget', 'defaultPrice', 'defaultCurrency', 'createdAt', 'updatedAt']) &&
+                         isValidCustomItem(incoming());
+        allow update: if isSignedIn() &&
+                         isValidCustomItem(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(itemId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'unit', 'defaultQuantity', 'dailyTarget', 'defaultPrice', 'defaultCurrency', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(itemId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /expenses/{expenseId} {
+        allow get: if isOwner(userId) && isValidId(expenseId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(expenseId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         isValidExpenseEntry(incoming());
+        allow update: if isSignedIn() &&
+                         isValidExpenseEntry(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(expenseId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(expenseId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /habits/{habitId} {
+        allow get: if isOwner(userId) && isValidId(habitId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(habitId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'category', 'scheduleType', 'targetPerPeriod', 'archived', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'category', 'scheduleType', 'scheduleDays', 'targetPerPeriod', 'linkedTaskCategory', 'reminderTimeMinutes', 'archived', 'createdAt', 'updatedAt']) &&
+                         isValidHabit(incoming());
+        allow update: if isSignedIn() &&
+                         isValidHabit(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(habitId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'scheduleType', 'scheduleDays', 'targetPerPeriod', 'linkedTaskCategory', 'reminderTimeMinutes', 'archived', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(habitId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /habitRecords/{recordId} {
+        allow get: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().keys().hasAll(['userId', 'habitId', 'localEpochDay', 'completedCount', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'habitId', 'localEpochDay', 'completedCount', 'notes', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         isValidHabitRecord(incoming());
+        allow update: if isSignedIn() &&
+                         isValidHabitRecord(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['habitId', 'localEpochDay', 'completedCount', 'notes', 'inputSource', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /sleepRecords/{recordId} {
+        allow get: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().keys().hasAll(['userId', 'sleepStartMillis', 'wakeUpMillis', 'durationMinutes', 'localEpochDay', 'qualityRating', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'sleepStartMillis', 'wakeUpMillis', 'durationMinutes', 'localEpochDay', 'qualityRating', 'notes', 'inputSource', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         isValidSleepRecord(incoming());
+        allow update: if isSignedIn() &&
+                         isValidSleepRecord(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['sleepStartMillis', 'wakeUpMillis', 'durationMinutes', 'localEpochDay', 'qualityRating', 'notes', 'inputSource', 'idempotencyKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /exerciseRecords/{recordId} {
+        allow get: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().keys().hasAll(['userId', 'activityType', 'durationMinutes', 'intensity', 'timestampMillis', 'localEpochDay', 'inputSource', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'activityType', 'durationMinutes', 'distanceMeters', 'intensity', 'repetitions', 'timestampMillis', 'localEpochDay', 'notes', 'inputSource', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         isValidExerciseRecord(incoming());
+        allow update: if isSignedIn() &&
+                         isValidExerciseRecord(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(recordId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['activityType', 'durationMinutes', 'distanceMeters', 'intensity', 'repetitions', 'timestampMillis', 'localEpochDay', 'notes', 'inputSource', 'idempotencyKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(recordId) && resource.data.userId == request.auth.uid;
+      }
+
+      // Append-only Activity & AI Audit Log: Clients can NEVER update or delete audit events
+      match /activityEvents/{eventId} {
+        allow get: if isOwner(userId) && isValidId(eventId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(eventId) &&
+                         incoming().keys().hasAll(['userId', 'timestampMillis', 'eventType', 'entityType', 'entityId', 'inputSource', 'operationStatus', 'verificationSource', 'correlationId', 'humanSummary', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'timestampMillis', 'eventType', 'entityType', 'entityId', 'inputSource', 'operationStatus', 'verificationSource', 'correlationId', 'beforeSummary', 'afterSummary', 'humanSummary', 'recognizedTranscript', 'createdAt']) &&
+                         isValidActivityEvent(incoming());
+        allow update, delete: if false;
+      }
+
+      match /conversations/{conversationId} {
+        allow get: if isOwner(userId) && isValidId(conversationId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         incoming().keys().hasAll(['userId', 'role', 'messageText', 'timestampMillis', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'role', 'messageText', 'structuredActionJson', 'timestampMillis', 'createdAt', 'updatedAt']) &&
+                         isValidConversationTurn(incoming());
+        allow update: if isSignedIn() &&
+                         isValidConversationTurn(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['messageText', 'structuredActionJson', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(conversationId) && resource.data.userId == request.auth.uid;
+      }
+
+      match /userPreferences/{prefId} {
+        allow get: if isOwner(userId) && isValidId(prefId) && resource.data.userId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isOwner(userId) &&
+                         isValidId(prefId) &&
+                         incoming().keys().hasAll(['userId', 'language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'onboardingCompleted', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'createdAt', 'updatedAt']) &&
+                         isValidUserPreferencesDoc(incoming());
+        allow update: if isSignedIn() &&
+                         isValidUserPreferencesDoc(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(prefId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(prefId) && resource.data.userId == request.auth.uid;
+      }
+    }
+  }
+}

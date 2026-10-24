@@ -1,0 +1,276 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "User task with priority, recurrence, subtasks, reminder, and status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase UID" },
+        "title": { "type": "string", "description": "Task title (1..300 chars)" },
+        "description": { "type": "string", "description": "Detailed task description" },
+        "category": { "type": "string", "description": "Task category" },
+        "tags": { "type": "array", "description": "List of string tags (max 20)" },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "dueDateEpochDay": { "type": "integer", "description": "Epoch day in local calendar or -1 if none" },
+        "dueTimeMinutes": { "type": "integer", "description": "Minutes from midnight (0..1439) or -1 if none" },
+        "reminderAtMillis": { "type": "integer", "description": "Reminder epoch millis or -1" },
+        "estimatedDurationMinutes": { "type": "integer", "description": "Estimated duration in minutes" },
+        "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "COMPLETED", "ARCHIVED"] },
+        "subtasksJson": { "type": "string", "description": "Serialized checklist items" },
+        "recurrenceRule": { "type": "string", "enum": ["NONE", "DAILY", "WEEKLY", "MONTHLY", "CUSTOM"] },
+        "recurrenceIntervalDays": { "type": "integer", "description": "Interval in days for custom recurrence" },
+        "notes": { "type": "string", "description": "Task notes" },
+        "inputSource": { "type": "string", "enum": ["MANUAL", "VOICE", "AI_ASSISTANT", "RECURRING"] },
+        "sortOrder": { "type": "integer", "description": "Custom ordering index" },
+        "completedAtMillis": { "type": "integer", "description": "Completion epoch millis or -1" },
+        "idempotencyKey": { "type": "string", "description": "Deduplication key" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "title", "category", "priority", "status", "recurrenceRule", "inputSource", "createdAt", "updatedAt"]
+    },
+    "ConsumptionEntry": {
+      "title": "ConsumptionEntry",
+      "description": "Non-monetary or linked consumption log entry (water, coffee, food, supplements, custom).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "category": { "type": "string", "enum": ["WATER", "COFFEE", "TEA", "BEVERAGE", "FOOD", "SUPPLEMENT", "CUSTOM"] },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "localEpochDay": { "type": "integer" },
+        "linkedExpenseId": { "type": "string" },
+        "linkedTaskId": { "type": "string" },
+        "notes": { "type": "string" },
+        "inputSource": { "type": "string", "enum": ["MANUAL", "QUICK_ADD", "VOICE", "AI_ASSISTANT"] },
+        "idempotencyKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "itemName", "category", "quantity", "unit", "timestampMillis", "localEpochDay", "inputSource", "createdAt", "updatedAt"]
+    },
+    "CustomItem": {
+      "title": "CustomItem",
+      "description": "User-defined custom consumption item with default unit, quantity, and target.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "defaultQuantity": { "type": "number" },
+        "dailyTarget": { "type": "number" },
+        "defaultPrice": { "type": "number" },
+        "defaultCurrency": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "category", "unit", "defaultQuantity", "createdAt", "updatedAt"]
+    },
+    "ExpenseEntry": {
+      "title": "ExpenseEntry",
+      "description": "Financial expense record with explicit currency isolation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["FOOD", "COFFEE", "TRANSPORT", "SHOPPING", "BILLS", "HEALTH", "OTHER"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["IRR", "TOMAN", "EUR", "USD", "GBP", "AED"] },
+        "timestampMillis": { "type": "integer" },
+        "localEpochDay": { "type": "integer" },
+        "linkedConsumptionId": { "type": "string" },
+        "notes": { "type": "string" },
+        "inputSource": { "type": "string", "enum": ["MANUAL", "VOICE", "AI_ASSISTANT"] },
+        "idempotencyKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "amount", "currency", "timestampMillis", "localEpochDay", "inputSource", "createdAt", "updatedAt"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "Tracked user habit with schedule and flexible target.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "scheduleType": { "type": "string", "enum": ["DAILY", "WEEKLY_DAYS", "TIMES_PER_WEEK"] },
+        "scheduleDays": { "type": "array", "description": "Days of week 1..7" },
+        "targetPerPeriod": { "type": "integer" },
+        "linkedTaskCategory": { "type": "string" },
+        "reminderTimeMinutes": { "type": "integer" },
+        "archived": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "scheduleType", "targetPerPeriod", "archived", "createdAt", "updatedAt"]
+    },
+    "HabitRecord": {
+      "title": "HabitRecord",
+      "description": "Completion record for a habit on a specific local calendar day.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "habitId": { "type": "string" },
+        "localEpochDay": { "type": "integer" },
+        "completedCount": { "type": "integer" },
+        "notes": { "type": "string" },
+        "inputSource": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "habitId", "localEpochDay", "completedCount", "inputSource", "createdAt", "updatedAt"]
+    },
+    "SleepRecord": {
+      "title": "SleepRecord",
+      "description": "User-recorded sleep duration and quality log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sleepStartMillis": { "type": "integer" },
+        "wakeUpMillis": { "type": "integer" },
+        "durationMinutes": { "type": "integer" },
+        "localEpochDay": { "type": "integer" },
+        "qualityRating": { "type": "integer", "description": "1..5 rating" },
+        "notes": { "type": "string" },
+        "inputSource": { "type": "string" },
+        "idempotencyKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sleepStartMillis", "wakeUpMillis", "durationMinutes", "localEpochDay", "qualityRating", "inputSource", "createdAt", "updatedAt"]
+    },
+    "ExerciseRecord": {
+      "title": "ExerciseRecord",
+      "description": "User-recorded exercise and physical activity log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "activityType": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "distanceMeters": { "type": "number" },
+        "intensity": { "type": "string", "enum": ["LOW", "MODERATE", "HIGH"] },
+        "repetitions": { "type": "integer" },
+        "timestampMillis": { "type": "integer" },
+        "localEpochDay": { "type": "integer" },
+        "notes": { "type": "string" },
+        "inputSource": { "type": "string" },
+        "idempotencyKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "activityType", "durationMinutes", "intensity", "timestampMillis", "localEpochDay", "inputSource", "createdAt", "updatedAt"]
+    },
+    "ActivityEvent": {
+      "title": "ActivityEvent",
+      "description": "Append-only operational activity log and Gemini audit trail event.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "eventType": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "inputSource": { "type": "string" },
+        "operationStatus": { "type": "string", "enum": ["PROPOSED", "CONFIRMED", "EXECUTED", "REJECTED", "FAILED"] },
+        "verificationSource": { "type": "string", "enum": ["CLIENT_RECORDED", "SERVER_VERIFIED"] },
+        "correlationId": { "type": "string" },
+        "beforeSummary": { "type": "string" },
+        "afterSummary": { "type": "string" },
+        "humanSummary": { "type": "string" },
+        "recognizedTranscript": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "timestampMillis", "eventType", "entityType", "entityId", "inputSource", "operationStatus", "verificationSource", "correlationId", "humanSummary", "createdAt"]
+    },
+    "ConversationTurn": {
+      "title": "ConversationTurn",
+      "description": "Gemini personal assistant conversation message turn.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["USER", "ASSISTANT"] },
+        "messageText": { "type": "string" },
+        "structuredActionJson": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "messageText", "timestampMillis", "createdAt", "updatedAt"]
+    },
+    "UserPreferencesDoc": {
+      "title": "UserPreferencesDoc",
+      "description": "Cloud-synced user preferences and daily targets.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "language": { "type": "string", "enum": ["fa", "en"] },
+        "darkTheme": { "type": "boolean" },
+        "weekStartDay": { "type": "integer", "description": "6 for Saturday (Persian default), 1 for Monday" },
+        "calendarDisplay": { "type": "string", "enum": ["JALALI", "GREGORIAN"] },
+        "defaultCurrency": { "type": "string", "enum": ["TOMAN", "IRR", "EUR", "USD", "GBP", "AED"] },
+        "dailyWaterTargetMl": { "type": "integer" },
+        "dailySleepTargetMinutes": { "type": "integer" },
+        "dailyExerciseTargetMinutes": { "type": "integer" },
+        "retainVoiceTranscripts": { "type": "boolean" },
+        "retainConversations": { "type": "boolean" },
+        "notificationsEnabled": { "type": "boolean" },
+        "onboardingCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "language", "darkTheme", "weekStartDay", "calendarDisplay", "defaultCurrency", "dailyWaterTargetMl", "onboardingCompleted", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "User tasks collection"
+    },
+    "/users/{userId}/consumptionEntries/{entryId}": {
+      "schema": "ConsumptionEntry",
+      "description": "User daily consumption logs"
+    },
+    "/users/{userId}/customItems/{itemId}": {
+      "schema": "CustomItem",
+      "description": "User custom consumption items"
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": "ExpenseEntry",
+      "description": "User financial expense logs"
+    },
+    "/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "User habits definitions"
+    },
+    "/users/{userId}/habitRecords/{recordId}": {
+      "schema": "HabitRecord",
+      "description": "User habit completion records"
+    },
+    "/users/{userId}/sleepRecords/{recordId}": {
+      "schema": "SleepRecord",
+      "description": "User sleep tracking records"
+    },
+    "/users/{userId}/exerciseRecords/{recordId}": {
+      "schema": "ExerciseRecord",
+      "description": "User exercise tracking records"
+    },
+    "/users/{userId}/activityEvents/{eventId}": {
+      "schema": "ActivityEvent",
+      "description": "Append-only operational activity and AI audit log"
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": "ConversationTurn",
+      "description": "AI assistant conversation turns"
+    },
+    "/users/{userId}/userPreferences/{prefId}": {
+      "schema": "UserPreferencesDoc",
+      "description": "User settings and targets"
+    }
+  }
+}

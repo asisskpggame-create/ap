@@ -1,0 +1,6 @@
+{
+  "name": "Personal Life OS",
+  "description": "Your Life, Organized by AI — Native Android AI Personal Assistant with Persian RTL support, Tasks, Voice Capture, Consumption, Expenses, Habits, Sleep, Exercise, and Gemini Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
