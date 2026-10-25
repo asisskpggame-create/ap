@@ -69,6 +69,12 @@ fun LiquidGlassBackdrop(
             .drawBehind {
                 val canvasWidth = size.width
                 val canvasHeight = size.height
+                if (canvasWidth <= 1f || canvasHeight <= 1f) return@drawBehind
+
+                val r1 = (canvasWidth * 1.05f).coerceAtLeast(1f)
+                val r2 = (canvasWidth * 0.70f).coerceAtLeast(1f)
+                val r3 = (canvasWidth * 0.65f).coerceAtLeast(1f)
+                val r4 = (canvasWidth * 0.75f).coerceAtLeast(1f)
 
                 // Fluid Dome 1: Top Volumetric Aura (Directly inspired by the luxury hero screenshot)
                 drawCircle(
@@ -80,9 +86,9 @@ fun LiquidGlassBackdrop(
                             Color.Transparent
                         ),
                         center = Offset(canvasWidth * 0.5f, 0f),
-                        radius = canvasWidth * 1.05f
+                        radius = r1
                     ),
-                    radius = canvasWidth * 1.05f,
+                    radius = r1,
                     center = Offset(canvasWidth * 0.5f, 0f)
                 )
 
@@ -95,9 +101,9 @@ fun LiquidGlassBackdrop(
                             Color.Transparent
                         ),
                         center = Offset(canvasWidth * 0.15f, canvasHeight * 0.18f),
-                        radius = canvasWidth * 0.70f
+                        radius = r2
                     ),
-                    radius = canvasWidth * 0.70f,
+                    radius = r2,
                     center = Offset(canvasWidth * 0.15f, canvasHeight * 0.18f)
                 )
 
@@ -110,9 +116,9 @@ fun LiquidGlassBackdrop(
                             Color.Transparent
                         ),
                         center = Offset(canvasWidth * 0.88f, canvasHeight * 0.52f),
-                        radius = canvasWidth * 0.65f
+                        radius = r3
                     ),
-                    radius = canvasWidth * 0.65f,
+                    radius = r3,
                     center = Offset(canvasWidth * 0.88f, canvasHeight * 0.52f)
                 )
 
@@ -125,9 +131,9 @@ fun LiquidGlassBackdrop(
                             Color.Transparent
                         ),
                         center = Offset(canvasWidth * 0.5f, canvasHeight * 0.98f),
-                        radius = canvasWidth * 0.75f
+                        radius = r4
                     ),
-                    radius = canvasWidth * 0.75f,
+                    radius = r4,
                     center = Offset(canvasWidth * 0.5f, canvasHeight * 0.98f)
                 )
             },

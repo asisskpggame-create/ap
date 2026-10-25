@@ -122,9 +122,13 @@ fun VoiceCaptureModalSheet(
 
     // SpeechRecognizer instance
     val speechRecognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
+        try {
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } else {
+                null
+            }
+        } catch (_: Throwable) {
             null
         }
     }
@@ -580,11 +584,13 @@ private fun VoiceWaveformHeader(
     ) {
         // Left waveform bars
         Canvas(modifier = Modifier.size(width = 88.dp, height = 48.dp)) {
+            if (size.width <= 2f || size.height <= 2f) return@Canvas
             val barCount = 7
             val spacing = size.width / barCount
+            val minBarHeight = 6.dp.toPx().coerceAtMost(size.height)
             for (i in 0 until barCount) {
                 val factor = if (isRecording) ((i % 3 + 1) * 0.25f * pulse * (0.6f + rmsLevel)) else 0.18f
-                val barHeight = (size.height * factor).coerceIn(6.dp.toPx(), size.height)
+                val barHeight = (size.height * factor).coerceIn(minBarHeight, size.height)
                 drawRoundRect(
                     color = if (isRecording) ElectricTeal else MutedViolet.copy(alpha = 0.4f),
                     topLeft = Offset(i * spacing + 4f, (size.height - barHeight) / 2f),
@@ -629,11 +635,13 @@ private fun VoiceWaveformHeader(
 
         // Right waveform bars
         Canvas(modifier = Modifier.size(width = 88.dp, height = 48.dp)) {
+            if (size.width <= 2f || size.height <= 2f) return@Canvas
             val barCount = 7
             val spacing = size.width / barCount
+            val minBarHeight = 6.dp.toPx().coerceAtMost(size.height)
             for (i in 0 until barCount) {
                 val factor = if (isRecording) (((barCount - i) % 3 + 1) * 0.25f * pulse * (0.6f + rmsLevel)) else 0.18f
-                val barHeight = (size.height * factor).coerceIn(6.dp.toPx(), size.height)
+                val barHeight = (size.height * factor).coerceIn(minBarHeight, size.height)
                 drawRoundRect(
                     color = if (isRecording) ElectricTeal else MutedViolet.copy(alpha = 0.4f),
                     topLeft = Offset(i * spacing + 4f, (size.height - barHeight) / 2f),

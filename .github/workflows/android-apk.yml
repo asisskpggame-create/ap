@@ -51,10 +51,71 @@ jobs:
               -dname "CN=Personal Life OS,O=AIStudio,C=US"
           fi
 
-      - name: Ensure .env exists for Secrets Plugin
+      - name: Ensure .env and Firebase Config exist for Standalone APK Build
         run: |
           if [ ! -f .env ]; then
             cp .env.example .env || echo "GEMINI_API_KEY=" > .env
+          fi
+          if [ ! -f app/google-services.json ]; then
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "957078935606",
+              "project_id": "gen-lang-client-0280793534",
+              "storage_bucket": "gen-lang-client-0280793534.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:957078935606:android:925e0574c700d106c9a097",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.personallifeos.kxmpzq"
+                  }
+                },
+                "oauth_client": [
+                  {
+                    "client_id": "957078935606-m9055dtit0577lvkjmp2sqvffbld1ueg.apps.googleusercontent.com",
+                    "client_type": 1,
+                    "android_info": {
+                      "package_name": "com.aistudio.personallifeos.kxmpzq",
+                      "certificate_hash": "24f9fedb0e3af68bfe2bf6b906ce1114aa87b09d"
+                    }
+                  },
+                  {
+                    "client_id": "957078935606-nfbplhuqu6k4g2j1r5rm83m4e04u8s8t.apps.googleusercontent.com",
+                    "client_type": 3
+                  }
+                ],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDniF4amC-qH1eL1NqLKOvo6EgZdqhvda8"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": [
+                      {
+                        "client_id": "957078935606-nfbplhuqu6k4g2j1r5rm83m4e04u8s8t.apps.googleusercontent.com",
+                        "client_type": 3
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+          if [ ! -f app/src/main/res/values/firebase_applet_config.xml ]; then
+            mkdir -p app/src/main/res/values
+            cat << 'EOF' > app/src/main/res/values/firebase_applet_config.xml
+          <?xml version="1.0" encoding="utf-8" standalone="no"?>
+          <resources>
+              <string name="firestore_database_id" translatable="false">ai-studio-android-personal-a911cedb-55ed-4d73-8197-39f8e08a22de</string>
+          </resources>
+          EOF
           fi
 
       - name: Build Signed Debug & Release APKs
@@ -65,33 +126,36 @@ jobs:
         run: |
           gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-LiquidGlass-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-LiquidGlass-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-LiquidGlass-APKs
+          name: Personal-Life-OS-v1.1.0-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: "Personal Life OS v1.0.${{ github.run_number }} (Liquid Glass Edition)"
+          tag_name: v1.1.${{ github.run_number }}
+          name: "Personal Life OS v1.1.${{ github.run_number }} (S24 Ultra Fixed + Liquid Glass)"
           body: |
-            ## Personal Life OS — Liquid Glass Edition
+            ## Personal Life OS v1.1.0 — Liquid Glass Edition (S24 Ultra Crash Fix)
+            - **رفع کامل کرش روی Samsung Galaxy S24 Ultra:**
+              - مقداردهی اولیه خودکار و ضدکرش `FirebaseApp` و `FirebaseFirestore` حتی در بیلدهای مستقل گیت‌هاب
+              - ایمن‌سازی شیدرهای `RadialGradient` و `Canvas` روی رندرر سخت‌افزاری Vulkan/Skia با تراکم بالای `xxxhdpi` (505 PPI)
+              - محافظت کامل از `CredentialManager` و `SpeechRecognizer` در برابر استثناهای سیستمی One UI
             - **UI Design:** Complete visionOS / iOS 18 Multi-Layered Liquid Glass (`LiquidGlassCard`, `LiquidGlassPill`, `GlassSurface`, `LiquidGlassBackdrop`)
-            - **Personal Assistant & Voice Capture:** Integrated Gemini AI + Real-time Speech-to-Text
             - **Offline-First & Cloud Sync:** Room Database + Firebase Firestore Sync
             
-            ### فایل‌های قابل نصب (APK):
-            - **`Personal-Life-OS-LiquidGlass-Debug.apk`**: امضا شده با کلید اصلی پروژه (پشتیبانی کامل از ورود با گوگل / Firebase Auth)
-            - **`Personal-Life-OS-LiquidGlass-Release.apk`**: نسخه ریلیز بهینه‌سازی‌شده
+            ### فایل‌های قابل نصب (APK - نسخه ۱.۱.۰):
+            - **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk`**: امضا شده با کلید اصلی پروژه (پشتیبانی کامل از ورود با گوگل / Firebase Auth و نصب مستقیم)
+            - **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk`**: نسخه ریلیز بهینه‌سازی‌شده
           files: |
-            release-assets/Personal-Life-OS-LiquidGlass-Debug.apk
-            release-assets/Personal-Life-OS-LiquidGlass-Release.apk
+            release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk
+            release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk
           draft: false
           prerelease: false
         env:

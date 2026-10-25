@@ -983,9 +983,11 @@ fun HomeDashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Canvas(modifier = Modifier.fillMaxSize()) {
+                                    if (size.minDimension <= 2f) return@Canvas
                                     val centerX = size.width / 2f
                                     val centerY = size.height / 2f
-                                    val maxRadius = size.minDimension / 2f
+                                    val maxRadius = (size.minDimension / 2f).coerceAtLeast(1f)
+                                    val coreRadius = (maxRadius * 0.45f).coerceAtLeast(1f)
 
                                     // Ambient Core Glow
                                     drawCircle(
@@ -1026,16 +1028,16 @@ fun HomeDashboardScreen(
                                                 Color(0xFF4C8210)
                                             ),
                                             center = Offset(centerX - maxRadius * 0.15f, centerY - maxRadius * 0.15f),
-                                            radius = maxRadius * 0.45f
+                                            radius = coreRadius
                                         ),
-                                        radius = maxRadius * 0.38f,
+                                        radius = (maxRadius * 0.38f).coerceAtLeast(1f),
                                         center = Offset(centerX, centerY)
                                     )
 
                                     // Specular Highlight Pin
                                     drawCircle(
                                         color = Color.White.copy(alpha = 0.9f),
-                                        radius = maxRadius * 0.08f,
+                                        radius = (maxRadius * 0.08f).coerceAtLeast(1f),
                                         center = Offset(centerX - maxRadius * 0.15f, centerY - maxRadius * 0.15f)
                                     )
                                 }

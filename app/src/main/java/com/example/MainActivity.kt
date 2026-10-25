@@ -95,6 +95,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.firebase.authStateFlow
 import com.example.data.firebase.configureAppCheck
 import com.example.data.firebase.onGoogleSignInClicked
+import com.example.data.firebase.safeAuthStateFlow
+import com.example.data.firebase.safeCurrentUser
 import com.example.data.firebase.signOut
 import com.example.data.local.LifeOsDatabase
 import com.example.data.local.PreferencesDataStore
@@ -175,11 +177,10 @@ fun PersonalLifeOSAppRoot(
     openVoiceInitially: Boolean = false,
     onConsumedVoiceTrigger: () -> Unit = {}
 ) {
-    val currentUser by Firebase.auth.authStateFlow().collectAsStateWithLifecycle(
-        initialValue = Firebase.auth.currentUser
-    )
-
     val context = LocalContext.current
+    val currentUser by remember(context) { safeAuthStateFlow(context) }.collectAsStateWithLifecycle(
+        initialValue = safeCurrentUser(context)
+    )
     val uid = currentUser?.uid ?: LifeOsDatabase.LOCAL_DEVICE_USER_ID
     val vm: LifeOsViewModel = viewModel(
         key = "life_os_vm_$uid",
@@ -221,7 +222,13 @@ fun AuthenticatedLifeOsShell(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val credentialManager = remember(context) {
+        try {
+            CredentialManager.create(context)
+        } catch (_: Throwable) {
+            null
+        }
+    }
 
     var currentSectionRoute by rememberSaveable { mutableStateOf(AppSection.HOME.route) }
     var showVoiceModal by rememberSaveable { mutableStateOf(false) }

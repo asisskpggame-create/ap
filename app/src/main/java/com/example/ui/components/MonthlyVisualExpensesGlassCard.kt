@@ -214,6 +214,7 @@ fun MonthlyVisualExpensesGlassCard(
                     Canvas(modifier = Modifier.size(130.dp)) {
                         val strokeWidth = 14.dp.toPx()
                         val arcSize = size.minDimension - strokeWidth
+                        if (arcSize <= 2f) return@Canvas
                         val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
 
                         // Base track ring

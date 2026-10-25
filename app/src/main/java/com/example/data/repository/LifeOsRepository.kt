@@ -53,17 +53,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class LifeOsRepository(
-    private val db: FirebaseFirestore,
+    private val cloudDb: FirebaseFirestore?,
     private val localDao: LifeOsDao? = null
 ) {
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        ),
+        resolveFirestoreSafely(context.applicationContext),
         LifeOsDatabase.getInstance(context.applicationContext).lifeOsDao()
     )
 
-    private val auth = Firebase.auth
+    private val db: FirebaseFirestore
+        get() = cloudDb
+            ?: throw IllegalStateException("Cloud Firestore is not available on this device.")
+
+    private val auth
+        get() = try {
+            Firebase.auth
+        } catch (_: Throwable) {
+            null
+        }
+
     private val recentIdempotencyKeys = ConcurrentHashMap<String, String>()
 
     /**
@@ -71,7 +79,7 @@ class LifeOsRepository(
      * strictly requires a signed-in Firebase user.
      */
     fun requireUserId(): String {
-        return auth.currentUser?.uid
+        return auth?.currentUser?.uid
             ?: throw IllegalStateException("User must be signed in with Google before accessing Firestore.")
     }
 
@@ -82,9 +90,29 @@ class LifeOsRepository(
      */
     fun resolveActiveUserId(): String {
         return if (localDao != null) {
-            auth.currentUser?.uid ?: LifeOsDatabase.LOCAL_DEVICE_USER_ID
+            auth?.currentUser?.uid ?: LifeOsDatabase.LOCAL_DEVICE_USER_ID
         } else {
             requireUserId()
+        }
+    }
+
+    companion object {
+        private fun resolveFirestoreSafely(appContext: Context): FirebaseFirestore? {
+            return try {
+                com.example.data.firebase.ensureFirebaseInitialized(appContext)
+                val dbId = try {
+                    appContext.getString(R.string.firestore_database_id)
+                } catch (_: Throwable) {
+                    "ai-studio-android-personal-a911cedb-55ed-4d73-8197-39f8e08a22de"
+                }
+                if (dbId.isNotBlank()) {
+                    FirebaseFirestore.getInstance(dbId)
+                } else {
+                    FirebaseFirestore.getInstance()
+                }
+            } catch (_: Throwable) {
+                null
+            }
         }
     }
 
@@ -1476,8 +1504,8 @@ class LifeOsRepository(
     }
 
     suspend fun saveUserPreferencesToCloud(prefs: UserPreferencesDoc): Result<Unit> {
-        val cloudUser = auth.currentUser
-        if (localDao != null && cloudUser == null) {
+        val cloudUser = auth?.currentUser
+        if (localDao != null && (cloudUser == null || cloudDb == null)) {
             logActivityEvent(
                 eventType = "SETTINGS_UPDATED",
                 entityType = "PREFERENCES",
@@ -1574,9 +1602,9 @@ class LifeOsRepository(
             dao.pruneSyncedQueueItems(uid)
 
             // 2. If signed in with a Google Account, push unsynced records to Cloud Firestore
-            val cloudUid = auth.currentUser?.uid
-            if (cloudUid != null) {
-                val userDoc = db.collection("users").document(cloudUid)
+            val cloudUid = auth?.currentUser?.uid
+            if (cloudUid != null && cloudDb != null) {
+                val userDoc = cloudDb.collection("users").document(cloudUid)
 
                 for (t in unsyncedTasks) {
                     val domain = t.toDomain().copy(userId = cloudUid)
@@ -1679,8 +1707,8 @@ class LifeOsRepository(
             localDao.clearCachedConversations(uid)
         }
 
-        val cloudUid = auth.currentUser?.uid
-        if (cloudUid == null && localDao != null) {
+        val cloudUid = auth?.currentUser?.uid
+        if ((cloudUid == null || cloudDb == null) && localDao != null) {
             return Result.success(Unit)
         }
 
