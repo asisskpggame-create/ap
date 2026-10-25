@@ -283,11 +283,18 @@ fun MonthlyVisualExpensesGlassCard(
                     modifier = Modifier.padding(start = 12.dp)
                 ) {
                     if (groupedCategories.isEmpty()) {
-                        Text(
-                            text = "هنوز هزینه‌ای در این ماه ثبت نشده است.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "این ماه هزینه‌ای ثبت نشده است ✦\nکل بودجه دست‌نخورده و امن است.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF10B981),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                     } else {
                         groupedCategories.take(3).forEach { slice ->
                             Row(

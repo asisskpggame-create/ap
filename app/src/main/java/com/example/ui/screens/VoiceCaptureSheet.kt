@@ -91,6 +91,7 @@ import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.GlassCard
 import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.GlassTheme
+import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
 
 /**
@@ -273,7 +274,8 @@ fun VoiceCaptureModalSheet(
         onDismissRequest = onDismissSheet,
         sheetState = sheetState,
         shape = GlassTheme.tokens.bottomSheetShape,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+        scrimColor = Color.Black.copy(alpha = 0.65f)
     ) {
         Column(
             modifier = Modifier
@@ -307,13 +309,9 @@ fun VoiceCaptureModalSheet(
                     )
                 }
 
-                Surface(
+                LiquidGlassPill(
                     shape = RoundedCornerShape(50),
-                    color = if (isRecording) MaterialTheme.colorScheme.error.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    border = BorderStroke(
-                        1.dp,
-                        GlassTheme.specularBorderBrush(if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                    )
+                    accentGlow = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 ) {
                     Text(
                         text = if (isRecording) "● در حال ضبط" else "آماده ضبط",
@@ -681,10 +679,11 @@ fun StructuredOperationPreviewCard(
             )
 
             editableOps.forEachIndexed { idx, op ->
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                GlassCard(
+                    shape = RoundedCornerShape(14.dp),
+                    baseColor = Color(0xFF141F1A),
+                    alpha = 0.7f,
+                    accentBorderColor = MutedViolet,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(

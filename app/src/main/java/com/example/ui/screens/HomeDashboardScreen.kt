@@ -11,8 +11,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.GlassmorphismDefaults
 import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -259,7 +261,8 @@ fun HomeDashboardScreen(
     if (showQuickLogManageSheet) {
         ModalBottomSheet(
             onDismissRequest = { showQuickLogManageSheet = false },
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            scrimColor = Color.Black.copy(alpha = 0.65f)
         ) {
             Column(
                 modifier = Modifier
@@ -295,10 +298,9 @@ fun HomeDashboardScreen(
                     )
                 } else {
                     customItems.forEach { preset ->
-                        Surface(
+                        LiquidGlassCard(
                             shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            accentBorderColor = ElectricTeal,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -354,6 +356,10 @@ fun HomeDashboardScreen(
                 editingPreset = null
                 showNewPresetDialog = false
             },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = {
                 Text(
                     text = if (currentEditing != null) "ویرایش «${currentEditing.name}»" else "دکمه ثبت سریع جدید",
@@ -488,16 +494,13 @@ fun HomeDashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                            modifier = Modifier
-                                .clickable {
-                                    WorldClassOsUtils.HapticSignature.crispTick(context)
-                                    showThemeAndLayoutStudio = !showThemeAndLayoutStudio
-                                }
-                                .testTag("toggle_theme_layout_studio_button")
+                        LiquidGlassPill(
+                            accentGlow = MaterialTheme.colorScheme.primary,
+                            onClick = {
+                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                showThemeAndLayoutStudio = !showThemeAndLayoutStudio
+                            },
+                            modifier = Modifier.testTag("toggle_theme_layout_studio_button")
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -519,10 +522,8 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        LiquidGlassPill(
+                            accentGlow = null
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -1649,17 +1650,45 @@ private fun PriorityTasksSectionCard(
 
             if (pendingTodayTasks.isEmpty()) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = EmeraldSuccess.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "✨ هیچ تسک فعالی برای امروز باقی نمانده است. با دکمه + یا فرمان صوتی تسک جدید اضافه کنید.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(14.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = EmeraldSuccess.copy(alpha = 0.22f),
+                            border = BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.55f)),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = EmeraldSuccess,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "همه کارهای امروز با موفقیت تیک خورد! ✦",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "مومنتوم امروزت عالیه؛ می‌تونی استراحت کنی یا کار جدیدت رو با فرمان صوتی ثبت کنی.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             } else {
                 pendingTodayTasks.take(4).forEach { task ->
@@ -1670,10 +1699,9 @@ private fun PriorityTasksSectionCard(
                         "LOW" -> SkyInfo
                         else -> taskCategory.color
                     }
-                    Surface(
+                    LiquidGlassCard(
                         shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, priorityAccent.copy(alpha = 0.35f)),
+                        accentBorderColor = priorityAccent,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1945,10 +1973,11 @@ private fun UnifiedQuickCommandAndBudgetCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     customItems.forEach { preset ->
-                        Surface(
+                        GlassSurface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            color = Color(0xFF141F1A),
+                            alpha = 0.65f,
+                            accentBorderColor = ElectricTeal,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
@@ -2024,11 +2053,12 @@ private fun CompactKpiCell(
     value: String,
     accentColor: androidx.compose.ui.graphics.Color
 ) {
-    Surface(
+    GlassSurface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.25f))
+        color = Color(0xFF141F1A),
+        alpha = 0.65f,
+        accentBorderColor = accentColor
     ) {
         Column(
             modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
@@ -2239,10 +2269,9 @@ fun PriorityBadge(priority: String) {
         "LOW" -> "کم" to SkyInfo
         else -> "متوسط" to ElectricTeal
     }
-    Surface(
+    LiquidGlassPill(
         shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.16f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
+        accentGlow = color
     ) {
         Text(
             text = label,

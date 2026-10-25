@@ -59,10 +59,13 @@ import com.example.data.model.ConversationTurn
 import com.example.data.model.Habit
 import com.example.data.model.HabitRecord
 import com.example.data.model.UserPreferencesDoc
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
 import com.example.util.PersianDateAndUnitUtils
 import com.example.util.WorldClassOsUtils
@@ -189,11 +192,18 @@ fun HabitsScreen(
 
         if (habits.isEmpty()) {
             item {
-                Text(
-                    text = "هنوز عادتی ثبت نشده است. یکی از پیشنهادهای بالا را لمس کنید.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
+                com.example.ui.components.GlassEmptyState(
+                    title = "اولین عادت مثبتت رو شروع کن ✦",
+                    subtitle = "عادت‌های کوچک روزانه، پایه‌های موفقیت بزرگ هستند. یکی از پیشنهادهای آماده را انتخاب کن یا عادت دلخواهت را بنویس.",
+                    badgeText = "✦ ساخت عادات پایدار",
+                    icon = Icons.Default.LocalFireDepartment,
+                    accentColor = MutedViolet,
+                    actionButtonText = "شروع با مطالعه روزانه (۲۰ دقیقه)",
+                    actionButtonIcon = Icons.Default.Add,
+                    onActionButtonClick = {
+                        onCreateHabit("مطالعه روزانه (۲۰ دقیقه)", "شخصی", "DAILY", listOf(1, 2, 3, 4, 5, 6, 7), 1)
+                    },
+                    testTag = "habits_empty_state"
                 )
             }
         }
@@ -246,10 +256,9 @@ fun HabitsScreen(
                         }
 
                         // Streak Badge
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = AmberWarning.copy(alpha = 0.16f),
-                            border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f))
+                        LiquidGlassPill(
+                            accentGlow = AmberWarning,
+                            modifier = Modifier.padding(start = 4.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -415,10 +424,10 @@ fun AiAssistantScreen(
         ) {
             if (conversations.isEmpty() && pendingPreview == null) {
                 item {
-                    Card(
+                    LiquidGlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        accentBorderColor = ElectricTeal
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
@@ -443,10 +452,9 @@ fun AiAssistantScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = if (isUser) Arrangement.Start else Arrangement.End
                 ) {
-                    Surface(
+                    LiquidGlassCard(
                         shape = RoundedCornerShape(18.dp),
-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, if (isUser) ElectricTeal.copy(alpha = 0.4f) else MutedViolet.copy(alpha = 0.4f)),
+                        accentBorderColor = if (isUser) ElectricTeal else MutedViolet,
                         modifier = Modifier.fillMaxWidth(0.9f)
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
@@ -496,12 +504,20 @@ fun AiAssistantScreen(
             OutlinedTextField(
                 value = inputPrompt,
                 onValueChange = { inputPrompt = it },
-                placeholder = { Text("پیام یا دستور به Gemini (فارسی / انگلیسی)...") },
+                placeholder = { Text("پیام یا دستور به Gemini (فارسی / انگلیسی)...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("ai_chat_input"),
                 singleLine = true,
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF141F1A).copy(alpha = 0.65f),
+                    unfocusedContainerColor = Color(0xFF141F1A).copy(alpha = 0.45f),
+                    focusedBorderColor = ElectricTeal.copy(alpha = 0.7f),
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
             )
             Button(
                 onClick = {

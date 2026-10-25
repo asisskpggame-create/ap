@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -511,7 +512,8 @@ fun AuthenticatedLifeOsShell(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .navigationBarsPadding()
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
                         ) {
                             GlassSurface(
                                 shape = GlassTheme.tokens.dockShape,
@@ -532,7 +534,8 @@ fun AuthenticatedLifeOsShell(
                                     )
                                     NavigationBar(
                                         containerColor = Color.Transparent,
-                                        tonalElevation = 0.dp
+                                        tonalElevation = 0.dp,
+                                        windowInsets = WindowInsets(0, 0, 0, 0)
                                     ) {
                                         AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
                                             val isSelected = currentSectionRoute == section.route
@@ -840,19 +843,18 @@ private fun FloatingFocusTimerBar(
         String.format(Locale.US, "%02d:%02d", mins, secs)
     )
 
-    Surface(
+    com.example.ui.theme.LiquidGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .testTag("floating_focus_timer_bar"),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.5.dp, ElectricTeal)
+        shape = RoundedCornerShape(20.dp),
+        accentBorderColor = ElectricTeal
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -860,13 +862,23 @@ private fun FloatingFocusTimerBar(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Timer,
-                    contentDescription = "تایمر تمرکز",
-                    tint = ElectricTeal,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                // Pulsing Active Session Icon Badge
+                Surface(
+                    shape = CircleShape,
+                    color = ElectricTeal.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f)),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = "تایمر تمرکز",
+                            tint = ElectricTeal,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -879,6 +891,7 @@ private fun FloatingFocusTimerBar(
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = AmberWarning.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.35f)),
                             modifier = Modifier.clickable { onToggleMode() }
                         ) {
                             Text(
@@ -903,19 +916,21 @@ private fun FloatingFocusTimerBar(
                 OutlinedButton(
                     onClick = { onStopAndSave(false) },
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.testTag("stop_focus_save_button")
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = null, tint = RoseError, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("توقف و ثبت", style = MaterialTheme.typography.labelSmall)
+                    Text("توقف", style = MaterialTheme.typography.labelSmall)
                 }
                 Button(
                     onClick = { onStopAndSave(true) },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.testTag("complete_focus_task_button")
                 ) {
-                    Text("تکمیل تسک", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text("تکمیل", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
             }
         }

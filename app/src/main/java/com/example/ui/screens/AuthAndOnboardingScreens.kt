@@ -59,7 +59,11 @@ import androidx.credentials.CredentialManager
 import com.example.data.firebase.attemptAutoSignIn
 import com.example.data.firebase.onGoogleSignInClicked
 import com.example.data.model.UserPreferencesDoc
+import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.ElectricTeal
+import com.example.ui.theme.LiquidGlassBackdrop
+import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -83,31 +87,25 @@ fun SignInScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+    LiquidGlassBackdrop(
+        modifier = Modifier.fillMaxSize(),
+        primaryGlow = ElectricTeal,
+        secondaryGlow = MutedViolet
     ) {
-        Card(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 460.dp),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
         ) {
+            LiquidGlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 460.dp),
+                shape = RoundedCornerShape(28.dp),
+                accentBorderColor = ElectricTeal,
+                borderWidth = 1.2.dp
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -247,16 +245,16 @@ fun SignInScreen(
         }
     }
 }
+}
 
 @Composable
 private fun FeatureBadge(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String
 ) {
-    Surface(
+    LiquidGlassPill(
         shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        accentGlow = MaterialTheme.colorScheme.primary
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -290,13 +288,13 @@ fun FirstRunOnboardingDialog(
     var addStarterHabits by remember { mutableStateOf(true) }
 
     Dialog(onDismissRequest = {}) {
-        Card(
+        LiquidGlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            shape = RoundedCornerShape(26.dp),
+            accentBorderColor = MaterialTheme.colorScheme.primary,
+            borderWidth = 1.2.dp
         ) {
             Column(
                 modifier = Modifier

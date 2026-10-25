@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -73,6 +74,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.data.model.SubtaskItem
 import com.example.data.model.Task
@@ -80,6 +82,7 @@ import com.example.notifications.ReminderScheduler
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
 import com.example.ui.theme.RoseError
 import com.example.ui.theme.TaskCategory
@@ -207,20 +210,27 @@ fun TasksScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "جستجو") },
-                placeholder = { Text("جستجو در عنوان، دسته‌بندی، برچسب‌ها یا یادداشت...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "جستجو", tint = ElectricTeal) },
+                placeholder = { Text("جستجو در عنوان، دسته‌بندی، برچسب‌ها یا یادداشت...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("task_search_input"),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF141F1A).copy(alpha = 0.65f),
+                    unfocusedContainerColor = Color(0xFF0F1612).copy(alpha = 0.45f),
+                    focusedBorderColor = ElectricTeal.copy(alpha = 0.8f),
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.16f),
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
             )
 
-            // Priority filter chips + Layout Mode Switcher
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            // Priority filter chips + Layout Mode Switcher in Liquid Glass
+            LiquidGlassCard(
+                shape = RoundedCornerShape(20.dp),
+                accentBorderColor = ElectricTeal.copy(alpha = 0.35f),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -307,7 +317,8 @@ fun TasksScreen(
         ScrollableTabRow(
             selectedTabIndex = selectedTabIndex,
             edgePadding = 16.dp,
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = Color.Transparent,
+            contentColor = ElectricTeal
         ) {
             tabs.forEachIndexed { idx, title ->
                 Tab(
@@ -327,49 +338,54 @@ fun TasksScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = "تسکی در این بخش وجود ندارد",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "برای افزودن تسک جدید دکمه «تسک جدید» یا میکروفون فرمان صوتی را لمس کنید.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                val emptyInfo = when (selectedTabIndex) {
+                    0 -> TaskEmptyStateInfo(
+                        title = "تمام تسک‌های امروز انجام شد! ✦",
+                        subtitle = "عالی پیش رفتی! همه کارهای امروزت تیک خورد. الان وقت استراحت یا ثبت تسک‌های بعدیه.",
+                        badge = "✦ آزادی و شفافیت ذهن",
+                        icon = Icons.Default.CheckCircle,
+                        color = EmeraldSuccess
+                    )
+                    3 -> TaskEmptyStateInfo(
+                        title = "هیچ کار عقب‌افتاده‌ای نداری",
+                        subtitle = "کنترل زمانت کاملاً دست خودته و همه مهلت‌ها رعایت شدن.",
+                        badge = "✦ زمان‌بندی بی‌نقص",
+                        icon = Icons.Default.DoneAll,
+                        color = ElectricTeal
+                    )
+                    4 -> TaskEmptyStateInfo(
+                        title = "هنوز تسکی تکمیل نشده است",
+                        subtitle = "هر زمان تسکی را به پایان رساندی، با یک ضربه روی دایره آن را تکمیل کن.",
+                        badge = "✦ آماده اقدام",
+                        icon = Icons.Default.RadioButtonUnchecked,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    else -> TaskEmptyStateInfo(
+                        title = "تسکی در این لیست نیست",
+                        subtitle = "برای سازماندهی روزت، اولین تسک را با دکمه زیر یا با فرمان صوتی اضافه کن.",
+                        badge = "✦ تسک جدید",
+                        icon = Icons.Default.Add,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
+
+                com.example.ui.components.GlassEmptyState(
+                    title = emptyInfo.title,
+                    subtitle = emptyInfo.subtitle,
+                    badgeText = emptyInfo.badge,
+                    icon = emptyInfo.icon,
+                    accentColor = emptyInfo.color,
+                    actionButtonText = "افزودن تسک جدید",
+                    actionButtonIcon = Icons.Default.Add,
+                    onActionButtonClick = {
+                        editingTask = null
+                        showCreateOrEditDialog = true
+                    },
+                    testTag = "tasks_empty_state"
+                )
             }
         } else {
             LazyColumn(
@@ -412,9 +428,15 @@ fun TasksScreen(
                             val groupTasks = filteredTasks.filter { it.priority == prioCode }
                             if (groupTasks.isNotEmpty()) {
                                 item(key = "header_$prioCode") {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    LiquidGlassCard(
+                                        shape = RoundedCornerShape(14.dp),
+                                        accentBorderColor = when (prioCode) {
+                                            "CRITICAL" -> RoseError
+                                            "HIGH" -> ElectricTeal
+                                            "MEDIUM" -> MaterialTheme.colorScheme.secondary
+                                            else -> EmeraldSuccess
+                                        }.copy(alpha = 0.45f),
+                                        borderWidth = 1.dp,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
@@ -422,7 +444,7 @@ fun TasksScreen(
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                         )
                                     }
                                 }
@@ -840,9 +862,9 @@ private fun TaskItemCard(
 
 @Composable
 private fun MetaChip(text: String, isAlert: Boolean = false) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (isAlert) RoseError.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+    LiquidGlassPill(
+        shape = RoundedCornerShape(10.dp),
+        accentGlow = if (isAlert) RoseError else null
     ) {
         Text(
             text = text,
@@ -910,7 +932,8 @@ private fun TaskEditorDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+        scrimColor = Color.Black.copy(alpha = 0.65f),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
@@ -947,10 +970,10 @@ private fun TaskEditorDialog(
             )
 
             if (liveNlp.detectedTokensSummary.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = ElectricTeal.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f)),
+                LiquidGlassCard(
+                    shape = RoundedCornerShape(14.dp),
+                    accentBorderColor = ElectricTeal,
+                    borderWidth = 1.2.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1194,3 +1217,12 @@ private fun encodeSubtasksJson(items: List<SubtaskItem>): String {
     }
     return arr.toString()
 }
+
+private data class TaskEmptyStateInfo(
+    val title: String,
+    val subtitle: String,
+    val badge: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val color: androidx.compose.ui.graphics.Color
+)
+

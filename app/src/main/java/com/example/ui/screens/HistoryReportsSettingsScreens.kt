@@ -77,9 +77,13 @@ import com.example.data.model.HabitRecord
 import com.example.data.model.SleepRecord
 import com.example.data.model.Task
 import com.example.data.model.UserPreferencesDoc
+import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.GlassSurface
+import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
 import com.example.ui.theme.RoseError
 import com.example.ui.theme.SkyInfo
@@ -206,10 +210,10 @@ fun HistoryScreen(
 
         if (filteredEvents.isEmpty()) {
             item {
-                Card(
+                LiquidGlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    shape = RoundedCornerShape(20.dp),
+                    accentBorderColor = ElectricTeal.copy(alpha = 0.3f)
                 ) {
                     Text(
                         text = "هیچ رویدادی مطابق فیلترهای انتخابی یافت نشد.",
@@ -229,11 +233,11 @@ fun HistoryScreen(
                 else -> SkyInfo
             }
 
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(18.dp),
+                accentBorderColor = statusColor.copy(alpha = 0.45f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier
@@ -282,9 +286,9 @@ fun HistoryScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Surface(
+                        LiquidGlassPill(
                             shape = RoundedCornerShape(6.dp),
-                            color = statusColor.copy(alpha = 0.15f)
+                            accentGlow = statusColor
                         ) {
                             Text(
                                 text = when (event.operationStatus) {
@@ -302,9 +306,10 @@ fun HistoryScreen(
                     }
 
                     if (event.recognizedTranscript.isNotBlank()) {
-                        Surface(
+                        GlassSurface(
                             shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surface,
+                            color = Color(0xFF141F1A),
+                            alpha = 0.65f,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -443,11 +448,11 @@ fun ReportsScreen(
 
         // Factual AI Summary Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f))
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = ElectricTeal,
+                borderWidth = 1.2.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -486,11 +491,11 @@ fun ReportsScreen(
 
         // Task Productivity Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = EmeraldSuccess.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -538,11 +543,11 @@ fun ReportsScreen(
 
         // 7-Day Hydration Trend Canvas Chart
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = SkyInfo.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -618,11 +623,11 @@ fun ReportsScreen(
 
         // Multi-Currency Expense & Income Analytics (Daily, Weekly, Monthly, Yearly)
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = EmeraldSuccess.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -650,9 +655,10 @@ fun ReportsScreen(
                             PersianDateAndUnitUtils.formatCurrencyAmount(it.value, it.key)
                         }.ifBlank { "۰" }
 
-                        Surface(
+                        GlassSurface(
                             shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surface,
+                            color = Color(0xFF141F1A),
+                            alpha = 0.65f,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -750,11 +756,11 @@ fun ReportsScreen(
 
         // Sleep, Exercise & Habit Summary Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = MutedViolet.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -829,11 +835,11 @@ fun SettingsScreen(
 
         // On-Device Processing & 6-Hour Periodic Data Transfer Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f))
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = EmeraldSuccess,
+                borderWidth = 1.2.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -926,11 +932,11 @@ fun SettingsScreen(
 
         // Appearance, Themes, Layout Architecture, Calendar & Currency Preferences
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = ElectricTeal.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1055,11 +1061,11 @@ fun SettingsScreen(
 
         // Daily Targets & Monthly Safe-to-Spend Budget Configuration
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = EmeraldSuccess.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1128,11 +1134,11 @@ fun SettingsScreen(
 
         // Privacy Vault PIN Lock, AI Retention & Backup Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = ElectricTeal.copy(alpha = 0.5f),
+                borderWidth = 1.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1261,6 +1267,10 @@ fun SettingsScreen(
     if (exportedJsonPreview != null) {
         AlertDialog(
             onDismissRequest = { exportedJsonPreview = null },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("خروجی JSON داده‌های شما") },
             text = {
                 OutlinedTextField(
@@ -1297,6 +1307,10 @@ fun SettingsScreen(
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = RoseError,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("تأیید حذف کامل داده‌ها") },
             text = {
                 Text("آیا مطمئن هستید که می‌خواهید تمامی تسک‌ها، رکوردهای مصرف، هزینه‌ها، عادت‌ها و تاریخچه حساب خود را حذف کنید؟ این عمل غیرقابل بازگشت است.")

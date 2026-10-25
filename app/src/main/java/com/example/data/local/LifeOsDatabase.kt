@@ -746,6 +746,7 @@ interface LifeOsDao {
 
 @Database(
     entities = [
+        com.example.data.local.task.TaskEntity::class,
         CachedTaskEntity::class,
         CachedConsumptionEntity::class,
         CachedCustomItemEntity::class,
@@ -758,11 +759,12 @@ interface LifeOsDao {
         CachedConversationEntity::class,
         SyncQueueEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class LifeOsDatabase : RoomDatabase() {
     abstract fun lifeOsDao(): LifeOsDao
+    abstract fun taskDao(): com.example.data.local.task.TaskDao
 
     companion object {
         const val LOCAL_DEVICE_USER_ID = "local_device_user"

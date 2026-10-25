@@ -6,8 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.example.ui.theme.GlassCard
+import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.GlassmorphismDefaults
 import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.LiquidGlassPill
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -69,6 +72,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -209,7 +213,8 @@ private fun ConsumptionTrackerSubScreen(
     if (showManagePresetsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showManagePresetsSheet = false },
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            scrimColor = Color.Black.copy(alpha = 0.65f)
         ) {
             Column(
                 modifier = Modifier
@@ -241,10 +246,11 @@ private fun ConsumptionTrackerSubScreen(
                 }
 
                 customItems.forEach { preset ->
-                    Surface(
+                    GlassCard(
                         shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        baseColor = Color(0xFF141F1A),
+                        alpha = 0.7f,
+                        accentBorderColor = ElectricTeal,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -330,6 +336,10 @@ private fun ConsumptionTrackerSubScreen(
                 editingPreset = null
                 showNewPresetDialog = false
             },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = {
                 Text(
                     text = if (currentEditing != null) "ویرایش نام و قیمت دکمه سریع" else "افزودن دکمه ثبت سریع جدید",
@@ -841,10 +851,9 @@ private fun ConsumptionTrackerSubScreen(
         }
 
         items(todayEntries, key = { it.id }) { entry ->
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            LiquidGlassCard(
+                shape = RoundedCornerShape(16.dp),
+                accentBorderColor = ElectricTeal,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -998,6 +1007,10 @@ private fun ExpenseTrackerSubScreen(
     if (showBudgetDialog) {
         AlertDialog(
             onDismissRequest = { showBudgetDialog = false },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("تنظیم سقف بودجه ماهانه (${prefs.defaultCurrency})") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1506,9 +1519,9 @@ private fun ExpenseTrackerSubScreen(
         // 4. List of All Recorded Expenses & Incomes in the Selected Period
         if (filteredTransactions.isEmpty()) {
             item {
-                Surface(
+                LiquidGlassCard(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    accentBorderColor = ElectricTeal,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -1526,10 +1539,9 @@ private fun ExpenseTrackerSubScreen(
             val badgeColor = if (isInc) EmeraldSuccess else RoseError
             val cleanDesc = exp.cleanNotes
 
-            Surface(
+            LiquidGlassCard(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.4f)),
+                accentBorderColor = badgeColor,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -1547,9 +1559,9 @@ private fun ExpenseTrackerSubScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
+                            LiquidGlassPill(
                                 shape = RoundedCornerShape(6.dp),
-                                color = badgeColor.copy(alpha = 0.16f)
+                                accentGlow = badgeColor
                             ) {
                                 Text(
                                     text = if (isInc) "درآمد" else "خرج",
@@ -1575,9 +1587,10 @@ private fun ExpenseTrackerSubScreen(
                         )
 
                         if (cleanDesc.isNotBlank()) {
-                            Surface(
+                            GlassSurface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface,
+                                color = Color(0xFF141F1A),
+                                alpha = 0.6f,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
@@ -1615,20 +1628,12 @@ private fun PeriodSummaryBox(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
+    LiquidGlassCard(
+        modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
-        border = BorderStroke(
-            width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) ElectricTeal else MaterialTheme.colorScheme.outline
-        )
+        accentBorderColor = if (isSelected) ElectricTeal else null,
+        borderWidth = if (isSelected) 1.5.dp else 1.dp,
+        onClick = onClick
     ) {
         Column(
             modifier = Modifier
@@ -1687,10 +1692,9 @@ private fun SleepAndExerciseSubScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MutedViolet.copy(alpha = 0.14f),
-                border = BorderStroke(1.dp, MutedViolet.copy(alpha = 0.35f)),
+            LiquidGlassCard(
+                shape = RoundedCornerShape(14.dp),
+                accentBorderColor = MutedViolet,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -1839,13 +1843,15 @@ private fun SleepAndExerciseSubScreen(
         }
 
         items(sleepRecords.take(5), key = { "slp_${it.id}" }) { s ->
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            LiquidGlassCard(
+                shape = RoundedCornerShape(14.dp),
+                accentBorderColor = MutedViolet,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("🌙 خواب: ${PersianDateAndUnitUtils.toPersianDigits((s.durationMinutes / 60).toString())} ساعت و ${PersianDateAndUnitUtils.toPersianDigits((s.durationMinutes % 60).toString())} دقیقه")
@@ -1855,13 +1861,15 @@ private fun SleepAndExerciseSubScreen(
         }
 
         items(exerciseRecords.take(5), key = { "exr_${it.id}" }) { ex ->
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            LiquidGlassCard(
+                shape = RoundedCornerShape(14.dp),
+                accentBorderColor = ElectricTeal,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("🏃 ${ex.activityType}: ${PersianDateAndUnitUtils.toPersianDigits(ex.durationMinutes.toString())} دقیقه")
