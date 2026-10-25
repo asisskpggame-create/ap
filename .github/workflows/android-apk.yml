@@ -142,17 +142,38 @@ jobs:
           tag_name: v1.1.${{ github.run_number }}
           name: "Personal Life OS v1.1.${{ github.run_number }} (S24 Ultra Fixed + Liquid Glass)"
           body: |
-            ## Personal Life OS v1.1.0 — Liquid Glass Edition (S24 Ultra Crash Fix)
-            - **رفع کامل کرش روی Samsung Galaxy S24 Ultra:**
-              - مقداردهی اولیه خودکار و ضدکرش `FirebaseApp` و `FirebaseFirestore` حتی در بیلدهای مستقل گیت‌هاب
-              - ایمن‌سازی شیدرهای `RadialGradient` و `Canvas` روی رندرر سخت‌افزاری Vulkan/Skia با تراکم بالای `xxxhdpi` (505 PPI)
-              - محافظت کامل از `CredentialManager` و `SpeechRecognizer` در برابر استثناهای سیستمی One UI
-            - **UI Design:** Complete visionOS / iOS 18 Multi-Layered Liquid Glass (`LiquidGlassCard`, `LiquidGlassPill`, `GlassSurface`, `LiquidGlassBackdrop`)
-            - **Offline-First & Cloud Sync:** Room Database + Firebase Firestore Sync
-            
-            ### فایل‌های قابل نصب (APK - نسخه ۱.۱.۰):
-            - **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk`**: امضا شده با کلید اصلی پروژه (پشتیبانی کامل از ورود با گوگل / Firebase Auth و نصب مستقیم)
-            - **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk`**: نسخه ریلیز بهینه‌سازی‌شده
+            ## 💎 Personal Life OS v1.1.0 — Liquid Glass Edition (نسخه ویژه رفع کرش Galaxy S24 Ultra)
+
+            سیستم‌عامل جامع مدیریت زندگی شخصی، سلامت، مالی و دستیار هوشمند فارسی با طراحی **Multi-Layered Liquid Glass** و معماری **Local-First (آفلاین + همگام‌سازی ابری)**.
+
+            ---
+
+            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.1.0` - `versionCode = 2`)
+            - ⭐ **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
+            - 📦 **`Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
+            > **نکته نصب:** به دلیل ارتقای `versionCode` به `2`، این نسخه بدون نیاز به پاک کردن نسخه قبلی مستقیماً روی آن آپدیت می‌شود.
+
+            ---
+
+            ### 🛡️ تغییرات و اصلاحات نسخه `v1.1.0` (ویژه Samsung Galaxy S24 Ultra / One UI)
+            1. **رفع کامل کرش راه‌اندازی اولیه Firebase در بیلدهای مستقل گیت‌هاب:**
+               - مقداردهی اولیه خودکار و ضدکرش `FirebaseApp` با تابع `ensureFirebaseInitialized(context)` و جریان‌های ایمن `safeAuthStateFlow` و `safeCurrentUser`.
+               - عملکرد ۱۰۰٪ پایدار دیتابیس محلی (`LifeOsRepository`) در حالت بدون اکانت و آفلاین.
+            2. **رفع کرش رندرر سخت‌افزاری Vulkan/Skia روی نمایشگر تراکم بالای S24 Ultra (`xxxhdpi` / 505 PPI):**
+               - ایمن‌سازی تمام شیدرهای `Brush.radialGradient` در `LiquidGlassBackdrop`، گوی سه‌بعدی هوش مصنوعی (`HomeDashboardScreen`) و نمودار حلقه‌ای هزینه‌ها (`MonthlyVisualExpensesGlassCard`) در برابر شعاع صفر در فریم‌های اولیه انیمیشن.
+               - ایمن‌سازی بازه `coerceIn` در موج صوتی زنده شیت ضبط صدا (`VoiceCaptureSheet`).
+            3. **محافظت از سرویس‌های سیستمی:**
+               - مدیریت ایمن استثناها در `CredentialManager` و `SpeechRecognizer`.
+
+            ---
+
+            ### ✨ امکانات اصلی برنامه
+            - **🏠 داشبورد هوشمند خانه:** گوی سه‌بعدی هوش مصنوعی، نوار ثبت سریع یک‌لمسی، موتور محاسبه بودجه امن روزانه (Safe-to-Spend) و نمودار حلقه‌ای هزینه‌های ماهانه.
+            - **✅ مدیریت تسک‌ها و تایمر فوکوس:** اولویت‌بندی ۴ سطحی، تایمر پومودورو، تسک‌های تکرارشونده و یادآور نوتیفیکیشن با قابلیت Snooze.
+            - **🍎 ثبت روزانه، تغذیه، سلامت و مالی:** کالری‌شمار و ماکروها (پروتئین، کربوهیدرات، چربی)، پایش آب مصرفی، ثبت خواب و کیفیت آن، ثبت ورزش و مدیریت هزینه‌ها به تومان.
+            - **🔄 پیگیری عادت‌ها (Habits):** محاسبه زنجیره تداوم (Streak) و ماتریس پیشرفت هفتگی.
+            - **🎙️ دستیار هوشمند و ثبت صوتی فارسی:** تبدیل گفتار فارسی به متن و استخراج خودکار تسک، هزینه، تغذیه، خواب و ورزش همراه با پیش‌نمایش ساختاریافته.
+            - **🔒 پشتیبان‌گیری رمزنگاری‌شده:** ذخیره خودکار ۶ ساعته با رمزنگاری `AES-256-GCM` روی حافظه گوشی + همگام‌سازی ابری با Cloud Firestore.
           files: |
             release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Debug.apk
             release-assets/Personal-Life-OS-v1.1.0-S24Ultra-Fixed-Release.apk
