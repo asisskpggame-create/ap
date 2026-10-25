@@ -33,6 +33,8 @@ class PreferencesDataStore(private val context: Context) {
         val MONTHLY_BUDGET_TARGET = doublePreferencesKey("monthly_budget_target")
         val VAULT_LOCK_ENABLED = booleanPreferencesKey("vault_lock_enabled")
         val VAULT_PIN_CODE = stringPreferencesKey("vault_pin_code")
+        val THEME_PALETTE = stringPreferencesKey("theme_palette")
+        val LAYOUT_STYLE = stringPreferencesKey("layout_style")
     }
 
     fun observeLocalPreferences(userId: String): Flow<UserPreferencesDoc> {
@@ -54,7 +56,9 @@ class PreferencesDataStore(private val context: Context) {
                 onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
                 monthlyBudgetTarget = prefs[Keys.MONTHLY_BUDGET_TARGET] ?: 15000000.0,
                 vaultLockEnabled = prefs[Keys.VAULT_LOCK_ENABLED] ?: false,
-                vaultPinCode = prefs[Keys.VAULT_PIN_CODE] ?: ""
+                vaultPinCode = prefs[Keys.VAULT_PIN_CODE] ?: "",
+                themePalette = prefs[Keys.THEME_PALETTE] ?: "OBSIDIAN_TEAL",
+                layoutStyle = prefs[Keys.LAYOUT_STYLE] ?: "BENTO_GRID"
             )
         }
     }
@@ -88,6 +92,8 @@ class PreferencesDataStore(private val context: Context) {
             prefs[Keys.MONTHLY_BUDGET_TARGET] = doc.monthlyBudgetTarget
             prefs[Keys.VAULT_LOCK_ENABLED] = doc.vaultLockEnabled
             prefs[Keys.VAULT_PIN_CODE] = doc.vaultPinCode
+            prefs[Keys.THEME_PALETTE] = doc.themePalette
+            prefs[Keys.LAYOUT_STYLE] = doc.layoutStyle
         }
     }
 }

@@ -1,8 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -26,25 +29,28 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -60,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -162,7 +169,7 @@ fun DailyLogAndHealthScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ConsumptionTrackerSubScreen(
     prefs: UserPreferencesDoc,
@@ -176,6 +183,7 @@ private fun ConsumptionTrackerSubScreen(
     onDeleteCustomItem: (CustomItem) -> Unit,
     onSwitchToExpensesTab: () -> Unit
 ) {
+    val context = LocalContext.current
     var itemName by remember { mutableStateOf("آب") }
     var category by remember { mutableStateOf("WATER") }
     var quantityText by remember { mutableStateOf("250") }
@@ -183,9 +191,10 @@ private fun ConsumptionTrackerSubScreen(
     var linkedPriceText by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
 
-    // Dialog states for editing an existing preset or creating a new preset button
+    // Dialog & BottomSheet states for editing or creating a preset button away from 1-tap logging
     var editingPreset by remember { mutableStateOf<CustomItem?>(null) }
     var showNewPresetDialog by remember { mutableStateOf(false) }
+    var showManagePresetsSheet by remember { mutableStateOf(false) }
 
     val todayEntries = consumption.filter { it.localEpochDay == todayEpochDay }
     val todayWaterMl = PersianDateAndUnitUtils.sumCompatibleConsumption(
@@ -193,6 +202,103 @@ private fun ConsumptionTrackerSubScreen(
         "ml"
     )
     val todayWaterLiters = PersianDateAndUnitUtils.convertUnit(todayWaterMl, "ml", "liters") ?: 0.0
+
+    // Dedicated Manage Presets ModalBottomSheet (keeps Edit buttons out of the way of daily 1-tap logging)
+    if (showManagePresetsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showManagePresetsSheet = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "مدیریت آیتم‌های ثبت سریع",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            showManagePresetsSheet = false
+                            showNewPresetDialog = true
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("دکمه جدید")
+                    }
+                }
+
+                customItems.forEach { preset ->
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = preset.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (preset.defaultPrice > 0.0) {
+                                        PersianDateAndUnitUtils.formatCurrencyAmount(preset.defaultPrice, preset.defaultCurrency)
+                                    } else {
+                                        "${PersianDateAndUnitUtils.toPersianDigits(preset.defaultQuantity.toInt().toString())} ${preset.unit}"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(
+                                    onClick = {
+                                        showManagePresetsSheet = false
+                                        editingPreset = preset
+                                    },
+                                    modifier = Modifier.testTag("edit_preset_${preset.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "ویرایش ${preset.name}",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onDeleteCustomItem(preset) }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "حذف ${preset.name}",
+                                        tint = RoseError
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
 
     // Edit / Create Preset Modal Dialog
     if (editingPreset != null || showNewPresetDialog) {
@@ -231,11 +337,6 @@ private fun ConsumptionTrackerSubScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "با زدن این دکمه در صفحه ثبت روزانه، هم مصرف ثبت می‌شود و هم مبلغ آن خودکار به خرج‌های روزانه، هفتگی، ماهانه و سالانه اضافه می‌گردد.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     OutlinedTextField(
                         value = dialogName,
                         onValueChange = { dialogName = it },
@@ -376,13 +477,13 @@ private fun ConsumptionTrackerSubScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Editable 1-Tap Priced Preset Buttons Card ("دبل ۹۰ تومن / سیگار ۱۵۰ تومن")
+        // 1. Clean 1-Tap «ثبت سریع» Card (No explanatory clutter; 1-Tap logs immediately; Long-Press or Manage Sheet edits)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.5.dp, ElectricTeal.copy(alpha = 0.6f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -393,127 +494,156 @@ private fun ConsumptionTrackerSubScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "ثبت سریع روزانه (با یک دکمه)",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = ElectricTeal
-                            )
-                            Text(
-                                text = "نام و قیمت هر دکمه قابل ویرایش است • ثبت خودکار در خرج روزانه/هفتگی/ماهانه/سالانه",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { showNewPresetDialog = true },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("add_new_preset_button")
+                        Text(
+                            text = "ثبت سریع",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("دکمه جدید", style = MaterialTheme.typography.labelMedium)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier
+                                    .clickable { showManagePresetsSheet = true }
+                                    .testTag("open_manage_presets_sheet_button")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "مدیریت دکمه‌ها",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "مدیریت",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { showNewPresetDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("add_new_preset_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("دکمه جدید", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
 
                     if (customItems.isEmpty()) {
                         Text(
-                            text = "هیچ دکمه سریعی وجود ندارد. با زدن «+ دکمه جدید» آیتم‌هایی مثل دبل ۹۰ تومن یا سیگار ۱۵۰ تومن را بسازید.",
+                            text = "با زدن «+ دکمه جدید» آیتم‌های پرکاربرد خود را اضافه کنید.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            customItems.forEach { preset ->
-                                val todayCountForPreset = todayEntries.count {
-                                    it.itemName.equals(preset.name, ignoreCase = true)
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                    modifier = Modifier.fillMaxWidth()
+                            customItems.chunked(2).forEach { rowPresets ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                Text(
-                                                    text = preset.name,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
+                                    rowPresets.forEach { preset ->
+                                        val todayCountForPreset = todayEntries.count {
+                                            it.itemName.equals(preset.name, ignoreCase = true)
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (todayCountForPreset > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                                else MaterialTheme.colorScheme.outline
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .combinedClickable(
+                                                    onClick = {
+                                                        WorldClassOsUtils.HapticSignature.doublePulse(context)
+                                                        onQuickAdd(
+                                                            preset.name,
+                                                            preset.category,
+                                                            preset.defaultQuantity,
+                                                            preset.unit,
+                                                            "",
+                                                            preset.defaultPrice,
+                                                            preset.defaultCurrency
+                                                        )
+                                                    },
+                                                    onLongClick = {
+                                                        WorldClassOsUtils.HapticSignature.heavyImpact(context)
+                                                        editingPreset = preset
+                                                    }
                                                 )
-                                                if (todayCountForPreset > 0) {
+                                                .testTag("quick_tap_preset_${preset.id}")
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = preset.name,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
                                                     Surface(
                                                         shape = RoundedCornerShape(50),
-                                                        color = ElectricTeal.copy(alpha = 0.16f)
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                                                     ) {
                                                         Text(
-                                                            text = "امروز: ${PersianDateAndUnitUtils.toPersianDigits(todayCountForPreset.toString())}",
+                                                            text = if (todayCountForPreset > 0) {
+                                                                "×${PersianDateAndUnitUtils.toPersianDigits(todayCountForPreset.toString())}"
+                                                            } else {
+                                                                "+"
+                                                            },
                                                             style = MaterialTheme.typography.labelSmall,
-                                                            color = ElectricTeal,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary,
                                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                                         )
                                                     }
                                                 }
-                                            }
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = if (preset.defaultPrice > 0.0) {
-                                                    "قیمت: ${PersianDateAndUnitUtils.formatCurrencyAmount(preset.defaultPrice, preset.defaultCurrency)} (ثبت خودکار در خرج‌ها)"
-                                                } else {
-                                                    "بدون هزینه مالی (${PersianDateAndUnitUtils.toPersianDigits(preset.defaultQuantity.toInt().toString())} ${preset.unit})"
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = if (preset.defaultPrice > 0.0) AmberWarning else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontWeight = if (preset.defaultPrice > 0.0) FontWeight.SemiBold else FontWeight.Normal
-                                            )
-                                        }
 
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            IconButton(
-                                                onClick = { editingPreset = preset },
-                                                modifier = Modifier.testTag("edit_preset_${preset.id}")
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Edit,
-                                                    contentDescription = "ویرایش نام و قیمت ${preset.name}",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                Text(
+                                                    text = if (preset.defaultPrice > 0.0) {
+                                                        PersianDateAndUnitUtils.formatCurrencyAmount(preset.defaultPrice, preset.defaultCurrency)
+                                                    } else {
+                                                        "${PersianDateAndUnitUtils.toPersianDigits(preset.defaultQuantity.toInt().toString())} ${preset.unit}"
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (preset.defaultPrice > 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontWeight = FontWeight.SemiBold
                                                 )
                                             }
-                                            Button(
-                                                onClick = {
-                                                    onQuickAdd(
-                                                        preset.name,
-                                                        preset.category,
-                                                        preset.defaultQuantity,
-                                                        preset.unit,
-                                                        "",
-                                                        preset.defaultPrice,
-                                                        preset.defaultCurrency
-                                                    )
-                                                },
-                                                shape = RoundedCornerShape(12.dp),
-                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                                                modifier = Modifier.testTag("quick_tap_preset_${preset.id}")
-                                            ) {
-                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("ثبت", fontWeight = FontWeight.Bold)
-                                            }
                                         }
+                                    }
+                                    if (rowPresets.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
                                     }
                                 }
                             }
@@ -522,12 +652,13 @@ private fun ConsumptionTrackerSubScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(onClick = onSwitchToExpensesTab) {
-                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("مشاهده در بخش خرج و درآمد (روزانه / هفتگی / ماهانه / سالانه) ←")
+                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("بخش خرج و درآمد ←", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
@@ -1647,7 +1778,7 @@ private fun SleepAndExerciseSubScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = ElectricTeal)
+                        Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = null, tint = ElectricTeal)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("ثبت فعالیت ورزشی", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }

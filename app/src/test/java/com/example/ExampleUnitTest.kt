@@ -214,5 +214,22 @@ class ExampleUnitTest {
             )
         }
     }
+
+    @Test
+    fun themePalettesAndLayoutStyles_resolveAllSixThemesAndFourLayouts() {
+        assertEquals(6, com.example.ui.theme.AppThemePalette.entries.size)
+        assertEquals(4, com.example.ui.theme.AppLayoutStyle.entries.size)
+
+        com.example.ui.theme.AppThemePalette.entries.forEach { palette ->
+            val scheme = com.example.ui.theme.resolveColorScheme(palette.code, palette.isDark)
+            assertNotNull(scheme)
+            assertEquals(palette, com.example.ui.theme.AppThemePalette.fromCode(palette.code))
+        }
+
+        com.example.ui.theme.AppLayoutStyle.entries.forEach { layout ->
+            assertEquals(layout, com.example.ui.theme.AppLayoutStyle.fromCode(layout.code))
+        }
+    }
 }
+
 

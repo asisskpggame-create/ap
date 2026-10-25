@@ -7,6 +7,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
@@ -37,6 +41,8 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -186,6 +192,7 @@ fun PersonalLifeOSAppRoot(
 
     PersonalLifeOsTheme(
         darkTheme = prefs.darkTheme,
+        themePalette = prefs.themePalette,
         isRtl = prefs.language == "fa"
     ) {
         AuthenticatedLifeOsShell(
@@ -313,114 +320,246 @@ fun AuthenticatedLifeOsShell(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideTablet = maxWidth >= 720.dp
 
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets.safeDrawing,
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Personal Life OS",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                            ) {
-                                Text(
-                                    text = AppSection.entries.find { it.route == currentSectionRoute }?.titleFa ?: "خانه",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = { currentSectionRoute = AppSection.REPORTS.route },
-                            modifier = Modifier.testTag("nav_reports_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Analytics,
-                                contentDescription = "گزارش‌ها",
-                                tint = if (currentSectionRoute == AppSection.REPORTS.route) ElectricTeal else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(
-                            onClick = { currentSectionRoute = AppSection.HISTORY.route },
-                            modifier = Modifier.testTag("nav_history_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "تاریخچه فعالیت‌ها",
-                                tint = if (currentSectionRoute == AppSection.HISTORY.route) ElectricTeal else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(
-                            onClick = { currentSectionRoute = AppSection.SETTINGS.route },
-                            modifier = Modifier.testTag("nav_settings_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "تنظیمات",
-                                tint = if (currentSectionRoute == AppSection.SETTINGS.route) ElectricTeal else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+        val activePendingTasksCount = tasks.count { it.status != "COMPLETED" && it.status != "ARCHIVED" }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.09f),
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background
+                        )
                     )
                 )
-            },
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        WorldClassOsUtils.HapticSignature.crispTick(context)
-                        showVoiceModal = true
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "ثبت صوتی هوشمند"
+        ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets.safeDrawing,
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Circular 4-dot Grid Button (from screenshot top-left)
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clickable {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            currentSectionRoute = AppSection.HOME.route
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.GridView,
+                                            contentDescription = "داشبورد",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                // "12 Active Tasks" Capsule Pill (from screenshot header)
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                    modifier = Modifier.clickable {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        currentSectionRoute = AppSection.TASKS.route
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = "${PersianDateAndUnitUtils.toPersianDigits(activePendingTasksCount.toString())} تسک فعال",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        actions = {
+                            Row(
+                                modifier = Modifier.padding(end = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    ),
+                                    modifier = Modifier.size(38.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { currentSectionRoute = AppSection.REPORTS.route },
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .testTag("nav_reports_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Analytics,
+                                            contentDescription = "گزارش‌ها",
+                                            tint = if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    ),
+                                    modifier = Modifier.size(38.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { currentSectionRoute = AppSection.HISTORY.route },
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .testTag("nav_history_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.History,
+                                            contentDescription = "تاریخچه فعالیت‌ها",
+                                            tint = if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    ),
+                                    modifier = Modifier.size(38.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { currentSectionRoute = AppSection.SETTINGS.route },
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .testTag("nav_settings_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = "تنظیمات",
+                                            tint = if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
                         )
-                    },
-                    text = { Text("فرمان صوتی") },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape,
-                    modifier = Modifier.testTag("voice_capture_fab")
-                )
-            },
-            bottomBar = {
-                if (!isWideTablet) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 4.dp
-                    ) {
-                        AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
-                            NavigationBarItem(
-                                selected = currentSectionRoute == section.route,
-                                onClick = { currentSectionRoute = section.route },
-                                icon = {
-                                    Icon(
-                                        imageVector = section.icon,
-                                        contentDescription = section.titleFa
-                                    )
-                                },
-                                label = { Text(section.titleFa) },
-                                modifier = Modifier.testTag("bottom_nav_${section.route.lowercase()}")
+                    )
+                },
+                floatingActionButton = {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                            showVoiceModal = true
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "ثبت صوتی هوشمند"
                             )
+                        },
+                        text = {
+                            Text(
+                                text = "فرمان صوتی",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = CircleShape,
+                        modifier = Modifier.testTag("voice_capture_fab")
+                    )
+                },
+                bottomBar = {
+                    if (!isWideTablet) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                tonalElevation = 0.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                NavigationBar(
+                                    containerColor = Color.Transparent,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
+                                        val isSelected = currentSectionRoute == section.route
+                                        NavigationBarItem(
+                                            selected = isSelected,
+                                            onClick = {
+                                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                                currentSectionRoute = section.route
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = section.icon,
+                                                    contentDescription = section.titleFa
+                                                )
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = section.titleFa,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            ),
+                                            modifier = Modifier.testTag("bottom_nav_${section.route.lowercase()}")
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            }
-        ) { innerPadding ->
+            ) { innerPadding ->
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -485,6 +624,7 @@ fun AuthenticatedLifeOsShell(
                                 sleepRecords = sleepRecords,
                                 exerciseRecords = exerciseRecords,
                                 activityEvents = activityEvents,
+                                onUpdatePrefs = { vm.updatePreferences(it) },
                                 onCompleteTask = { vm.completeTask(it) },
                                 onStartFocusTimer = { task -> vm.startFocusTimer(task) },
                                 onQuickAddWater = { ml ->
@@ -502,6 +642,15 @@ fun AuthenticatedLifeOsShell(
                                         optionalExpenseAmount = preset.defaultPrice,
                                         optionalCurrency = preset.defaultCurrency
                                     )
+                                },
+                                onCreateCustomItem = { name, cat, unit, defQty, target, price ->
+                                    vm.createCustomConsumptionItem(name, cat, unit, defQty, target, price)
+                                },
+                                onUpdateCustomItem = { updatedItem ->
+                                    vm.updateCustomConsumptionItem(updatedItem)
+                                },
+                                onDeleteCustomItem = { itemToDelete ->
+                                    vm.deleteCustomConsumptionItem(itemToDelete)
                                 },
                                 onOpenVoiceCapture = { showVoiceModal = true },
                                 onNavigateToSection = { route -> currentSectionRoute = route }
@@ -654,6 +803,7 @@ fun AuthenticatedLifeOsShell(
                     }
                 }
             }
+        }
         }
     }
 }

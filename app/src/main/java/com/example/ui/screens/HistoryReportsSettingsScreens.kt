@@ -24,17 +24,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -894,7 +894,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .testTag("share_encrypted_telegram_backup_button")
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("پشتیبان رمزنگاری‌شده AES-256 (ارسال به تلگرام / فایل)")
                     }
@@ -915,7 +915,7 @@ fun SettingsScreen(
                                 .fillMaxWidth()
                                 .testTag("sign_out_button")
                         ) {
-                            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("خروج از حساب ابری (ادامه روی گوشی بدون اکانت)")
                         }
@@ -924,7 +924,7 @@ fun SettingsScreen(
             }
         }
 
-        // Appearance, Calendar & Currency Preferences
+        // Appearance, Themes, Layout Architecture, Calendar & Currency Preferences
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -936,7 +936,51 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("پوسته، تقویم و واحد پول", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("تم‌های رنگی، نوع چیدمان، تقویم و واحد پول", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    Text("انتخاب تم رنگی (۶ پوسته استاندارد):", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.ui.theme.AppThemePalette.entries.forEach { palette ->
+                            FilterChip(
+                                selected = prefs.themePalette == palette.code,
+                                onClick = {
+                                    onUpdatePrefs(
+                                        prefs.copy(
+                                            themePalette = palette.code,
+                                            darkTheme = palette.isDark
+                                        )
+                                    )
+                                },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .background(palette.previewPrimary, CircleShape)
+                                    )
+                                },
+                                label = { Text(palette.titleFa) },
+                                modifier = Modifier.testTag("settings_theme_chip_${palette.code}")
+                            )
+                        }
+                    }
+
+                    Text("نوع چیدمان و معماری داشبورد (۴ حالت چیدمان):", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.ui.theme.AppLayoutStyle.entries.forEach { styleOption ->
+                            FilterChip(
+                                selected = prefs.layoutStyle == styleOption.code,
+                                onClick = { onUpdatePrefs(prefs.copy(layoutStyle = styleOption.code)) },
+                                label = { Text(styleOption.titleFa) },
+                                modifier = Modifier.testTag("settings_layout_chip_${styleOption.code}")
+                            )
+                        }
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -946,7 +990,16 @@ fun SettingsScreen(
                         Text("پوسته تاریک OLED (Dark Theme)", style = MaterialTheme.typography.bodyMedium)
                         Switch(
                             checked = prefs.darkTheme,
-                            onCheckedChange = { onUpdatePrefs(prefs.copy(darkTheme = it)) },
+                            onCheckedChange = {
+                                val nextPalette = if (it && prefs.themePalette == "MINIMAL_DAYLIGHT") {
+                                    "OBSIDIAN_TEAL"
+                                } else if (!it) {
+                                    "MINIMAL_DAYLIGHT"
+                                } else {
+                                    prefs.themePalette
+                                }
+                                onUpdatePrefs(prefs.copy(darkTheme = it, themePalette = nextPalette))
+                            },
                             modifier = Modifier.testTag("dark_theme_switch")
                         )
                     }

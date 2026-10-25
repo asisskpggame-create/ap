@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -115,6 +116,7 @@ fun TasksScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedPriorityFilter by remember { mutableStateOf("ALL") }
+    var selectedTaskLayoutMode by remember { mutableStateOf("CARDS") } // CARDS, COMPACT, GROUPED
     var showCreateOrEditDialog by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) }
 
@@ -203,20 +205,62 @@ fun TasksScreen(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            // Priority filter chips
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "ALL" to "همه اولویت‌ها",
-                    "CRITICAL" to "بحرانی",
-                    "HIGH" to "بالا",
-                    "MEDIUM" to "متوسط",
-                    "LOW" to "کم"
-                ).forEach { (code, label) ->
-                    FilterChip(
-                        selected = selectedPriorityFilter == code,
-                        onClick = { selectedPriorityFilter = code },
-                        label = { Text(label) }
-                    )
+            // Priority filter chips + Layout Mode Switcher
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "نمای چیدمان تسک‌ها:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                "CARDS" to "نمای کارت کامل",
+                                "COMPACT" to "نمای فشرده سریع",
+                                "GROUPED" to "نمای برد اولویت"
+                            ).forEach { (layoutCode, layoutLabel) ->
+                                FilterChip(
+                                    selected = selectedTaskLayoutMode == layoutCode,
+                                    onClick = { selectedTaskLayoutMode = layoutCode },
+                                    label = { Text(layoutLabel, style = MaterialTheme.typography.labelSmall) },
+                                    modifier = Modifier.testTag("task_layout_chip_$layoutCode")
+                                )
+                            }
+                        }
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "ALL" to "همه اولویت‌ها",
+                            "CRITICAL" to "بحرانی",
+                            "HIGH" to "بالا",
+                            "MEDIUM" to "متوسط",
+                            "LOW" to "کم"
+                        ).forEach { (code, label) ->
+                            FilterChip(
+                                selected = selectedPriorityFilter == code,
+                                onClick = { selectedPriorityFilter = code },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -230,30 +274,63 @@ fun TasksScreen(
                 Tab(
                     selected = selectedTabIndex == idx,
                     onClick = { selectedTabIndex = idx },
-                    text = { Text(title) }
+                    text = {
+                        Text(
+                            text = title,
+                            fontWeight = if (selectedTabIndex == idx) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
                 )
             }
         }
 
         if (filteredTasks.isEmpty()) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "تسکی در این بخش وجود ندارد",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "برای افزودن تسک جدید دکمه «تسک جدید» یا میکروفون صوتی را لمس کنید.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "تسکی در این بخش وجود ندارد",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "برای افزودن تسک جدید دکمه «تسک جدید» یا میکروفون فرمان صوتی را لمس کنید.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -261,42 +338,131 @@ fun TasksScreen(
                     .fillMaxSize()
                     .testTag("tasks_lazy_list"),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(if (selectedTaskLayoutMode == "COMPACT") 6.dp else 10.dp)
             ) {
-                items(filteredTasks, key = { it.id }) { task ->
-                    TaskItemCard(
-                        task = task,
-                        todayEpochDay = todayEpochDay,
-                        calendarDisplay = calendarDisplay,
-                        isFocusing = activeFocusTaskId == task.id,
-                        onComplete = {
-                            WorldClassOsUtils.HapticSignature.crispTick(context)
-                            onCompleteTask(task)
-                        },
-                        onStartFocus = {
-                            WorldClassOsUtils.HapticSignature.crispTick(context)
-                            onStartFocusTimer(task)
-                        },
-                        onEdit = {
-                            editingTask = task
-                            showCreateOrEditDialog = true
-                        },
-                        onToggleSubtask = { updatedSubtasksJson ->
-                            WorldClassOsUtils.HapticSignature.crispTick(context)
-                            onUpdateTask(task.copy(subtasksJson = updatedSubtasksJson))
-                        },
-                        onMoveOrder = { delta ->
-                            onUpdateTask(task.copy(sortOrder = task.sortOrder + delta))
-                        },
-                        onRescheduleTomorrow = {
-                            val base = if (task.dueDateEpochDay >= todayEpochDay) task.dueDateEpochDay else todayEpochDay
-                            onRescheduleTask(task, base + 1L)
-                        },
-                        onArchiveOrRestore = {
-                            onArchiveOrRestore(task, task.status != "ARCHIVED")
-                        },
-                        onDelete = { onDeleteTask(task) }
-                    )
+                when (selectedTaskLayoutMode) {
+                    "COMPACT" -> {
+                        items(filteredTasks, key = { it.id }) { task ->
+                            CompactTaskRowItem(
+                                task = task,
+                                isFocusing = activeFocusTaskId == task.id,
+                                onComplete = {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onCompleteTask(task)
+                                },
+                                onStartFocus = {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onStartFocusTimer(task)
+                                },
+                                onEdit = {
+                                    editingTask = task
+                                    showCreateOrEditDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    "GROUPED" -> {
+                        val priorityOrder = listOf(
+                            "CRITICAL" to "🔥 اولویت بحرانی",
+                            "HIGH" to "⚡ اولویت بالا",
+                            "MEDIUM" to "📌 اولویت متوسط",
+                            "LOW" to "🌿 اولویت کم"
+                        )
+                        priorityOrder.forEach { (prioCode, prioHeader) ->
+                            val groupTasks = filteredTasks.filter { it.priority == prioCode }
+                            if (groupTasks.isNotEmpty()) {
+                                item(key = "header_$prioCode") {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "$prioHeader (${PersianDateAndUnitUtils.toPersianDigits(groupTasks.size.toString())})",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                                items(groupTasks, key = { "grp_${it.id}" }) { task ->
+                                    TaskItemCard(
+                                        task = task,
+                                        todayEpochDay = todayEpochDay,
+                                        calendarDisplay = calendarDisplay,
+                                        isFocusing = activeFocusTaskId == task.id,
+                                        onComplete = {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            onCompleteTask(task)
+                                        },
+                                        onStartFocus = {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            onStartFocusTimer(task)
+                                        },
+                                        onEdit = {
+                                            editingTask = task
+                                            showCreateOrEditDialog = true
+                                        },
+                                        onToggleSubtask = { updatedSubtasksJson ->
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            onUpdateTask(task.copy(subtasksJson = updatedSubtasksJson))
+                                        },
+                                        onMoveOrder = { delta ->
+                                            onUpdateTask(task.copy(sortOrder = task.sortOrder + delta))
+                                        },
+                                        onRescheduleTomorrow = {
+                                            val base = if (task.dueDateEpochDay >= todayEpochDay) task.dueDateEpochDay else todayEpochDay
+                                            onRescheduleTask(task, base + 1L)
+                                        },
+                                        onArchiveOrRestore = {
+                                            onArchiveOrRestore(task, task.status != "ARCHIVED")
+                                        },
+                                        onDelete = { onDeleteTask(task) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        items(filteredTasks, key = { it.id }) { task ->
+                            TaskItemCard(
+                                task = task,
+                                todayEpochDay = todayEpochDay,
+                                calendarDisplay = calendarDisplay,
+                                isFocusing = activeFocusTaskId == task.id,
+                                onComplete = {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onCompleteTask(task)
+                                },
+                                onStartFocus = {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onStartFocusTimer(task)
+                                },
+                                onEdit = {
+                                    editingTask = task
+                                    showCreateOrEditDialog = true
+                                },
+                                onToggleSubtask = { updatedSubtasksJson ->
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onUpdateTask(task.copy(subtasksJson = updatedSubtasksJson))
+                                },
+                                onMoveOrder = { delta ->
+                                    onUpdateTask(task.copy(sortOrder = task.sortOrder + delta))
+                                },
+                                onRescheduleTomorrow = {
+                                    val base = if (task.dueDateEpochDay >= todayEpochDay) task.dueDateEpochDay else todayEpochDay
+                                    onRescheduleTask(task, base + 1L)
+                                },
+                                onArchiveOrRestore = {
+                                    onArchiveOrRestore(task, task.status != "ARCHIVED")
+                                },
+                                onDelete = { onDeleteTask(task) }
+                            )
+                        }
+                    }
                 }
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
@@ -350,6 +516,85 @@ fun TasksScreen(
                 showCreateOrEditDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun CompactTaskRowItem(
+    task: Task,
+    isFocusing: Boolean,
+    onComplete: () -> Unit,
+    onStartFocus: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val isCompleted = task.status == "COMPLETED"
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("compact_task_card_${task.id}"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isFocusing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onComplete,
+                enabled = !isCompleted,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Icon(
+                    imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = "تکمیل تسک",
+                    tint = if (isCompleted) EmeraldSuccess else MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                modifier = Modifier.weight(1f),
+                maxLines = 1
+            )
+            if (task.dueTimeMinutes >= 0) {
+                Text(
+                    text = PersianDateAndUnitUtils.formatTimeMinutes(task.dueTimeMinutes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
+            PriorityBadge(priority = task.priority)
+            IconButton(
+                onClick = onStartFocus,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "شروع تمرکز",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "ویرایش",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

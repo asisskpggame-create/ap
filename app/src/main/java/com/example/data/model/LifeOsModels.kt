@@ -377,6 +377,8 @@ data class UserPreferencesDoc(
     val monthlyBudgetTarget: Double = 15000000.0,
     val vaultLockEnabled: Boolean = false,
     val vaultPinCode: String = "",
+    val themePalette: String = "OBSIDIAN_TEAL", // OBSIDIAN_TEAL, EMERALD_MATRIX, ROYAL_AMETHYST, AMBER_CYBER, NORDIC_FROST, MINIMAL_DAYLIGHT
+    val layoutStyle: String = "BENTO_GRID", // BENTO_GRID, COMPACT_PRO, MINIMAL_ZEN, KANBAN_BOARD
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
