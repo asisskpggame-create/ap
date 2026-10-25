@@ -2,14 +2,17 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Strict OLED Pure Black & Layered Charcoal Surfaces (Momentum / Superlist / Raycast OLED)
+// Strict OLED Pure Black & Layered Frosted Liquid Glass Surfaces
 val ObsidianBg = Color(0xFF050706)          // Strict OLED Black-Charcoal
-val CharcoalSurface = Color(0xFF0C0F0D)     // Deep Matte Charcoal Surface
-val LayeredCardSurface = Color(0xFF121614)  // Matte Card Surface
-val ElevatedCardSurface = Color(0xFF191F1C) // Elevated Pill / Dialog Surface
+val CharcoalSurface = Color(0xF20B0F0D)     // Deep Frosted Charcoal Glass
+val LayeredCardSurface = Color(0xCC111814)  // Translucent Liquid Glass Card Surface (80% opacity)
+val ElevatedCardSurface = Color(0xE017221C) // Elevated Crystal Glass Surface
 
-// 1dp Hairline Border: rgba(255, 255, 255, 0.08)
-val SubtleBorderDark = Color(0x16FFFFFF)
+// Liquid Glass Specular Rim Border: highlights light refraction on top edges
+val SubtleBorderDark = Color(0x22FFFFFF)
+val GlassSpecularTop = Color(0x66FFFFFF)
+val GlassSpecularDim = Color(0x18FFFFFF)
+val GlassGlossSheen = Color(0x14FFFFFF)
 
 // High-Contrast Neon Lime Accent (from user's Momentum screenshot)
 val NeonLime = Color(0xFFB8FF2C)

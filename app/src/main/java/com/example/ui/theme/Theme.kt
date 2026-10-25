@@ -265,28 +265,27 @@ val AppShapes = Shapes(
 )
 
 /**
- * Configures MaterialTheme with strict OLED-optimized dark theme by default,
+ * Configures MaterialTheme and centralized GlassTheme with strict OLED-optimized dark theme,
  * explicit RTL layout direction (LayoutDirection.Rtl for Persian-first rendering),
- * high-contrast accents, and Vazirmatn + Tabular Figures (tnum) Typography.
+ * high-contrast accents, Vazirmatn + Tabular Figures (tnum) Typography, and GlassTokens.
  */
 @Composable
 fun PersonalLifeOsTheme(
+    tokens: GlassTokens = GlassTokens(),
     darkTheme: Boolean = true,
     themePalette: String = AppThemePalette.OBSIDIAN_TEAL.code,
     isRtl: Boolean = true,
     layoutDirection: LayoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = resolveColorScheme(themePalette = themePalette, darkTheme = darkTheme)
-
-    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-        MaterialTheme(
-            colorScheme = colorScheme,
-            typography = Typography,
-            shapes = AppShapes,
-            content = content
-        )
-    }
+    GlassTheme(
+        tokens = tokens,
+        darkTheme = darkTheme,
+        themePalette = themePalette,
+        isRtl = isRtl,
+        layoutDirection = layoutDirection,
+        content = content
+    )
 }
 
 @Composable

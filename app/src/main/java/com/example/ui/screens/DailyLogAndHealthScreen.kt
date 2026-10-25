@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.example.ui.theme.GlassmorphismDefaults
+import com.example.ui.theme.LiquidGlassCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -477,13 +479,12 @@ private fun ConsumptionTrackerSubScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Clean 1-Tap «ثبت سریع» Card (No explanatory clutter; 1-Tap logs immediately; Long-Press or Manage Sheet edits)
+        // 1. Clean 1-Tap «ثبت سریع» Card (Liquid Glass Frosted Surface with Specular Rim)
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -506,8 +507,8 @@ private fun ConsumptionTrackerSubScreen(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, GlassmorphismDefaults.specularBorderBrush(topIntensity = 0.35f)),
                                 modifier = Modifier
                                     .clickable { showManagePresetsSheet = true }
                                     .testTag("open_manage_presets_sheet_button")
@@ -533,6 +534,7 @@ private fun ConsumptionTrackerSubScreen(
                             OutlinedButton(
                                 onClick = { showNewPresetDialog = true },
                                 shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, GlassmorphismDefaults.specularBorderBrush(MaterialTheme.colorScheme.primary, topIntensity = 0.5f)),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 modifier = Modifier.testTag("add_new_preset_button")
                             ) {
@@ -562,11 +564,13 @@ private fun ConsumptionTrackerSubScreen(
                                         }
                                         Surface(
                                             shape = RoundedCornerShape(18.dp),
-                                            color = MaterialTheme.colorScheme.surface,
+                                            color = if (todayCountForPreset > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
                                             border = BorderStroke(
                                                 1.dp,
-                                                if (todayCountForPreset > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                                else MaterialTheme.colorScheme.outline
+                                                GlassmorphismDefaults.specularBorderBrush(
+                                                    accentColor = if (todayCountForPreset > 0) MaterialTheme.colorScheme.primary else null,
+                                                    topIntensity = if (todayCountForPreset > 0) 0.65f else 0.35f
+                                                )
                                             ),
                                             modifier = Modifier
                                                 .weight(1f)
@@ -665,13 +669,12 @@ private fun ConsumptionTrackerSubScreen(
             }
         }
 
-        // 2. Hydration Progress Summary with Unit Conversion
+        // 2. Hydration Progress Summary with Unit Conversion (Liquid Glass)
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, SkyInfo.copy(alpha = 0.5f))
+                accentBorderColor = SkyInfo.copy(alpha = 0.5f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -728,11 +731,10 @@ private fun ConsumptionTrackerSubScreen(
 
         // 3. Detailed Manual Consumption Form
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                accentBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -909,11 +911,10 @@ private fun ExpenseTrackerSubScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.6f))
+                accentBorderColor = ElectricTeal.copy(alpha = 0.65f)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -1097,13 +1098,12 @@ private fun ExpenseTrackerSubScreen(
                 safeToSpend.burnRateRatio > 0.75f -> AmberWarning
                 else -> EmeraldSuccess
             }
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("expense_safe_to_spend_card"),
                 shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, safeStatusColor.copy(alpha = 0.55f))
+                accentBorderColor = safeStatusColor.copy(alpha = 0.55f)
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -1226,11 +1226,10 @@ private fun ExpenseTrackerSubScreen(
             val isIncome = transactionType == "INCOME"
             val accentColor = if (isIncome) EmeraldSuccess else RoseError
 
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.6f))
+                accentBorderColor = accentColor.copy(alpha = 0.6f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1421,11 +1420,10 @@ private fun ExpenseTrackerSubScreen(
 
         // 3. Period & Type Filter Bar + Selected Period Balance Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                accentBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1706,11 +1704,10 @@ private fun SleepAndExerciseSubScreen(
 
         // Sleep Logger Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MutedViolet.copy(alpha = 0.5f))
+                accentBorderColor = MutedViolet.copy(alpha = 0.5f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1767,11 +1764,10 @@ private fun SleepAndExerciseSubScreen(
 
         // Exercise Logger Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f))
+                accentBorderColor = ElectricTeal.copy(alpha = 0.5f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),

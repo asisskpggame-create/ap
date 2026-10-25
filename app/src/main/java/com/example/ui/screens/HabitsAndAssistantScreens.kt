@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,8 +62,10 @@ import com.example.data.model.UserPreferencesDoc
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.LiquidGlassCard
 import com.example.ui.theme.MutedViolet
 import com.example.util.PersianDateAndUnitUtils
+import com.example.util.WorldClassOsUtils
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -73,6 +76,7 @@ fun HabitsScreen(
     onCreateHabit: (title: String, category: String, scheduleType: String, scheduleDays: List<Int>, targetPerPeriod: Int) -> Unit,
     onToggleHabitDay: (Habit, Long) -> Unit
 ) {
+    val context = LocalContext.current
     val todayEpochDay = PersianDateAndUnitUtils.currentLocalEpochDay()
     var newHabitTitle by remember { mutableStateOf("") }
     var scheduleType by remember { mutableStateOf("DAILY") }
@@ -103,11 +107,10 @@ fun HabitsScreen(
 
         // Create Habit Card
         item {
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                accentBorderColor = MutedViolet.copy(alpha = 0.45f)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -209,11 +212,10 @@ fun HabitsScreen(
             )
             val isDoneToday = todayEpochDay in completedDays
 
-            Card(
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, if (isDoneToday) EmeraldSuccess.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline)
+                accentBorderColor = if (isDoneToday) EmeraldSuccess.copy(alpha = 0.65f) else MutedViolet.copy(alpha = 0.4f)
             ) {
                 Column(
                     modifier = Modifier
@@ -266,7 +268,15 @@ fun HabitsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
 
                         Button(
-                            onClick = { onToggleHabitDay(habit, todayEpochDay) }
+                            onClick = {
+                                if (!isDoneToday) {
+                                    WorldClassOsUtils.HapticSignature.successThud(context)
+                                    WorldClassOsUtils.HapticSignature.doublePulse(context)
+                                } else {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                }
+                                onToggleHabitDay(habit, todayEpochDay)
+                            }
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -296,7 +306,14 @@ fun HabitsScreen(
                                         .background(
                                             if (done) EmeraldSuccess else MaterialTheme.colorScheme.surface
                                         )
-                                        .clickable { onToggleHabitDay(habit, day) },
+                                        .clickable {
+                                            if (!done) {
+                                                WorldClassOsUtils.HapticSignature.successThud(context)
+                                            } else {
+                                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            }
+                                            onToggleHabitDay(habit, day)
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(

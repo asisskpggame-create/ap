@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +19,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -74,8 +79,11 @@ import com.example.data.model.Task
 import com.example.notifications.ReminderScheduler
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.LiquidGlassCard
 import com.example.ui.theme.MutedViolet
 import com.example.ui.theme.RoseError
+import com.example.ui.theme.TaskCategory
+import com.example.ui.theme.TaskCategoryIndicator
 import com.example.util.PersianDateAndUnitUtils
 import com.example.util.WorldClassOsUtils
 import org.json.JSONArray
@@ -116,6 +124,7 @@ fun TasksScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedPriorityFilter by remember { mutableStateOf("ALL") }
+    var selectedCategoryFilter by remember { mutableStateOf("ALL") }
     var selectedTaskLayoutMode by remember { mutableStateOf("CARDS") } // CARDS, COMPACT, GROUPED
     var showCreateOrEditDialog by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) }
@@ -146,7 +155,9 @@ fun TasksScreen(
             task.tags.any { it.contains(searchQuery, ignoreCase = true) }
 
         val matchesPriority = selectedPriorityFilter == "ALL" || task.priority == selectedPriorityFilter
-        matchesTab && matchesSearch && matchesPriority
+        val matchesCategory = selectedCategoryFilter == "ALL" ||
+            TaskCategory.fromCode(task.category).code == selectedCategoryFilter
+        matchesTab && matchesSearch && matchesPriority && matchesCategory
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -258,6 +269,34 @@ fun TasksScreen(
                                 selected = selectedPriorityFilter == code,
                                 onClick = { selectedPriorityFilter = code },
                                 label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+
+                    // Category Filter Chips with Colored Dot Indicators
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedCategoryFilter == "ALL",
+                            onClick = { selectedCategoryFilter = "ALL" },
+                            label = { Text("همه دسته‌ها", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.testTag("task_category_chip_ALL")
+                        )
+                        TaskCategory.entries.forEach { cat ->
+                            FilterChip(
+                                selected = selectedCategoryFilter == cat.code,
+                                onClick = { selectedCategoryFilter = cat.code },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(cat.color, CircleShape)
+                                    )
+                                },
+                                label = { Text(cat.titleFa, style = MaterialTheme.typography.labelSmall) },
+                                modifier = Modifier.testTag("task_category_chip_${cat.code}")
                             )
                         }
                     }
@@ -528,16 +567,13 @@ private fun CompactTaskRowItem(
     onEdit: () -> Unit
 ) {
     val isCompleted = task.status == "COMPLETED"
-    Card(
+    val taskCategory = TaskCategory.fromCode(task.category)
+    LiquidGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("compact_task_card_${task.id}"),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isFocusing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-        )
+        accentBorderColor = if (isFocusing) MaterialTheme.colorScheme.primary else taskCategory.color.copy(alpha = 0.45f)
     ) {
         Row(
             modifier = Modifier
@@ -553,7 +589,7 @@ private fun CompactTaskRowItem(
                 Icon(
                     imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                     contentDescription = "تکمیل تسک",
-                    tint = if (isCompleted) EmeraldSuccess else MaterialTheme.colorScheme.primary
+                    tint = if (isCompleted) EmeraldSuccess else taskCategory.color
                 )
             }
             Spacer(modifier = Modifier.width(6.dp))
@@ -564,6 +600,10 @@ private fun CompactTaskRowItem(
                 textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                 modifier = Modifier.weight(1f),
                 maxLines = 1
+            )
+            TaskCategoryIndicator(
+                category = taskCategory,
+                modifier = Modifier.padding(end = 6.dp)
             )
             if (task.dueTimeMinutes >= 0) {
                 Text(
@@ -617,24 +657,19 @@ private fun TaskItemCard(
     val isCompleted = task.status == "COMPLETED"
     val isOverdue = !isCompleted && task.dueDateEpochDay in 0 until todayEpochDay
     val subtasks = remember(task.subtasksJson) { parseSubtasksJson(task.subtasksJson) }
+    val taskCategory = TaskCategory.fromCode(task.category)
 
-    Card(
+    LiquidGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("task_card_${task.id}"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = when {
-                isFocusing -> ElectricTeal
-                isOverdue -> RoseError.copy(alpha = 0.6f)
-                isCompleted -> EmeraldSuccess.copy(alpha = 0.4f)
-                else -> MaterialTheme.colorScheme.outline
-            }
-        )
+        accentBorderColor = when {
+            isFocusing -> ElectricTeal
+            isOverdue -> RoseError.copy(alpha = 0.6f)
+            isCompleted -> EmeraldSuccess.copy(alpha = 0.45f)
+            else -> taskCategory.color.copy(alpha = 0.48f)
+        }
     ) {
         Column(
             modifier = Modifier
@@ -654,7 +689,7 @@ private fun TaskItemCard(
                     Icon(
                         imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                         contentDescription = "تکمیل تسک",
-                        tint = if (isCompleted) EmeraldSuccess else MaterialTheme.colorScheme.primary
+                        tint = if (isCompleted) EmeraldSuccess else taskCategory.color
                     )
                 }
 
@@ -692,12 +727,15 @@ private fun TaskItemCard(
                 PriorityBadge(priority = task.priority)
             }
 
-            // Metadata Badges (Date, Time, Category, Recurrence, Duration, Actual Focus)
+            // Metadata Badges (Colored Category Indicator, Date, Time, Recurrence, Duration, Actual Focus)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                MetaChip(text = "📁 ${task.category}")
+                TaskCategoryIndicator(
+                    category = taskCategory,
+                    modifier = Modifier.testTag("task_category_badge_${task.id}")
+                )
                 if (task.dueDateEpochDay >= 0) {
                     val dateLabel = PersianDateAndUnitUtils.formatEpochDay(task.dueDateEpochDay, calendarDisplay)
                     val timeLabel = if (task.dueTimeMinutes >= 0) " • ${PersianDateAndUnitUtils.formatTimeMinutes(task.dueTimeMinutes)}" else ""
@@ -942,6 +980,28 @@ private fun TaskEditorDialog(
                 label = { Text("توضیحات") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Text("انتخاب سریع دسته‌بندی:", style = MaterialTheme.typography.labelLarge)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                TaskCategory.entries.forEach { catOption ->
+                    val isSelected = TaskCategory.fromCode(category) == catOption
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { category = catOption.titleFa },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(catOption.color, CircleShape)
+                            )
+                        },
+                        label = { Text(catOption.titleFa) }
+                    )
+                }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

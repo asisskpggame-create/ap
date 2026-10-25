@@ -8,6 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import com.example.ui.theme.GlassTheme
+import com.example.ui.theme.GlassSurface
+import com.example.ui.theme.GlassTokens
+import com.example.ui.theme.GlassmorphismDefaults
+import com.example.ui.theme.LiquidGlassBackdrop
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.foundation.clickable
@@ -322,18 +328,10 @@ fun AuthenticatedLifeOsShell(
 
         val activePendingTasksCount = tasks.count { it.status != "COMPLETED" && it.status != "ARCHIVED" }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.09f),
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.background
-                        )
-                    )
-                )
+        LiquidGlassBackdrop(
+            modifier = Modifier.fillMaxSize(),
+            primaryGlow = MaterialTheme.colorScheme.primary,
+            secondaryGlow = MaterialTheme.colorScheme.secondary
         ) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -347,19 +345,19 @@ fun AuthenticatedLifeOsShell(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Circular 4-dot Grid Button (from screenshot top-left)
-                                Surface(
+                                // Circular 4-dot Grid Button with Specular Liquid Rim
+                                GlassSurface(
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clickable {
-                                            WorldClassOsUtils.HapticSignature.crispTick(context)
-                                            currentSectionRoute = AppSection.HOME.route
-                                        }
+                                    color = Color(0x33FFFFFF),
+                                    accentBorderColor = MaterialTheme.colorScheme.primary,
+                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        currentSectionRoute = AppSection.HOME.route
+                                    },
+                                    modifier = Modifier.size(38.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                         Icon(
                                             imageVector = Icons.Default.GridView,
                                             contentDescription = "داشبورد",
@@ -369,12 +367,13 @@ fun AuthenticatedLifeOsShell(
                                     }
                                 }
 
-                                // "12 Active Tasks" Capsule Pill (from screenshot header)
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                    modifier = Modifier.clickable {
+                                // "X Active Tasks" Frosted Capsule Pill with glowing dot
+                                GlassSurface(
+                                    shape = GlassTheme.tokens.pillShape,
+                                    color = Color(0x24FFFFFF),
+                                    accentBorderColor = MaterialTheme.colorScheme.primary,
+                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
+                                    onClick = {
                                         WorldClassOsUtils.HapticSignature.crispTick(context)
                                         currentSectionRoute = AppSection.TASKS.route
                                     }
@@ -384,12 +383,11 @@ fun AuthenticatedLifeOsShell(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(15.dp)
-                                        )
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(7.dp)
+                                        ) {}
                                         Text(
                                             text = "${PersianDateAndUnitUtils.toPersianDigits(activePendingTasksCount.toString())} تسک فعال",
                                             style = MaterialTheme.typography.labelMedium,
@@ -406,13 +404,11 @@ fun AuthenticatedLifeOsShell(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
+                                GlassSurface(
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    ),
+                                    color = Color(0x28FFFFFF),
+                                    accentBorderColor = if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else null,
+                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
                                     modifier = Modifier.size(38.dp)
                                 ) {
                                     IconButton(
@@ -429,13 +425,11 @@ fun AuthenticatedLifeOsShell(
                                         )
                                     }
                                 }
-                                Surface(
+                                GlassSurface(
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    ),
+                                    color = Color(0x28FFFFFF),
+                                    accentBorderColor = if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else null,
+                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
                                     modifier = Modifier.size(38.dp)
                                 ) {
                                     IconButton(
@@ -452,13 +446,11 @@ fun AuthenticatedLifeOsShell(
                                         )
                                     }
                                 }
-                                Surface(
+                                GlassSurface(
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    ),
+                                    color = Color(0x28FFFFFF),
+                                    accentBorderColor = if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else null,
+                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
                                     modifier = Modifier.size(38.dp)
                                 ) {
                                     IconButton(
@@ -503,7 +495,15 @@ fun AuthenticatedLifeOsShell(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         shape = CircleShape,
-                        modifier = Modifier.testTag("voice_capture_fab")
+                        modifier = Modifier
+                            .border(
+                                BorderStroke(
+                                    1.2.dp,
+                                    GlassmorphismDefaults.specularBorderBrush(Color.White, topIntensity = 0.75f)
+                                ),
+                                CircleShape
+                            )
+                            .testTag("voice_capture_fab")
                     )
                 },
                 bottomBar = {
@@ -513,46 +513,57 @@ fun AuthenticatedLifeOsShell(
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(32.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            GlassSurface(
+                                shape = GlassTheme.tokens.dockShape,
+                                color = Color(0xCC0D1410),
+                                border = BorderStroke(
+                                    GlassTheme.tokens.specularBorderWidth,
+                                    GlassTheme.specularBorderBrush(null, topIntensity = 0.5f)
+                                ),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                NavigationBar(
-                                    containerColor = Color.Transparent,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
-                                        val isSelected = currentSectionRoute == section.route
-                                        NavigationBarItem(
-                                            selected = isSelected,
-                                            onClick = {
-                                                WorldClassOsUtils.HapticSignature.crispTick(context)
-                                                currentSectionRoute = section.route
-                                            },
-                                            icon = {
-                                                Icon(
-                                                    imageVector = section.icon,
-                                                    contentDescription = section.titleFa
-                                                )
-                                            },
-                                            label = {
-                                                Text(
-                                                    text = section.titleFa,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            },
-                                            colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            ),
-                                            modifier = Modifier.testTag("bottom_nav_${section.route.lowercase()}")
-                                        )
+                                Box {
+                                    // Top Liquid Gloss Sheen reflection
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(GlassmorphismDefaults.GlossSheenBrush)
+                                    )
+                                    NavigationBar(
+                                        containerColor = Color.Transparent,
+                                        tonalElevation = 0.dp
+                                    ) {
+                                        AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
+                                            val isSelected = currentSectionRoute == section.route
+                                            NavigationBarItem(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                                    currentSectionRoute = section.route
+                                                },
+                                                icon = {
+                                                    Icon(
+                                                        imageVector = section.icon,
+                                                        contentDescription = section.titleFa
+                                                    )
+                                                },
+                                                label = {
+                                                    Text(
+                                                        text = section.titleFa,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                colors = NavigationBarItemDefaults.colors(
+                                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                ),
+                                                modifier = Modifier.testTag("bottom_nav_${section.route.lowercase()}")
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -627,6 +638,7 @@ fun AuthenticatedLifeOsShell(
                                 onUpdatePrefs = { vm.updatePreferences(it) },
                                 onCompleteTask = { vm.completeTask(it) },
                                 onStartFocusTimer = { task -> vm.startFocusTimer(task) },
+                                onToggleHabitDay = { habit, day -> vm.toggleHabitForDay(habit, day) },
                                 onQuickAddWater = { ml ->
                                     vm.quickAddConsumption("آب", "WATER", ml, "ml")
                                 },

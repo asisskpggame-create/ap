@@ -366,6 +366,25 @@ object WorldClassOsUtils {
             } catch (_: Exception) {
             }
         }
+
+        fun successThud(context: Context) {
+            try {
+                val vib = vibrator(context) ?: return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vib.vibrate(
+                        VibrationEffect.createWaveform(
+                            longArrayOf(0L, 16L, 35L, 34L),
+                            intArrayOf(0, 140, 0, 255),
+                            -1
+                        )
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    vib.vibrate(longArrayOf(0L, 16L, 35L, 34L), -1)
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /**

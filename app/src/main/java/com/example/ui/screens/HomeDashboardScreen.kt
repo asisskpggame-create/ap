@@ -10,12 +10,17 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.GlassmorphismDefaults
+import com.example.ui.theme.LiquidGlassCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CheckCircle
@@ -75,10 +81,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -96,6 +104,8 @@ import com.example.data.model.HabitRecord
 import com.example.data.model.SleepRecord
 import com.example.data.model.Task
 import com.example.data.model.UserPreferencesDoc
+import com.example.ui.components.HabitTrackingGlassModule
+import com.example.ui.components.MonthlyVisualExpensesGlassCard
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.AppLayoutStyle
 import com.example.ui.theme.AppThemePalette
@@ -104,7 +114,10 @@ import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.MutedViolet
 import com.example.ui.theme.RoseError
 import com.example.ui.theme.SkyInfo
+import com.example.ui.theme.TaskCategory
+import com.example.ui.theme.TaskCategoryIndicator
 import com.example.util.PersianDateAndUnitUtils
+import com.example.util.SafeToSpendSummary
 import com.example.util.WorldClassOsUtils
 import java.util.Calendar
 
@@ -125,6 +138,7 @@ fun HomeDashboardScreen(
     onUpdatePrefs: (UserPreferencesDoc) -> Unit = {},
     onCompleteTask: (Task) -> Unit,
     onStartFocusTimer: (Task) -> Unit = {},
+    onToggleHabitDay: (Habit, Long) -> Unit = { _, _ -> },
     onQuickAddWater: (Double) -> Unit,
     onQuickAddCoffee: () -> Unit,
     onQuickAddPresetItem: (CustomItem) -> Unit = {},
@@ -440,17 +454,33 @@ fun HomeDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = formattedDate,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "مومنتوم امروز ✦",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = formattedDate,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "$greeting، ${userEmail?.substringBefore("@") ?: "کاربر"} 👋",
+                            text = "$greeting، ${userEmail?.substringBefore("@") ?: "کاربر"}",
                             style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.ExtraBold
+                            fontWeight = FontWeight.Black
                         )
                     }
 
@@ -517,13 +547,12 @@ fun HomeDashboardScreen(
 
                 // Expandable Interactive Theme & Layout Studio Panel
                 AnimatedVisibility(visible = showThemeAndLayoutStudio) {
-                    Card(
+                    LiquidGlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("theme_layout_studio_card"),
                         shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                        accentBorderColor = MaterialTheme.colorScheme.primary
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
@@ -631,267 +660,15 @@ fun HomeDashboardScreen(
             }
         }
 
-        // 2. Daily Safe-to-Spend ("سهم مجاز خرج امروز") — Present in all layouts
-        item {
-            val statusColor = if (safeToSpend.isOverBudgetToday) RoseError else EmeraldSuccess
-            val dailyAllowanceBase = (safeToSpend.remainingSafeToSpendToday + safeToSpend.spentToday).coerceAtLeast(1.0)
-            val spentRatio = (safeToSpend.spentToday / dailyAllowanceBase).toFloat().coerceIn(0f, 1f)
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToSection("DAILY_LOG") }
-                    .testTag("home_safe_to_spend_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    statusColor.copy(alpha = 0.12f),
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            )
-                        )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = statusColor.copy(alpha = 0.18f),
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.Payments,
-                                            contentDescription = null,
-                                            tint = statusColor,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "سهم مجاز خرج امروز (${safeToSpend.jalaliMonthName} • ${PersianDateAndUnitUtils.toPersianDigits(safeToSpend.remainingDaysIncludingToday.toString())} روز مانده)",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = statusColor.copy(alpha = 0.16f),
-                                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.4f))
-                            ) {
-                                Text(
-                                    text = if (safeToSpend.isOverBudgetToday) "عبور از سقف امروز" else "در محدوده امن",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = statusColor,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Text(
-                                text = PersianDateAndUnitUtils.formatCurrencyAmount(
-                                    safeToSpend.remainingSafeToSpendToday,
-                                    safeToSpend.currency
-                                ),
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = statusColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "خرج امروز: ${PersianDateAndUnitUtils.formatCurrencyAmount(safeToSpend.spentToday, safeToSpend.currency)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        LinearProgressIndicator(
-                            progress = { (1f - spentRatio).coerceIn(0.04f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(50)),
-                            color = statusColor,
-                            trackColor = MaterialTheme.colorScheme.surface
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. Clean «ثبت سریع» Bar — 1-tap logs immediately; Long-Press or subtle Tune icon opens edit sheet (no inline edit clutter)
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "ثبت سریع",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                                modifier = Modifier
-                                    .clickable { onOpenVoiceCapture() }
-                                    .testTag("dashboard_voice_button")
-                            ) {
-                                Text(
-                                    text = "🎤 فرمان صوتی",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clickable { showQuickLogManageSheet = true }
-                                    .testTag("manage_quick_presets_button")
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Tune,
-                                        contentDescription = "مدیریت آیتم‌های ثبت سریع",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        customItems.forEach { preset ->
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .combinedClickable(
-                                        onClick = {
-                                            WorldClassOsUtils.HapticSignature.doublePulse(context)
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onQuickAddPresetItem(preset)
-                                        },
-                                        onLongClick = {
-                                            WorldClassOsUtils.HapticSignature.heavyImpact(context)
-                                            editingPreset = preset
-                                        }
-                                    )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (preset.category == "COFFEE") Icons.Default.Coffee else Icons.Default.Payments,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (preset.defaultPrice > 0.0) {
-                                            "+ ${preset.name} • ${PersianDateAndUnitUtils.formatCurrencyAmount(preset.defaultPrice, preset.defaultCurrency)}"
-                                        } else {
-                                            "+ ${preset.name}"
-                                        },
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                        AssistChip(
-                            onClick = {
-                                WorldClassOsUtils.HapticSignature.crispTick(context)
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onQuickAddWater(250.0)
-                            },
-                            leadingIcon = { Icon(Icons.Default.LocalDrink, contentDescription = null, tint = SkyInfo, modifier = Modifier.size(18.dp)) },
-                            label = { Text("+۲۵۰ ml آب") },
-                            modifier = Modifier.testTag("quick_add_water_250")
-                        )
-                        AssistChip(
-                            onClick = {
-                                WorldClassOsUtils.HapticSignature.crispTick(context)
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onQuickAddCoffee()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Coffee, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp)) },
-                            label = { Text("+۱ فنجان قهوه") }
-                        )
-                        AssistChip(
-                            onClick = { onNavigateToSection("TASKS") },
-                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) },
-                            label = { Text("تسک جدید") }
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. Layout-Specific Dashboard Architecture
+        // 2. Layout-Specific Dashboard Architecture
         when (currentLayoutStyle) {
             AppLayoutStyle.COMPACT_PRO -> {
                 // RAYCAST COMPACT PRO: High-density 4-KPI strip + Priority Tasks promoted immediately to top + 3-column mini metrics
                 item {
-                    Card(
+                    LiquidGlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                        accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                     ) {
                         Row(
                             modifier = Modifier
@@ -914,6 +691,20 @@ fun HomeDashboardScreen(
                         onNavigateToSection = onNavigateToSection,
                         onCompleteTask = onCompleteTask,
                         onStartFocusTimer = onStartFocusTimer
+                    )
+                }
+
+                item {
+                    UnifiedQuickCommandAndBudgetCard(
+                        safeToSpend = safeToSpend,
+                        customItems = customItems,
+                        onNavigateToSection = onNavigateToSection,
+                        onOpenVoiceCapture = onOpenVoiceCapture,
+                        onQuickAddPresetItem = onQuickAddPresetItem,
+                        onQuickAddWater = onQuickAddWater,
+                        onQuickAddCoffee = onQuickAddCoffee,
+                        onManagePresets = { showQuickLogManageSheet = true },
+                        onEditPreset = { editingPreset = it }
                     )
                 }
 
@@ -957,7 +748,7 @@ fun HomeDashboardScreen(
             }
 
             AppLayoutStyle.MINIMAL_ZEN -> {
-                // THINGS 3 ZEN: Clean, breathable focus mode — Priority Tasks + subtle single-line wellness summary
+                // THINGS 3 ZEN: Clean, breathable focus mode — Priority Tasks + Unified Quick & Budget dock + subtle wellness summary
                 item {
                     PriorityTasksSectionCard(
                         pendingTodayTasks = pendingTodayTasks,
@@ -968,11 +759,24 @@ fun HomeDashboardScreen(
                 }
 
                 item {
-                    Card(
+                    UnifiedQuickCommandAndBudgetCard(
+                        safeToSpend = safeToSpend,
+                        customItems = customItems,
+                        onNavigateToSection = onNavigateToSection,
+                        onOpenVoiceCapture = onOpenVoiceCapture,
+                        onQuickAddPresetItem = onQuickAddPresetItem,
+                        onQuickAddWater = onQuickAddWater,
+                        onQuickAddCoffee = onQuickAddCoffee,
+                        onManagePresets = { showQuickLogManageSheet = true },
+                        onEditPreset = { editingPreset = it }
+                    )
+                }
+
+                item {
+                    LiquidGlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
                     ) {
                         Row(
                             modifier = Modifier
@@ -1044,148 +848,334 @@ fun HomeDashboardScreen(
                         onStartFocusTimer = onStartFocusTimer
                     )
                 }
+
+                item {
+                    UnifiedQuickCommandAndBudgetCard(
+                        safeToSpend = safeToSpend,
+                        customItems = customItems,
+                        onNavigateToSection = onNavigateToSection,
+                        onOpenVoiceCapture = onOpenVoiceCapture,
+                        onQuickAddPresetItem = onQuickAddPresetItem,
+                        onQuickAddWater = onQuickAddWater,
+                        onQuickAddCoffee = onQuickAddCoffee,
+                        onManagePresets = { showQuickLogManageSheet = true },
+                        onEditPreset = { editingPreset = it }
+                    )
+                }
             }
 
             AppLayoutStyle.BENTO_GRID -> {
-                // SCREENSHOT-INSPIRED OLED BENTO GRID: Glowing Neon-Lime AI Assistant Card + Capsule "پیشرفت امروز" Bar + Dual-Ring Hero + 2x3 Bento Cards
+                // 1. SCREENSHOT-INSPIRED LUMINOUS HERO AI BENTO CARD
                 item {
                     val accentColor = MaterialTheme.colorScheme.primary
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(26.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.55f))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            accentColor.copy(alpha = 0.22f),
-                                            MaterialTheme.colorScheme.surfaceVariant,
-                                            accentColor.copy(alpha = 0.08f)
-                                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(26.dp))
+                            .border(
+                                border = BorderStroke(
+                                    1.2.dp,
+                                    GlassmorphismDefaults.specularBorderBrush(Color.White, topIntensity = 0.65f)
+                                ),
+                                shape = RoundedCornerShape(26.dp)
+                            )
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFFD8FA70),
+                                        Color(0xFFA6EE2C),
+                                        Color(0xFF4C8210)
                                     )
                                 )
+                            )
+                    ) {
+                        // Top Specular Sheen Overlay
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(GlassmorphismDefaults.GlossSheenBrush)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Top
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = accentColor,
-                                            modifier = Modifier.size(44.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    imageVector = Icons.Default.AutoAwesome,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-                                        }
-                                        Column {
-                                            Text(
-                                                text = "دستیار هوشمند",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = accentColor,
-                                                fontWeight = FontWeight.ExtraBold
-                                            )
-                                            Text(
-                                                text = dailyInsightText,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                    }
                                     Surface(
                                         shape = CircleShape,
-                                        color = accentColor.copy(alpha = 0.16f),
-                                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f)),
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .clickable { onOpenVoiceCapture() }
+                                        color = Color(0xFF0F1E08),
+                                        modifier = Modifier.size(28.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
-                                                imageVector = Icons.Default.Mic,
-                                                contentDescription = "فرمان صوتی",
-                                                tint = accentColor,
-                                                modifier = Modifier.size(18.dp)
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = Color(0xFFD8FA70),
+                                                modifier = Modifier.size(15.dp)
                                             )
                                         }
                                     }
+                                    Text(
+                                        text = "دستیار هوشمند شما",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color(0xFF0A1404),
+                                        fontWeight = FontWeight.Black
+                                    )
                                 }
 
-                                // Thick capsule "پیشرفت امروز" progress bar inspired by the user's screenshot
+                                Text(
+                                    text = if (pendingTodayTasks.isNotEmpty()) {
+                                        "شما ${PersianDateAndUnitUtils.toPersianDigits(pendingTodayTasks.size.toString())} تسک برای تمرکز و پیگیری امروز دارید."
+                                    } else {
+                                        dailyInsightText
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF1B360A),
+                                    fontWeight = FontWeight.Medium,
+                                    lineHeight = 20.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Dark Frosted Capsule Pill: "پرسش از هوش مصنوعی ←"
                                 Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column {
-                                                Text(
-                                                    text = "پیشرفت امروز",
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                Text(
-                                                    text = "${PersianDateAndUnitUtils.toPersianDigits(completedTodayCount.toString())} از ${PersianDateAndUnitUtils.toPersianDigits((completedTodayCount + pendingTodayTasks.size).toString())} انجام شده",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            Text(
-                                                text = "${PersianDateAndUnitUtils.toPersianDigits((productivityProgress * 100).toInt().toString())}٪",
-                                                style = MaterialTheme.typography.headlineSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = accentColor
-                                            )
+                                    shape = RoundedCornerShape(50),
+                                    color = Color(0xFF0F1E08),
+                                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                                    modifier = Modifier
+                                        .clickable {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            onNavigateToSection("AI_ASSISTANT")
                                         }
-                                        LinearProgressIndicator(
-                                            progress = { productivityProgress.coerceIn(0.04f, 1f) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(10.dp)
-                                                .clip(RoundedCornerShape(50)),
-                                            color = accentColor,
-                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        .testTag("ask_ai_anything_hero_button")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "پرسش از هوش مصنوعی ←",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = Color(0xFFD8FA70),
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
+                                }
+                            }
+
+                            // Right Visual: 3D Holographic AI Sphere with concentric orbit rings
+                            Box(
+                                modifier = Modifier
+                                    .size(105.dp)
+                                    .padding(start = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val centerX = size.width / 2f
+                                    val centerY = size.height / 2f
+                                    val maxRadius = size.minDimension / 2f
+
+                                    // Ambient Core Glow
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                Color(0x80D8FA70),
+                                                Color(0x33A6EE2C),
+                                                Color.Transparent
+                                            ),
+                                            center = Offset(centerX, centerY),
+                                            radius = maxRadius
+                                        ),
+                                        radius = maxRadius,
+                                        center = Offset(centerX, centerY)
+                                    )
+
+                                    // Concentric Orbit Ellipses
+                                    drawOval(
+                                        color = Color(0x660F1E08),
+                                        topLeft = Offset(centerX - maxRadius * 0.95f, centerY - maxRadius * 0.45f),
+                                        size = androidx.compose.ui.geometry.Size(maxRadius * 1.9f, maxRadius * 0.9f),
+                                        style = Stroke(width = 2.5f)
+                                    )
+
+                                    drawOval(
+                                        color = Color(0x40FFFFFF),
+                                        topLeft = Offset(centerX - maxRadius * 0.85f, centerY - maxRadius * 0.70f),
+                                        size = androidx.compose.ui.geometry.Size(maxRadius * 1.7f, maxRadius * 1.4f),
+                                        style = Stroke(width = 1.8f)
+                                    )
+
+                                    // Luminous 3D AI Sphere Core
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                Color(0xFFFFFFFF),
+                                                Color(0xFFD8FA70),
+                                                Color(0xFF4C8210)
+                                            ),
+                                            center = Offset(centerX - maxRadius * 0.15f, centerY - maxRadius * 0.15f),
+                                            radius = maxRadius * 0.45f
+                                        ),
+                                        radius = maxRadius * 0.38f,
+                                        center = Offset(centerX, centerY)
+                                    )
+
+                                    // Specular Highlight Pin
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        radius = maxRadius * 0.08f,
+                                        center = Offset(centerX - maxRadius * 0.15f, centerY - maxRadius * 0.15f)
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // Grid of 6 Live Summary Cards
+                // 2. SCREENSHOT-INSPIRED TODAY'S PROGRESS WITH THICK 3D CYLINDER BAR
+                item {
+                    val accentColor = MaterialTheme.colorScheme.primary
+                    LiquidGlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("today_progress_card"),
+                        shape = RoundedCornerShape(24.dp),
+                        accentBorderColor = accentColor.copy(alpha = 0.45f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "پیشرفت امروز",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                ) {
+                                    Text(
+                                        text = formattedDate.take(15),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Text(
+                                    text = "${PersianDateAndUnitUtils.toPersianDigits(completedTodayCount.toString())} از ${PersianDateAndUnitUtils.toPersianDigits((completedTodayCount + pendingTodayTasks.size).toString())} تسک انجام شده",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Text(
+                                    text = "${PersianDateAndUnitUtils.toPersianDigits((productivityProgress * 100).toInt().toString())}٪",
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = accentColor
+                                )
+                            }
+
+                            // Thick 3D Cylinder Progress Bar
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF101813))
+                                    .border(BorderStroke(1.dp, Color(0x24FFFFFF)), RoundedCornerShape(50))
+                            ) {
+                                val progressFraction = productivityProgress.coerceIn(0.04f, 1f)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progressFraction)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF70D418),
+                                                    Color(0xFFCEF665)
+                                                )
+                                            )
+                                        )
+                                ) {
+                                    // 3D Glass Sheen Highlight Line across the top of the cylinder
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(3.dp)
+                                            .padding(horizontal = 6.dp)
+                                            .background(Color.White.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. TODAY'S PRIORITY TASKS (Promoted directly under Today's Progress!)
+                item {
+                    PriorityTasksSectionCard(
+                        pendingTodayTasks = pendingTodayTasks,
+                        onNavigateToSection = onNavigateToSection,
+                        onCompleteTask = onCompleteTask,
+                        onStartFocusTimer = onStartFocusTimer
+                    )
+                }
+
+                // 4. UNIFIED QUICK ACTIONS & SAFE-TO-SPEND BENTO DOCK
+                item {
+                    UnifiedQuickCommandAndBudgetCard(
+                        safeToSpend = safeToSpend,
+                        customItems = customItems,
+                        onNavigateToSection = onNavigateToSection,
+                        onOpenVoiceCapture = onOpenVoiceCapture,
+                        onQuickAddPresetItem = onQuickAddPresetItem,
+                        onQuickAddWater = onQuickAddWater,
+                        onQuickAddCoffee = onQuickAddCoffee,
+                        onManagePresets = { showQuickLogManageSheet = true },
+                        onEditPreset = { editingPreset = it }
+                    )
+                }
+
+                // 5. SCREENSHOT-INSPIRED TODAY'S FOCUS 3D GLASS PILLARS WEEKLY CHART
+                item {
+                    WeeklyFocusGlassChartCard(
+                        productivityProgress = productivityProgress,
+                        onNavigateToSection = onNavigateToSection
+                    )
+                }
+
+                // 6. REFINED 2x2 WELLNESS & LIFE METRIC BENTO CLUSTER
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -1205,13 +1195,13 @@ fun HomeDashboardScreen(
 
                             DashboardMetricCard(
                                 modifier = Modifier.weight(1f),
-                                title = "قهوه و نوشیدنی",
-                                primaryValue = "${PersianDateAndUnitUtils.toPersianDigits(todayCoffeeCount.toString())} قهوه",
-                                subtitle = "سایر نوشیدنی‌ها: ${PersianDateAndUnitUtils.toPersianDigits(todayBeverageCount.toString())}",
-                                progress = (todayCoffeeCount / 3f).coerceIn(0f, 1f),
-                                accentColor = AmberWarning,
-                                icon = Icons.Default.Coffee,
-                                onClick = { onNavigateToSection("DAILY_LOG") }
+                                title = "امتیاز عادت‌ها",
+                                primaryValue = "${PersianDateAndUnitUtils.toPersianDigits(habitScorePercent.toString())}٪",
+                                subtitle = "${PersianDateAndUnitUtils.toPersianDigits(completedHabitsToday.size.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(activeHabits.size.toString())} عادت",
+                                progress = habitScorePercent / 100f,
+                                accentColor = MutedViolet,
+                                icon = Icons.Default.CheckCircle,
+                                onClick = { onNavigateToSection("HABITS") }
                             )
                         }
 
@@ -1232,22 +1222,6 @@ fun HomeDashboardScreen(
 
                             DashboardMetricCard(
                                 modifier = Modifier.weight(1f),
-                                title = "امتیاز عادت‌ها",
-                                primaryValue = "${PersianDateAndUnitUtils.toPersianDigits(habitScorePercent.toString())}٪",
-                                subtitle = "${PersianDateAndUnitUtils.toPersianDigits(completedHabitsToday.size.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(activeHabits.size.toString())} عادت فعال",
-                                progress = habitScorePercent / 100f,
-                                accentColor = MutedViolet,
-                                icon = Icons.Default.CheckCircle,
-                                onClick = { onNavigateToSection("HABITS") }
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            DashboardMetricCard(
-                                modifier = Modifier.weight(1f),
                                 title = "خلاصه خواب",
                                 primaryValue = sleepText,
                                 subtitle = if (latestSleep != null) "کیفیت: ${PersianDateAndUnitUtils.toPersianDigits(latestSleep.qualityRating.toString())}/۵" else "لمس برای ثبت خواب",
@@ -1256,40 +1230,40 @@ fun HomeDashboardScreen(
                                 icon = Icons.Default.Bedtime,
                                 onClick = { onNavigateToSection("DAILY_LOG") }
                             )
-
-                            DashboardMetricCard(
-                                modifier = Modifier.weight(1f),
-                                title = "فعالیت ورزشی امروز",
-                                primaryValue = "${PersianDateAndUnitUtils.toPersianDigits(todayExerciseMinutes.toString())} دقیقه",
-                                subtitle = "هدف: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyExerciseTargetMinutes.toString())} دقیقه",
-                                progress = (todayExerciseMinutes.toFloat() / prefs.dailyExerciseTargetMinutes.coerceAtLeast(1)).coerceIn(0f, 1f),
-                                accentColor = MaterialTheme.colorScheme.primary,
-                                icon = Icons.AutoMirrored.Filled.DirectionsRun,
-                                onClick = { onNavigateToSection("DAILY_LOG") }
-                            )
                         }
                     }
                 }
-
-                item {
-                    PriorityTasksSectionCard(
-                        pendingTodayTasks = pendingTodayTasks,
-                        onNavigateToSection = onNavigateToSection,
-                        onCompleteTask = onCompleteTask,
-                        onStartFocusTimer = onStartFocusTimer
-                    )
-                }
             }
+        }
+
+        // Visual Monthly Expenses Distribution GlassCard
+        item {
+            MonthlyVisualExpensesGlassCard(
+                expenses = expenses,
+                defaultCurrency = prefs.defaultCurrency,
+                onNavigateToExpenses = { onNavigateToSection("DAILY_LOG") }
+            )
+        }
+
+        // Interactive Habit Tracking Glass Module with Haptic Toggle
+        item {
+            HabitTrackingGlassModule(
+                habits = habits,
+                habitRecords = habitRecords,
+                todayEpochDay = todayEpochDay,
+                weekStartDay = prefs.weekStartDay,
+                onToggleHabitDay = onToggleHabitDay,
+                onNavigateToHabits = { onNavigateToSection("HABITS") }
+            )
         }
 
         // 7. Upcoming Reminders
         if (upcomingReminders.isNotEmpty()) {
             item {
-                Card(
+                LiquidGlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    shape = RoundedCornerShape(20.dp),
+                    accentBorderColor = AmberWarning.copy(alpha = 0.45f)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -1298,7 +1272,7 @@ fun HomeDashboardScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("یادآورهای پیش‌رو", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("یادآورهای پیش‌رو", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
                         upcomingReminders.forEach { rTask ->
                             Text(
@@ -1315,11 +1289,10 @@ fun HomeDashboardScreen(
         // 8. Recent Activity Timeline (shown in Bento Grid & Kanban Board)
         if (currentLayoutStyle != AppLayoutStyle.MINIMAL_ZEN) {
             item {
-                Card(
+                LiquidGlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
                 ) {
                     Column(
                         modifier = Modifier
@@ -1335,7 +1308,7 @@ fun HomeDashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("تایم‌لاین فعالیت‌های اخیر", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("تایم‌لاین فعالیت‌های اخیر", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             }
                             Text(
                                 text = "لاگ کامل",
@@ -1388,6 +1361,234 @@ fun HomeDashboardScreen(
     }
 }
 
+@Composable
+private fun WeeklyFocusGlassChartCard(
+    productivityProgress: Float,
+    onNavigateToSection: (String) -> Unit
+) {
+    val context = LocalContext.current
+    LiquidGlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("weekly_focus_glass_chart_card"),
+        shape = RoundedCornerShape(26.dp),
+        accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Analytics,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "روند تمرکز و بهره‌وری",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Text(
+                    text = "مشاهده جزئیات ←",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { onNavigateToSection("REPORTS") }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "پیشرفت عالی!",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "بهره‌وری شما ۱۵٪ بیشتر از هفته گذشته است",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "${PersianDateAndUnitUtils.toPersianDigits((productivityProgress * 100).toInt().toString())}٪",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // 7 Days 3D Glass Pillars Chart (شنبه تا جمعه)
+            val dayData = remember(productivityProgress) {
+                listOf(
+                    Triple("ش", 0.65f, "+۱۰٪"),
+                    Triple("ی", 0.40f, "-۱۵٪"),
+                    Triple("د", 0.55f, "-۵٪"),
+                    Triple("س", 0.70f, "+۵٪"),
+                    Triple("چ", 0.60f, "+۲٪"),
+                    Triple("پ", productivityProgress.coerceIn(0.25f, 1f), "${(productivityProgress * 100).toInt()}٪"),
+                    Triple("ج", 0.35f, "-۸٪")
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                dayData.forEachIndexed { index, (dayLabel, ratio, tag) ->
+                    val isToday = index == 5
+                    val pillarHeight = (ratio * 80).coerceIn(24f, 85f).dp
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (isToday) Color(0xFFD8FA70) else Color(0x332B3B2B),
+                            border = BorderStroke(1.dp, if (isToday) Color.White else Color(0x22FFFFFF))
+                        ) {
+                            Text(
+                                text = PersianDateAndUnitUtils.toPersianDigits(tag),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isToday) Color(0xFF0C1905) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isToday) FontWeight.Black else FontWeight.Normal,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(28.dp)
+                                .height(pillarHeight)
+                                .clip(RoundedCornerShape(50))
+                                .border(
+                                    width = if (isToday) 1.2.dp else 1.dp,
+                                    brush = GlassmorphismDefaults.specularBorderBrush(
+                                        accentColor = if (isToday) Color.White else null,
+                                        topIntensity = if (isToday) 0.8f else 0.4f
+                                    ),
+                                    shape = RoundedCornerShape(50)
+                                )
+                                .background(
+                                    if (isToday) {
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFFD8FA70),
+                                                Color(0xFFA2EE23),
+                                                Color(0xFF569414)
+                                            )
+                                        )
+                                    } else {
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0x3D2E3E28),
+                                                Color(0x1F142012)
+                                            )
+                                        )
+                                    }
+                                )
+                        ) {
+                            if (isToday) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(6.dp)
+                                        .padding(start = 3.dp)
+                                        .background(Color.White.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = dayLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.Transparent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .border(BorderStroke(1.2.dp, Color(0x66FFFFFF)), RoundedCornerShape(50))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color(0xFFD8FA70),
+                                Color(0xFFA4EE25)
+                            )
+                        )
+                    )
+                    .clickable {
+                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                        onNavigateToSection("AI_ASSISTANT")
+                    }
+                    .testTag("boost_productivity_ai_button")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFF0C1905),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "✦ ارتقای بهره‌وری با هوش مصنوعی",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color(0xFF0C1905),
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
 private val SubtleRingTrack = androidx.compose.ui.graphics.Color(0xFF283552)
 
 @Composable
@@ -1399,11 +1600,10 @@ private fun PriorityTasksSectionCard(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    Card(
+    LiquidGlassCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
     ) {
         Column(
             modifier = Modifier
@@ -1463,16 +1663,17 @@ private fun PriorityTasksSectionCard(
                 }
             } else {
                 pendingTodayTasks.take(4).forEach { task ->
+                    val taskCategory = TaskCategory.fromCode(task.category)
                     val priorityAccent = when (task.priority) {
                         "CRITICAL" -> RoseError
                         "HIGH" -> AmberWarning
                         "LOW" -> SkyInfo
-                        else -> ElectricTeal
+                        else -> taskCategory.color
                     }
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, priorityAccent.copy(alpha = 0.28f)),
+                        border = BorderStroke(1.dp, priorityAccent.copy(alpha = 0.35f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1492,21 +1693,31 @@ private fun PriorityTasksSectionCard(
                                 Icon(
                                     imageVector = Icons.Default.RadioButtonUnchecked,
                                     contentDescription = "تکمیل تسک",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = taskCategory.color
                                 )
                             }
                             Spacer(modifier = Modifier.width(6.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = task.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = task.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    TaskCategoryIndicator(category = taskCategory)
+                                }
                                 Text(
                                     text = buildString {
-                                        append(task.category)
+                                        append(taskCategory.titleFa)
                                         if (task.dueTimeMinutes >= 0) {
                                             append(" • ساعت ${PersianDateAndUnitUtils.formatTimeMinutes(task.dueTimeMinutes)}")
                                         }
@@ -1542,6 +1753,264 @@ private fun PriorityTasksSectionCard(
                             PriorityBadge(priority = task.priority)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@Composable
+private fun UnifiedQuickCommandAndBudgetCard(
+    safeToSpend: SafeToSpendSummary,
+    customItems: List<CustomItem>,
+    onNavigateToSection: (String) -> Unit,
+    onOpenVoiceCapture: () -> Unit,
+    onQuickAddPresetItem: (CustomItem) -> Unit,
+    onQuickAddWater: (Double) -> Unit,
+    onQuickAddCoffee: () -> Unit,
+    onManagePresets: () -> Unit,
+    onEditPreset: (CustomItem) -> Unit
+) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val statusColor = if (safeToSpend.isOverBudgetToday) RoseError else EmeraldSuccess
+    val dailyAllowanceBase = (safeToSpend.remainingSafeToSpendToday + safeToSpend.spentToday).coerceAtLeast(1.0)
+    val spentRatio = (safeToSpend.spentToday / dailyAllowanceBase).toFloat().coerceIn(0f, 1f)
+
+    LiquidGlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        accentBorderColor = statusColor.copy(alpha = 0.45f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Upper Section: Safe-to-Spend Allowance Bar (TestTag: home_safe_to_spend_card)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(statusColor.copy(alpha = 0.08f))
+                    .border(
+                        1.dp,
+                        GlassmorphismDefaults.specularBorderBrush(statusColor, topIntensity = 0.35f),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable { onNavigateToSection("DAILY_LOG") }
+                    .testTag("home_safe_to_spend_card")
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = statusColor.copy(alpha = 0.22f),
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Payments,
+                                        contentDescription = null,
+                                        tint = statusColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "سهم مجاز خرج امروز (${safeToSpend.jalaliMonthName} • ${PersianDateAndUnitUtils.toPersianDigits(safeToSpend.remainingDaysIncludingToday.toString())} روز مانده)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = statusColor.copy(alpha = 0.18f),
+                            border = BorderStroke(
+                                1.dp,
+                                GlassmorphismDefaults.specularBorderBrush(statusColor, topIntensity = 0.5f)
+                            )
+                        ) {
+                            Text(
+                                text = if (safeToSpend.isOverBudgetToday) "عبور از سقف امروز" else "در محدوده امن",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = PersianDateAndUnitUtils.formatCurrencyAmount(
+                                safeToSpend.remainingSafeToSpendToday,
+                                safeToSpend.currency
+                            ),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = statusColor,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "خرج امروز: ${PersianDateAndUnitUtils.formatCurrencyAmount(safeToSpend.spentToday, safeToSpend.currency)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { (1f - spentRatio).coerceIn(0.04f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(50)),
+                        color = statusColor,
+                        trackColor = MaterialTheme.colorScheme.surface
+                    )
+                }
+            }
+
+            // Lower Section: Quick Actions & Voice Capture Dock
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "ثبت سریع و اقدامات یک‌لمسی",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .clickable { onOpenVoiceCapture() }
+                                .testTag("dashboard_voice_button")
+                        ) {
+                            Text(
+                                text = "🎤 فرمان صوتی",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable { onManagePresets() }
+                                .testTag("manage_quick_presets_button")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "مدیریت آیتم‌های ثبت سریع",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    customItems.forEach { preset ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .combinedClickable(
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.doublePulse(context)
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onQuickAddPresetItem(preset)
+                                    },
+                                    onLongClick = {
+                                        WorldClassOsUtils.HapticSignature.heavyImpact(context)
+                                        onEditPreset(preset)
+                                    }
+                                )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (preset.category == "COFFEE") Icons.Default.Coffee else Icons.Default.Payments,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = if (preset.defaultPrice > 0.0) {
+                                        "+ ${preset.name} • ${PersianDateAndUnitUtils.formatCurrencyAmount(preset.defaultPrice, preset.defaultCurrency)}"
+                                    } else {
+                                        "+ ${preset.name}"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                    AssistChip(
+                        onClick = {
+                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onQuickAddWater(250.0)
+                        },
+                        leadingIcon = { Icon(Icons.Default.LocalDrink, contentDescription = null, tint = SkyInfo, modifier = Modifier.size(16.dp)) },
+                        label = { Text("+۲۵۰ ml آب", style = MaterialTheme.typography.labelMedium) },
+                        modifier = Modifier.testTag("quick_add_water_250")
+                    )
+                    AssistChip(
+                        onClick = {
+                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onQuickAddCoffee()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Coffee, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(16.dp)) },
+                        label = { Text("+۱ فنجان قهوه", style = MaterialTheme.typography.labelMedium) }
+                    )
+                    AssistChip(
+                        onClick = { onNavigateToSection("TASKS") },
+                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) },
+                        label = { Text("تسک جدید", style = MaterialTheme.typography.labelMedium) }
+                    )
                 }
             }
         }
@@ -1589,11 +2058,10 @@ private fun KanbanDomainColumn(
     accentColor: androidx.compose.ui.graphics.Color,
     content: @Composable () -> Unit
 ) {
-    Card(
+    LiquidGlassCard(
         modifier = Modifier.width(264.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
+        shape = RoundedCornerShape(22.dp),
+        accentBorderColor = accentColor.copy(alpha = 0.5f)
     ) {
         Column(
             modifier = Modifier
@@ -1601,8 +2069,8 @@ private fun KanbanDomainColumn(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            accentColor.copy(alpha = 0.1f),
-                            MaterialTheme.colorScheme.surfaceVariant
+                            accentColor.copy(alpha = 0.12f),
+                            Color.Transparent
                         )
                     )
                 )
@@ -1617,7 +2085,8 @@ private fun KanbanDomainColumn(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Surface(
                     shape = RoundedCornerShape(50),
@@ -1681,11 +2150,11 @@ private fun DashboardMetricCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
+    LiquidGlassCard(
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.32f))
+        accentBorderColor = accentColor.copy(alpha = 0.45f),
+        onClick = onClick
     ) {
         Box(
             modifier = Modifier
@@ -1693,8 +2162,8 @@ private fun DashboardMetricCard(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            accentColor.copy(alpha = 0.08f),
-                            MaterialTheme.colorScheme.surfaceVariant
+                            accentColor.copy(alpha = 0.10f),
+                            Color.Transparent
                         )
                     )
                 )

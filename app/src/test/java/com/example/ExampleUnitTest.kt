@@ -230,6 +230,35 @@ class ExampleUnitTest {
             assertEquals(layout, com.example.ui.theme.AppLayoutStyle.fromCode(layout.code))
         }
     }
+
+    @Test
+    fun glassmorphismTheme_verifiesCentralizedGlassTokensAndBrushes() {
+        val tokens = com.example.ui.theme.GlassTokens()
+        assertTrue(tokens.surfaceAlpha > 0.5f)
+        assertTrue(tokens.blurRadius.value > 0f)
+        assertTrue(tokens.specularBorderWidth.value > 0f)
+        assertNotNull(tokens.cardShape)
+        assertNotNull(tokens.dockShape)
+        assertNotNull(tokens.pillShape)
+
+        val specularBrush = com.example.ui.theme.GlassTheme.specularBorderBrush(
+            accentColor = androidx.compose.ui.graphics.Color.Cyan,
+            topIntensity = 0.65f
+        )
+        assertNotNull(specularBrush)
+
+        val frostedBrush = com.example.ui.theme.GlassTheme.frostedGlassBrush(
+            baseColor = androidx.compose.ui.graphics.Color.Black
+        )
+        assertNotNull(frostedBrush)
+
+        // Verify GlassMotion spring animations and transitions
+        assertNotNull(com.example.ui.theme.GlassMotion.FluidSpring)
+        assertNotNull(com.example.ui.theme.GlassMotion.SnappySpring)
+        assertNotNull(com.example.ui.theme.GlassMotion.BouncySpring)
+        assertNotNull(com.example.ui.theme.GlassMotion.entryTransition())
+        assertNotNull(com.example.ui.theme.GlassMotion.exitTransition())
+    }
 }
 
 

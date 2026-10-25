@@ -608,29 +608,80 @@ $cleanInput
             }
         }
 
-        // F. General Task: e.g. "فردا ساعت ۹ قبض رو پرداخت کنم"
+        // F. Journal / Daily Log / Diary: e.g. "یادداشت روزانه: ..." or "خاطره امروز: ..." or "یادداشت کن ..."
+        if (clause.contains("یادداشت روزانه") || clause.contains("خاطره") || clause.contains("دفترچه خاطرات") ||
+            clause.contains("یادداشت کن") || clause.contains("ژورنال") || clause.startsWith("یادداشت")
+        ) {
+            val content = clause
+                .replace("یادداشت روزانه", "")
+                .replace("ثبت خاطره", "")
+                .replace("خاطره امروز", "")
+                .replace("دفترچه خاطرات", "")
+                .replace("یادداشت کن که", "")
+                .replace("یادداشت کن", "")
+                .replace("ژورنال", "")
+                .trim()
+                .removePrefix(":")
+                .trim()
+                .ifBlank { clause }
+
+            return ProposedAiOperation(
+                operationType = "CreateTask",
+                title = content.take(80),
+                category = "یادداشت روزانه",
+                dueDateOffsetDays = dateOffset,
+                priority = "LOW",
+                requiresConfirmation = true,
+                humanReadablePreview = "ثبت یادداشت روزانه: «$content»"
+            )
+        }
+
+        // G. Tasks with Due Date, Time, Priority & Category (e.g. "فردا ساعت ۹ جلسه با علی دارم" / "تسک پرداخت قبض")
         val dueTime = extractTimeMinutes(clause)
+        val priority = when {
+            clause.contains("خیلی مهم") || clause.contains("بحرانی") || clause.contains("فوری") -> "CRITICAL"
+            clause.contains("مهم") || clause.contains("اولویت بالا") || clause.contains("قبض") -> "HIGH"
+            clause.contains("کم‌اهمیت") || clause.contains("اولویت پایین") -> "LOW"
+            else -> "MEDIUM"
+        }
+        val category = when {
+            clause.contains("قبض") || clause.contains("مالی") || clause.contains("بانک") || clause.contains("حساب") -> "مالی"
+            clause.contains("جلسه") || clause.contains("کاری") || clause.contains("پروژه") || clause.contains("شرکت") || clause.contains("تیم") -> "کار"
+            clause.contains("کتاب") || clause.contains("درس") || clause.contains("مطالعه") || clause.contains("دانشگاه") -> "یادگیری"
+            clause.contains("دارو") || clause.contains("دکتر") || clause.contains("پزشک") || clause.contains("ویزیت") -> "سلامت"
+            clause.contains("خرید") || clause.contains("سوپرمارکت") || clause.contains("بازار") -> "خرید"
+            else -> "عمومی"
+        }
+
         val cleanedTitle = clause
+            .replace("تسک جدید", "")
+            .replace("تسک", "")
             .replace("فردا", "")
             .replace("امروز", "")
             .replace(Regex("ساعت\\s*\\d+(?::\\d+)?"), "")
             .replace("رو پرداخت کنم", "پرداخت")
             .replace("را پرداخت کنم", "پرداخت")
+            .replace("اضافه کن", "")
+            .replace("ثبت کن", "")
+            .replace("انجام بدم", "")
             .replace("کنم", "")
+            .trim()
+            .removePrefix(":")
             .trim()
             .ifBlank { clause }
 
         return ProposedAiOperation(
             operationType = "CreateTask",
-            title = if (clause.contains("قبض")) "پرداخت قبض" else cleanedTitle,
-            category = if (clause.contains("قبض")) "مالی" else "عمومی",
+            title = if (clause.contains("قبض") && !cleanedTitle.contains("قبض")) "پرداخت قبض" else cleanedTitle,
+            category = category,
             dueDateOffsetDays = dateOffset,
             dueTimeMinutes = dueTime,
-            priority = if (clause.contains("قبض") || clause.contains("مهم")) "HIGH" else "MEDIUM",
+            priority = priority,
             requiresConfirmation = true,
-            humanReadablePreview = "ایجاد تسک: «${if (clause.contains("قبض")) "پرداخت قبض" else cleanedTitle}»" +
+            humanReadablePreview = "ایجاد تسک [$category]: «${if (clause.contains("قبض") && !cleanedTitle.contains("قبض")) "پرداخت قبض" else cleanedTitle}»" +
                 (if (dateOffset == 1) " (فردا)" else "") +
-                (if (dueTime >= 0) " ساعت ${PersianDateAndUnitUtils.formatTimeMinutes(dueTime)}" else "")
+                (if (dueTime >= 0) " ساعت ${PersianDateAndUnitUtils.formatTimeMinutes(dueTime)}" else "") +
+                (if (priority == "HIGH" || priority == "CRITICAL") " [اولویت $priority]" else "")
         )
     }
 
