@@ -67,6 +67,15 @@ internal fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     awaitClose { removeAuthStateListener(listener) }
 }
 
+private fun getDefaultWebClientId(context: Context): String? {
+    return try {
+        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (resId != 0) context.getString(resId) else null
+    } catch (e: Exception) {
+        null
+    }
+}
+
 /**
  * 1. Silent Auto-Sign-In on App Startup (One option per request: GetGoogleIdOption)
  */
@@ -77,13 +86,18 @@ fun attemptAutoSignIn(
     onUnauthenticated: () -> Unit,
     scope: CoroutineScope
 ) {
-    if (Firebase.auth.currentUser != null) {
-        onAuthSuccess()
+    try {
+        if (Firebase.auth.currentUser != null) {
+            onAuthSuccess()
+            return
+        }
+    } catch (e: Exception) {
+        onUnauthenticated()
         return
     }
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
+
+    val clientId = getDefaultWebClientId(context)
+    if (clientId.isNullOrEmpty()) {
         onUnauthenticated()
         return
     }
@@ -127,9 +141,8 @@ fun onGoogleSignInClicked(
     scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
+    val clientId = getDefaultWebClientId(context)
+    if (clientId.isNullOrEmpty()) {
         onAuthError("پیکربندی ورود با گوگل یافت نشد: default_web_client_id موجود نیست")
         return
     }
