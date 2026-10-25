@@ -411,6 +411,7 @@ data class UserPreferencesDoc(
     val vaultPinCode: String = "",
     val themePalette: String = "OBSIDIAN_TEAL", // OBSIDIAN_TEAL, EMERALD_MATRIX, ROYAL_AMETHYST, AMBER_CYBER, NORDIC_FROST, MINIMAL_DAYLIGHT
     val layoutStyle: String = "BENTO_GRID", // BENTO_GRID, COMPACT_PRO, MINIMAL_ZEN, KANBAN_BOARD
+    val dashboardCardOrder: List<String> = listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR"),
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -179,6 +180,7 @@ fun HomeDashboardScreen(
     )
 
     var showThemeAndLayoutStudio by rememberSaveable { mutableStateOf(false) }
+    var showCardReorderSheet by rememberSaveable { mutableStateOf(false) }
     var goalsSectionExpanded by rememberSaveable { mutableStateOf(true) }
     var financeSectionExpanded by rememberSaveable { mutableStateOf(true) }
     var debtsDrawerExpanded by rememberSaveable { mutableStateOf(true) }
@@ -304,6 +306,110 @@ fun HomeDashboardScreen(
         todayEpochDay = todayEpochDay,
         expenses = expenses
     )
+
+    // Modal Bottom Sheet for reordering dashboard cards
+    if (showCardReorderSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showCardReorderSheet = false },
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.95f),
+            scrimColor = Color.Black.copy(alpha = 0.65f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "ترتیب شخصی‌سازی کارت‌های داشبورد",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = {
+                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                        onUpdatePrefs(prefs.copy(dashboardCardOrder = listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR")))
+                    }) {
+                        Text("پیش‌فرض")
+                    }
+                }
+
+                Text(
+                    text = "کارت‌ها را با دکمه‌های بالا و پایین جابجا کنید تا طبق اولویت دلخواهتان در صفحه اصلی نمایش داده شوند.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                val currentOrder = prefs.dashboardCardOrder.ifEmpty { listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR") }
+                val cardTitles = mapOf(
+                    "QUICK_BAR" to "⚡ نوار ثبت فوری هوشمند (Omni-Bar)",
+                    "FINANCE" to "💰 امور مالی، بودجه و بدهی/طلب",
+                    "GOALS" to "🎯 اهداف امروز و تسک‌ها",
+                    "HABITS" to "🌱 عادت‌های روزانه",
+                    "WELLNESS" to "💧 سلامت (آب، قهوه و تغذیه)",
+                    "CALENDAR" to "📅 تقویم و نمودار هفتگی"
+                )
+
+                currentOrder.forEachIndexed { index, cardKey ->
+                    LiquidGlassCard(
+                        shape = RoundedCornerShape(14.dp),
+                        accentBorderColor = ElectricTeal,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = cardTitles[cardKey] ?: cardKey,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(
+                                    onClick = {
+                                        if (index > 0) {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            val mutable = currentOrder.toMutableList()
+                                            val item = mutable.removeAt(index)
+                                            mutable.add(index - 1, item)
+                                            onUpdatePrefs(prefs.copy(dashboardCardOrder = mutable))
+                                        }
+                                    },
+                                    enabled = index > 0
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "بالا")
+                                }
+                                IconButton(
+                                    onClick = {
+                                        if (index < currentOrder.size - 1) {
+                                            WorldClassOsUtils.HapticSignature.crispTick(context)
+                                            val mutable = currentOrder.toMutableList()
+                                            val item = mutable.removeAt(index)
+                                            mutable.add(index + 1, item)
+                                            onUpdatePrefs(prefs.copy(dashboardCardOrder = mutable))
+                                        }
+                                    },
+                                    enabled = index < currentOrder.size - 1
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "پایین")
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
 
     // Modal Bottom Sheet for managing Quick-Log items
     if (showQuickLogManageSheet) {
@@ -804,6 +910,34 @@ fun HomeDashboardScreen(
                             animationSpec = GlassMotion.FluidSpring,
                             label = "theme_drawer_arrow"
                         )
+                        LiquidGlassPill(
+                            accentGlow = ElectricTeal,
+                            onClick = {
+                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                showCardReorderSheet = true
+                            },
+                            modifier = Modifier.testTag("open_card_reorder_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "ترتیب کارت‌ها",
+                                    tint = ElectricTeal,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "ترتیب",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ElectricTeal,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
                         LiquidGlassPill(
                             accentGlow = MaterialTheme.colorScheme.primary,
                             onClick = {

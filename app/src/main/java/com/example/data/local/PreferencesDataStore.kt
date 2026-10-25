@@ -35,10 +35,17 @@ class PreferencesDataStore(private val context: Context) {
         val VAULT_PIN_CODE = stringPreferencesKey("vault_pin_code")
         val THEME_PALETTE = stringPreferencesKey("theme_palette")
         val LAYOUT_STYLE = stringPreferencesKey("layout_style")
+        val DASHBOARD_CARD_ORDER = stringPreferencesKey("dashboard_card_order")
     }
 
     fun observeLocalPreferences(userId: String): Flow<UserPreferencesDoc> {
         return context.applicationContext.dataStore.data.map { prefs ->
+            val orderStr = prefs[Keys.DASHBOARD_CARD_ORDER]
+            val cardOrder = if (!orderStr.isNullOrBlank()) {
+                orderStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            } else {
+                listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR")
+            }
             UserPreferencesDoc(
                 id = "default",
                 userId = userId,
@@ -58,7 +65,8 @@ class PreferencesDataStore(private val context: Context) {
                 vaultLockEnabled = prefs[Keys.VAULT_LOCK_ENABLED] ?: false,
                 vaultPinCode = prefs[Keys.VAULT_PIN_CODE] ?: "",
                 themePalette = prefs[Keys.THEME_PALETTE] ?: "OBSIDIAN_TEAL",
-                layoutStyle = prefs[Keys.LAYOUT_STYLE] ?: "BENTO_GRID"
+                layoutStyle = prefs[Keys.LAYOUT_STYLE] ?: "BENTO_GRID",
+                dashboardCardOrder = cardOrder
             )
         }
     }
@@ -94,6 +102,7 @@ class PreferencesDataStore(private val context: Context) {
             prefs[Keys.VAULT_PIN_CODE] = doc.vaultPinCode
             prefs[Keys.THEME_PALETTE] = doc.themePalette
             prefs[Keys.LAYOUT_STYLE] = doc.layoutStyle
+            prefs[Keys.DASHBOARD_CARD_ORDER] = doc.dashboardCardOrder.joinToString(",")
         }
     }
 }
