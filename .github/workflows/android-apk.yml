@@ -1,15 +1,16 @@
-name: Build Personal Life OS APK
+name: Build & Release Personal Life OS APK
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-apk:
+  build-and-release-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -26,14 +27,29 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Create debug keystore (gitignored, required by debugConfig signing)
+      - name: Restore Debug Keystore (Preserves Firebase Google Sign-In SHA-1)
         run: |
-          keytool -genkeypair -v \
-            -keystore debug.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Prepare Release Keystore
+        run: |
+          if [ ! -f my-upload-key.jks ]; then
+            keytool -genkeypair -v \
+              -keystore my-upload-key.jks \
+              -storepass androidrelease -keypass androidrelease \
+              -alias upload \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Personal Life OS,O=AIStudio,C=US"
+          fi
 
       - name: Ensure .env exists for Secrets Plugin
         run: |
@@ -41,12 +57,42 @@ jobs:
             cp .env.example .env || echo "GEMINI_API_KEY=" > .env
           fi
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build Signed Debug & Release APKs
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: androidrelease
+          KEY_PASSWORD: androidrelease
+        run: |
+          gradle assembleDebug assembleRelease --stacktrace
+          mkdir -p release-assets
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-LiquidGlass-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-LiquidGlass-Release.apk
 
-      - name: Upload APK Artifact
+      - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: Personal-Life-OS-LiquidGlass-APKs
+          path: release-assets/*.apk
           if-no-files-found: error
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Personal Life OS v1.0.${{ github.run_number }} (Liquid Glass Edition)"
+          body: |
+            ## Personal Life OS — Liquid Glass Edition
+            - **UI Design:** Complete visionOS / iOS 18 Multi-Layered Liquid Glass (`LiquidGlassCard`, `LiquidGlassPill`, `GlassSurface`, `LiquidGlassBackdrop`)
+            - **Personal Assistant & Voice Capture:** Integrated Gemini AI + Real-time Speech-to-Text
+            - **Offline-First & Cloud Sync:** Room Database + Firebase Firestore Sync
+            
+            ### فایل‌های قابل نصب (APK):
+            - **`Personal-Life-OS-LiquidGlass-Debug.apk`**: امضا شده با کلید اصلی پروژه (پشتیبانی کامل از ورود با گوگل / Firebase Auth)
+            - **`Personal-Life-OS-LiquidGlass-Release.apk`**: نسخه ریلیز بهینه‌سازی‌شده
+          files: |
+            release-assets/Personal-Life-OS-LiquidGlass-Debug.apk
+            release-assets/Personal-Life-OS-LiquidGlass-Release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
