@@ -247,7 +247,14 @@ data class CachedExpenseEntity(
             notes = e.notes,
             inputSource = e.inputSource,
             idempotencyKey = e.idempotencyKey,
-            transactionType = if (e.isIncome) "INCOME" else "EXPENSE",
+            transactionType = when {
+                e.isDebt && e.isSettled -> "DEBT_SETTLED"
+                e.isDebt -> "DEBT"
+                e.isReceivable && e.isSettled -> "RECEIVABLE_SETTLED"
+                e.isReceivable -> "RECEIVABLE"
+                e.isIncome -> "INCOME"
+                else -> "EXPENSE"
+            },
             syncedWithCloud = synced
         )
     }

@@ -59,23 +59,23 @@ import androidx.compose.ui.unit.dp
  */
 @Immutable
 data class GlassTokens(
-    val surfaceAlpha: Float = 0.72f,
-    val surfaceVariantAlpha: Float = 0.55f,
-    val elevatedAlpha: Float = 0.85f,
-    val subtleAlpha: Float = 0.35f,
-    val chipAlpha: Float = 0.22f,
-    val blurRadius: Dp = 20.dp,
-    val subtleBlurRadius: Dp = 12.dp,
-    val specularBorderWidth: Dp = 1.2.dp,
+    val surfaceAlpha: Float = 0.52f,
+    val surfaceVariantAlpha: Float = 0.42f,
+    val elevatedAlpha: Float = 0.68f,
+    val subtleAlpha: Float = 0.28f,
+    val chipAlpha: Float = 0.24f,
+    val blurRadius: Dp = 24.dp,
+    val subtleBlurRadius: Dp = 14.dp,
+    val specularBorderWidth: Dp = 1.25.dp,
     val subtleBorderWidth: Dp = 1.dp,
-    val topRimIntensity: Float = 0.55f,
-    val bottomRimAlpha: Float = 0.05f,
-    val sheenAlpha: Float = 0.12f,
+    val topRimIntensity: Float = 0.68f,
+    val bottomRimAlpha: Float = 0.08f,
+    val sheenAlpha: Float = 0.18f,
     val cardShape: Shape = RoundedCornerShape(24.dp),
     val cardMediumShape: Shape = RoundedCornerShape(18.dp),
     val pillShape: Shape = RoundedCornerShape(50),
     val chipShape: Shape = RoundedCornerShape(14.dp),
-    val dockShape: Shape = RoundedCornerShape(32.dp),
+    val dockShape: Shape = RoundedCornerShape(30.dp),
     val dialogShape: Shape = RoundedCornerShape(26.dp),
     val bottomSheetShape: Shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     val springDampingRatio: Float = Spring.DampingRatioMediumBouncy,
@@ -106,8 +106,8 @@ object GlassMotion {
     )
 
     val BouncySpring: SpringSpec<Float> = spring(
-        dampingRatio = 0.65f,
-        stiffness = Spring.StiffnessLow
+        dampingRatio = 0.6f,
+        stiffness = Spring.StiffnessMediumLow
     )
 
     val DpSpring: SpringSpec<Dp> = spring(
@@ -189,37 +189,40 @@ object GlassTheme {
         get() = GlassMotion
 
     /**
-     * Creates a 3D liquid glass specular rim border where light catches the upper edge.
+     * Creates a 3D diagonal liquid glass specular rim border where light catches the top-left و bottom-right edges.
      */
     fun specularBorderBrush(
         accentColor: Color? = null,
-        topIntensity: Float = 0.55f,
-        bottomAlpha: Float = 0.05f
+        topIntensity: Float = 0.68f,
+        bottomAlpha: Float = 0.12f
     ): Brush {
-        val topColor = if (accentColor != null) {
-            accentColor.copy(alpha = topIntensity.coerceIn(0.2f, 0.85f))
+        val highlight = if (accentColor != null) {
+            accentColor.copy(alpha = topIntensity.coerceIn(0.3f, 0.92f))
         } else {
             Color.White.copy(alpha = topIntensity)
         }
-        return Brush.verticalGradient(
+        val secondaryRim = accentColor?.copy(alpha = 0.28f) ?: Color.White.copy(alpha = 0.24f)
+        return Brush.linearGradient(
             colors = listOf(
-                topColor,
-                Color.White.copy(alpha = 0.16f),
-                Color.White.copy(alpha = bottomAlpha)
+                highlight,
+                Color.White.copy(alpha = 0.32f),
+                Color.White.copy(alpha = bottomAlpha),
+                secondaryRim
             )
         )
     }
 
     /**
-     * Creates a frosted translucent dark acrylic gradient fill.
+     * Creates a frosted translucent multi-stop diagonal glass gradient fill.
      */
     fun frostedGlassBrush(
-        baseColor: Color = Color(0xFF0F1612),
-        alphaTop: Float = 0.72f,
-        alphaBottom: Float = 0.55f
+        baseColor: Color = Color(0xFF101B17),
+        alphaTop: Float = 0.56f,
+        alphaBottom: Float = 0.38f
     ): Brush {
-        return Brush.verticalGradient(
+        return Brush.linearGradient(
             colors = listOf(
+                Color.White.copy(alpha = 0.10f),
                 baseColor.copy(alpha = alphaTop),
                 baseColor.copy(alpha = alphaBottom)
             )
@@ -227,13 +230,14 @@ object GlassTheme {
     }
 
     /**
-     * Top Specular Gloss Sheen reflection overlay.
+     * Top Specular Gloss Sheen reflection overlay for authentic glass refraction.
      */
-    val GlossSheenBrush = Brush.verticalGradient(
+    val GlossSheenBrush = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = 0.12f),
-            Color.White.copy(alpha = 0.03f),
-            Color.Transparent
+            Color.White.copy(alpha = 0.18f),
+            Color.White.copy(alpha = 0.06f),
+            Color.Transparent,
+            Color.White.copy(alpha = 0.04f)
         )
     )
 }

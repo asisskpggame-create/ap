@@ -358,8 +358,13 @@ class LifeOsViewModel(
         optionalCurrency: String = preferencesState.value.defaultCurrency
     ) {
         viewModelScope.launch {
+            val normalizedExpenseAmount = if (optionalExpenseAmount > 0.0) {
+                PersianDateAndUnitUtils.normalizeColloquialTomanAmount(optionalExpenseAmount, optionalCurrency)
+            } else {
+                0.0
+            }
             var linkedExpId = ""
-            if (optionalExpenseAmount > 0.0) {
+            if (normalizedExpenseAmount > 0.0) {
                 val expCategory = when (category) {
                     "COFFEE", "TEA" -> "COFFEE"
                     "WATER", "FOOD", "BEVERAGE" -> "FOOD"
@@ -369,7 +374,7 @@ class LifeOsViewModel(
                 val expRes = repository.addExpense(
                     title = "خرید $itemName",
                     category = expCategory,
-                    amount = optionalExpenseAmount,
+                    amount = normalizedExpenseAmount,
                     currency = optionalCurrency,
                     notes = notes.ifBlank { "ثبت خودکار از دکمه سریع روزانه ($quantity $unit)" },
                     inputSource = "MANUAL",
@@ -388,8 +393,8 @@ class LifeOsViewModel(
             )
             if (res.isSuccess) {
                 val entryId = res.getOrThrow()
-                val msg = if (optionalExpenseAmount > 0.0) {
-                    "ثبت شد: $itemName (${PersianDateAndUnitUtils.formatCurrencyAmount(optionalExpenseAmount, optionalCurrency)} به خرج روزانه/ماهانه اضافه شد)"
+                val msg = if (normalizedExpenseAmount > 0.0) {
+                    "ثبت شد: $itemName (${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedExpenseAmount, optionalCurrency)} به خرج روزانه/ماهانه اضافه شد)"
                 } else {
                     "ثبت شد: ${PersianDateAndUnitUtils.toPersianDigits(quantity.toInt().toString())} $unit $itemName"
                 }
@@ -433,14 +438,20 @@ class LifeOsViewModel(
         defaultPrice: Double
     ) {
         viewModelScope.launch {
+            val curr = preferencesState.value.defaultCurrency
+            val normalizedPrice = if (defaultPrice > 0.0) {
+                PersianDateAndUnitUtils.normalizeColloquialTomanAmount(defaultPrice, curr)
+            } else {
+                0.0
+            }
             val res = repository.addCustomItem(
                 name = name,
                 category = category,
                 unit = unit,
                 defaultQuantity = defaultQty,
                 dailyTarget = dailyTarget,
-                defaultPrice = defaultPrice,
-                defaultCurrency = preferencesState.value.defaultCurrency
+                defaultPrice = normalizedPrice,
+                defaultCurrency = curr
             )
             if (res.isSuccess) {
                 postSnackbar("دکمه ثبت سریع «$name» اضافه شد.")
@@ -450,9 +461,19 @@ class LifeOsViewModel(
 
     fun updateCustomConsumptionItem(item: CustomItem) {
         viewModelScope.launch {
-            val res = repository.updateCustomItem(item)
+            val normalizedItem = if (item.defaultPrice > 0.0) {
+                item.copy(
+                    defaultPrice = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(
+                        item.defaultPrice,
+                        item.defaultCurrency
+                    )
+                )
+            } else {
+                item
+            }
+            val res = repository.updateCustomItem(normalizedItem)
             if (res.isSuccess) {
-                postSnackbar("دکمه «${item.name}» (${PersianDateAndUnitUtils.formatCurrencyAmount(item.defaultPrice, item.defaultCurrency)}) بروزرسانی شد.")
+                postSnackbar("دکمه «${normalizedItem.name}» (${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedItem.defaultPrice, normalizedItem.defaultCurrency)}) بروزرسانی شد.")
             }
         }
     }
@@ -490,10 +511,11 @@ class LifeOsViewModel(
             return
         }
         viewModelScope.launch {
+            val normalizedAmount = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(amount, currency)
             val res = repository.addExpense(
                 title = cleanTitle,
                 category = category,
-                amount = amount,
+                amount = normalizedAmount,
                 currency = currency,
                 notes = notes,
                 inputSource = "MANUAL",
@@ -501,11 +523,26 @@ class LifeOsViewModel(
             )
             if (res.isSuccess) {
                 val expId = res.getOrThrow()
-                val typeLabel = if (transactionType.equals("INCOME", ignoreCase = true)) "درآمد" else "خرج"
-                postSnackbar("$typeLabel «$cleanTitle» (${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)}) ثبت شد.") {
+                val typeLabel = when {
+                    transactionType.equals("INCOME", ignoreCase = true) -> "درآمد"
+                    transactionType.equals("DEBT", ignoreCase = true) -> "بدهکاری"
+                    transactionType.equals("RECEIVABLE", ignoreCase = true) -> "طلبکاری"
+                    else -> "خرج"
+                }
+                postSnackbar("$typeLabel «$cleanTitle» (${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedAmount, currency)}) ثبت شد.") {
                     val currentList = (expensesState.value as? UiState.Success)?.data.orEmpty()
                     currentList.find { it.id == expId }?.let { repository.deleteExpense(it) }
                 }
+            }
+        }
+    }
+
+    fun settleDebtOrReceivable(entry: ExpenseEntry) {
+        viewModelScope.launch {
+            val res = repository.settleDebtOrReceivable(entry)
+            if (res.isSuccess) {
+                val actionLabel = if (entry.isDebt) "بدهکاری" else "طلبکاری"
+                postSnackbar("$actionLabel «${entry.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(entry.amount, entry.currency)}) تسویه شد.")
             }
         }
     }
@@ -514,7 +551,12 @@ class LifeOsViewModel(
         viewModelScope.launch {
             val res = repository.deleteExpense(expense)
             if (res.isSuccess) {
-                val typeLabel = if (expense.isIncome) "درآمد" else "خرج"
+                val typeLabel = when {
+                    expense.isDebt -> "بدهکاری"
+                    expense.isReceivable -> "طلبکاری"
+                    expense.isIncome -> "درآمد"
+                    else -> "خرج"
+                }
                 postSnackbar("$typeLabel «${expense.title}» حذف شد.") {
                     repository.addExpense(
                         title = expense.title,
@@ -524,7 +566,7 @@ class LifeOsViewModel(
                         localEpochDay = expense.localEpochDay,
                         notes = expense.cleanNotes,
                         inputSource = expense.inputSource,
-                        transactionType = if (expense.isIncome) "INCOME" else "EXPENSE"
+                        transactionType = expense.transactionType
                     )
                 }
             }
@@ -687,13 +729,49 @@ class LifeOsViewModel(
         }
     }
 
+    fun executeQuickSmartInput(
+        rawInput: String,
+        inputSource: String = "QUICK_BAR"
+    ) {
+        val clean = rawInput.trim()
+        if (clean.isEmpty()) return
+
+        val prefs = preferencesState.value
+        val today = PersianDateAndUnitUtils.currentLocalEpochDay()
+        val tasks = (tasksState.value as? UiState.Success)?.data.orEmpty()
+        val consumption = (consumptionState.value as? UiState.Success)?.data.orEmpty()
+        val expenses = (expensesState.value as? UiState.Success)?.data.orEmpty()
+
+        val parsed = GeminiAssistantService.parsePersianCommandDeterministic(
+            rawText = clean,
+            todayEpochDay = today,
+            defaultCurrency = prefs.defaultCurrency,
+            tasks = tasks,
+            consumption = consumption,
+            expenses = expenses,
+            habits = habitsState.value,
+            habitRecords = habitRecordsState.value,
+            sleepRecords = sleepRecordsState.value,
+            exerciseRecords = exerciseRecordsState.value,
+            recentEvents = activityEventsState.value
+        )
+
+        if (parsed.operations.isNotEmpty() && !parsed.isAmbiguous) {
+            confirmAndExecuteOperations(parsed.operations, clean, inputSource)
+        } else if (parsed.operations.isEmpty() && parsed.conversationalReply.isNotBlank()) {
+            postSnackbar(parsed.conversationalReply.lines().firstOrNull() ?: parsed.conversationalReply)
+        } else {
+            analyzeVoiceOrChatCommand(clean, inputSource)
+        }
+    }
+
     fun confirmAndExecuteOperations(
         operations: List<ProposedAiOperation>,
         rawTranscript: String,
         inputSource: String = "VOICE"
     ) {
-        val commandHash = "${rawTranscript.trim().lowercase()}:${operations.map { "${it.operationType}_${it.title}_${it.quantity}_${it.amount}" }}"
-        if (_lastSubmittedVoiceHash.value == commandHash) {
+        val commandHash = "${rawTranscript.trim().lowercase()}:${operations.map { "${it.operationType}_${it.title}_${it.quantity}_${it.amount}_${it.transactionType}" }}"
+        if (_lastSubmittedVoiceHash.value == commandHash && inputSource == "VOICE") {
             postSnackbar("این دستور قبلاً اجرا شده است (جلوگیری از ثبت تکراری).")
             _pendingAiPreview.value = null
             return
@@ -704,6 +782,9 @@ class LifeOsViewModel(
             val today = PersianDateAndUnitUtils.currentLocalEpochDay()
             val correlationId = "corr_${System.currentTimeMillis()}"
             val executedSummaries = mutableListOf<String>()
+            val createdExpenseIds = mutableListOf<String>()
+            val createdTaskIds = mutableListOf<String>()
+            val createdConsumptionIds = mutableListOf<String>()
             var anyFailed = false
 
             for ((idx, op) in operations.withIndex()) {
@@ -723,7 +804,7 @@ class LifeOsViewModel(
                 }
 
                 val targetDay = today + op.dueDateOffsetDays
-                val idemKey = "idem_${commandHash.hashCode()}_$idx"
+                val idemKey = "idem_${commandHash.hashCode()}_${System.currentTimeMillis()}_$idx"
 
                 val writeResult: Result<*> = when (op.operationType) {
                     "CreateTask" -> repository.createTask(
@@ -736,7 +817,8 @@ class LifeOsViewModel(
                         recurrenceRule = op.recurrenceRule,
                         inputSource = inputSource,
                         idempotencyKey = idemKey
-                    )
+                    ).also { res -> res.getOrNull()?.let { createdTaskIds.add(it) } }
+
                     "CompleteTask" -> {
                         val tasks = (tasksState.value as? UiState.Success)?.data.orEmpty()
                         val match = tasks.firstOrNull {
@@ -748,6 +830,7 @@ class LifeOsViewModel(
                             Result.failure<Unit>(IllegalStateException("تسک مورد نظر یافت نشد"))
                         }
                     }
+
                     "AddConsumptionEntry" -> repository.addConsumptionEntry(
                         itemName = op.title.ifBlank { op.category },
                         category = op.category.ifBlank { "WATER" },
@@ -756,16 +839,24 @@ class LifeOsViewModel(
                         localEpochDay = targetDay,
                         inputSource = inputSource,
                         idempotencyKey = idemKey
-                    )
-                    "AddExpense" -> repository.addExpense(
-                        title = op.title.ifBlank { "هزینه" },
-                        category = op.category.ifBlank { "OTHER" },
-                        amount = op.amount,
-                        currency = op.currency.ifBlank { preferencesState.value.defaultCurrency },
-                        localEpochDay = targetDay,
-                        inputSource = inputSource,
-                        idempotencyKey = idemKey
-                    )
+                    ).also { res -> res.getOrNull()?.let { createdConsumptionIds.add(it) } }
+
+                    "AddExpense" -> {
+                        val curr = op.currency.ifBlank { preferencesState.value.defaultCurrency }
+                        val normalizedAmt = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(op.amount, curr)
+                        repository.addExpense(
+                            title = op.title.ifBlank { "هزینه" },
+                            category = op.category.ifBlank { "OTHER" },
+                            amount = normalizedAmt,
+                            currency = curr,
+                            localEpochDay = targetDay,
+                            notes = op.notes,
+                            inputSource = inputSource,
+                            idempotencyKey = idemKey,
+                            transactionType = op.transactionType.ifBlank { "EXPENSE" }
+                        ).also { res -> res.getOrNull()?.let { createdExpenseIds.add(it) } }
+                    }
+
                     "AddSleepRecord" -> repository.addSleepRecord(
                         durationMinutes = op.durationMinutes,
                         qualityRating = op.qualityRating,
@@ -773,6 +864,7 @@ class LifeOsViewModel(
                         inputSource = inputSource,
                         idempotencyKey = idemKey
                     )
+
                     "AddExerciseRecord" -> repository.addExerciseRecord(
                         activityType = op.title.ifBlank { "ورزش" },
                         durationMinutes = op.durationMinutes,
@@ -781,6 +873,7 @@ class LifeOsViewModel(
                         inputSource = inputSource,
                         idempotencyKey = idemKey
                     )
+
                     else -> Result.success("SKIPPED")
                 }
 
@@ -818,9 +911,27 @@ class LifeOsViewModel(
                 if (preferencesState.value.retainConversations) {
                     repository.addConversationTurn("ASSISTANT", summaryMsg)
                 }
-                postSnackbar("${PersianDateAndUnitUtils.toPersianDigits(executedSummaries.size.toString())} عملیات با موفقیت ثبت شد.")
+                val snackbarText = if (executedSummaries.size == 1) {
+                    "✓ ${executedSummaries.first()}"
+                } else {
+                    "✓ ${PersianDateAndUnitUtils.toPersianDigits(executedSummaries.size.toString())} مورد ثبت شد"
+                }
+                postSnackbar(snackbarText) {
+                    val curExps = (expensesState.value as? UiState.Success)?.data.orEmpty()
+                    createdExpenseIds.forEach { expId ->
+                        curExps.find { it.id == expId }?.let { repository.deleteExpense(it) }
+                    }
+                    val curTasks = (tasksState.value as? UiState.Success)?.data.orEmpty()
+                    createdTaskIds.forEach { tId ->
+                        curTasks.find { it.id == tId }?.let { repository.deleteTask(it) }
+                    }
+                    val curCons = (consumptionState.value as? UiState.Success)?.data.orEmpty()
+                    createdConsumptionIds.forEach { cId ->
+                        curCons.find { it.id == cId }?.let { repository.deleteConsumptionEntry(it) }
+                    }
+                }
             } else if (anyFailed) {
-                postSnackbar("برخی عملیات‌ها به دلیل نقص اطلاعات یا خطای شبکه ثبت نشدند.")
+                postSnackbar("برخی عملیات‌ها به دلیل نقص اطلاعات ثبت نشدند.")
             }
 
             _pendingAiPreview.value = null

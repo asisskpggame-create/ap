@@ -105,6 +105,7 @@ fun VoiceCaptureModalSheet(
     isProcessing: Boolean,
     pendingPreview: AiParseResult?,
     onAnalyzeTranscript: (String) -> Unit,
+    onInstantExecuteTranscript: (String) -> Unit = { onAnalyzeTranscript(it) },
     onConfirmOperations: (List<ProposedAiOperation>, String) -> Unit,
     onRejectPreview: (String) -> Unit,
     onDismissSheet: () -> Unit
@@ -115,8 +116,9 @@ fun VoiceCaptureModalSheet(
 
     var transcriptText by remember { mutableStateOf("") }
     var isRecording by remember { mutableStateOf(false) }
+    var instantAutoSave by remember { mutableStateOf(true) }
     var rmsLevel by remember { mutableFloatStateOf(0.2f) }
-    var statusMessage by remember { mutableStateOf("برای ضبط دستور یا یادداشت صوتی، دکمه میکروفون را لمس کنید.") }
+    var statusMessage by remember { mutableStateOf("در حال آماده‌سازی میکروفون... (یا متن را بنویسید)") }
     var permissionDeniedWarning by remember { mutableStateOf(false) }
     var selectedTargetMode by remember { mutableStateOf("AUTO") } // AUTO, TASK, JOURNAL
 
@@ -133,16 +135,16 @@ fun VoiceCaptureModalSheet(
         }
     }
 
-    DisposableEffect(speechRecognizer) {
+    DisposableEffect(speechRecognizer, instantAutoSave, selectedTargetMode) {
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 isRecording = true
-                statusMessage = "در حال گوش دادن (فارسی)... صحبت کنید"
+                statusMessage = "گوش می‌دهم... بگویید (مثلاً: ۵۰۰ سیگار، ۱۲۰ اسنپ، ۳۰۰ طلب از علی)"
             }
 
             override fun onBeginningOfSpeech() {
                 isRecording = true
-                statusMessage = "در حال ضبط صدای شما..."
+                statusMessage = "در حال دریافت صدای شما..."
             }
 
             override fun onRmsChanged(rmsdB: Float) {
@@ -153,18 +155,16 @@ fun VoiceCaptureModalSheet(
 
             override fun onEndOfSpeech() {
                 isRecording = false
-                statusMessage = "در حال پردازش گفتار..."
+                statusMessage = "در حال پردازش..."
             }
 
             override fun onError(error: Int) {
                 isRecording = false
                 statusMessage = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH -> "گفتاری تشخیص داده نشد. می‌توانید مجدداً صحبت کنید یا متن را بنویسید."
+                    SpeechRecognizer.ERROR_NO_MATCH -> "صدایی تشخیص داده نشد. دوباره لمس کنید یا بنویسید."
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "دسترسی میکروفون داده نشده است."
-                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "خطای اتصال اینترنت در سرویس گفتار. می‌توانید از ورودی متنی استفاده کنید."
-                    SpeechRecognizer.ERROR_AUDIO -> "خطای ضبط صدا در دستگاه."
-                    SpeechRecognizer.ERROR_SERVER -> "خطای سرور تشخیص گفتار."
-                    else -> "سرویس تشخیص گفتار داخلی در دسترس نیست. می‌توانید متن را وارد یا از دیالوگ صوتی سیستم استفاده نمایید."
+                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "خطای شبکه گفتار؛ می‌توانید همین‌جا تایپ کنید."
+                    else -> "می‌توانید روی میکروفون بزنید یا دستور را تایپ کنید."
                 }
             }
 
@@ -174,10 +174,14 @@ fun VoiceCaptureModalSheet(
                 val best = matches?.firstOrNull().orEmpty()
                 if (best.isNotBlank()) {
                     transcriptText = best
-                    statusMessage = "صدا تشخیص داده شد. می‌توانید تسک یا یادداشت را سریع ثبت کنید."
-                    // If in AUTO mode, automatically trigger intelligent analysis
-                    if (selectedTargetMode == "AUTO") {
+                    if (selectedTargetMode == "AUTO" && instantAutoSave) {
+                        statusMessage = "⚡ ثبت آنی: «$best»"
+                        onInstantExecuteTranscript(best)
+                    } else if (selectedTargetMode == "AUTO") {
+                        statusMessage = "تشخیص داده شد. پیش‌نمایش آماده است."
                         onAnalyzeTranscript(best)
+                    } else {
+                        statusMessage = "تشخیص داده شد."
                     }
                 }
             }
@@ -209,8 +213,9 @@ fun VoiceCaptureModalSheet(
         val best = matches?.firstOrNull().orEmpty()
         if (best.isNotBlank()) {
             transcriptText = best
-            statusMessage = "صدا از دیالوگ سیستم دریافت شد."
-            if (selectedTargetMode == "AUTO") {
+            if (selectedTargetMode == "AUTO" && instantAutoSave) {
+                onInstantExecuteTranscript(best)
+            } else if (selectedTargetMode == "AUTO") {
                 onAnalyzeTranscript(best)
             }
         }
@@ -218,16 +223,15 @@ fun VoiceCaptureModalSheet(
 
     fun startVoiceListening() {
         if (speechRecognizer == null) {
-            // Launch standard system speech dialog fallback
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "فرمان، تسک یا یادداشت روزانه خود را بگویید...")
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "بگویید: مثلاً ۵۰۰ سیگار یا فردا ساعت ۱۰ جلسه...")
             }
             try {
                 systemSpeechLauncher.launch(intent)
             } catch (e: Exception) {
-                statusMessage = "برنامه تشخیص گفتار بر روی این دستگاه یافت نشد. متن را دستی وارد نمایید."
+                statusMessage = "سرویس گفتار در دسترس نیست؛ متن را تایپ کنید."
             }
             return
         }
@@ -245,7 +249,7 @@ fun VoiceCaptureModalSheet(
             speechRecognizer.startListening(intent)
         } catch (e: Exception) {
             isRecording = false
-            statusMessage = "خطا در اتصال به میکروفون: ${e.localizedMessage ?: ""}"
+            statusMessage = "برای شروع ضبط روی دکمه میکروفون بزنید."
         }
     }
 
@@ -257,39 +261,53 @@ fun VoiceCaptureModalSheet(
             startVoiceListening()
         } else {
             permissionDeniedWarning = true
-            statusMessage = "مجوز میکروفون تأیید نشد. لطفاً مجوز ضبط صدا را در تنظیمات فعال کنید."
+            statusMessage = "مجوز میکروفون فعال نیست؛ می‌توانید دستور را تایپ کنید."
         }
     }
 
-    val sampleTaskCommands = listOf(
-        "فردا ساعت ۱۰ جلسه با تیم پروژه و بررسی فاز دوم",
-        "تسک فوری: پرداخت قبوض برق و گاز تا ساعت ۶ عصر",
-        "خرید میوه و نان تازه با اولویت بالا برای خانه",
-        "مطالعه فصل پنجم کتاب مدیریت زمان برای فردا شب"
+    // Auto-start listening immediately when sheet opens if permission is already granted
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val hasPerm = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPerm && speechRecognizer != null) {
+            startVoiceListening()
+        } else if (!hasPerm) {
+            statusMessage = "برای ضبط صوتی روی میکروفون بزنید یا دستور را بنویسید."
+        }
+    }
+
+    val sampleFinanceCommands = listOf(
+        "۵۰۰ سیگار",
+        "۱۲۰ اسنپ",
+        "۲۵۰ ناهار",
+        "۳۰۰ از علی طلبکارم",
+        "۲۰۰ به رضا بدهکارم"
     )
 
-    val sampleJournalCommands = listOf(
-        "یادداشت روزانه: امروز فاز جدید پروژه شروع شد و با تیم به توافق رسیدیم.",
-        "خاطره امروز: پیاده‌روی عصرگاهی در هوای تمیز بهاری و احساس سرزندگی عالی.",
-        "یادداشت روزانه: ایده جذاب برای بازطراحی رابط کاربری شیشه‌ای ثبت شد."
+    val sampleTaskCommands = listOf(
+        "فردا ساعت ۱۰ جلسه با تیم",
+        "پرداخت قبض برق تا ساعت ۶ عصر",
+        "۴۰۰ میلی‌لیتر آب خوردم"
     )
 
     ModalBottomSheet(
         onDismissRequest = onDismissSheet,
         sheetState = sheetState,
         shape = GlassTheme.tokens.bottomSheetShape,
-        containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+        containerColor = Color(0xFF0F1612).copy(alpha = 0.96f),
         scrimColor = Color.Black.copy(alpha = 0.65f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header with Live Mic Indicator
+            // Header with Live Mic Indicator & Instant Auto-Save Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,28 +321,27 @@ fun VoiceCaptureModalSheet(
                         imageVector = Icons.Default.RecordVoiceOver,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Text(
-                        text = "فرمان صوتی و ثبت هوشمند",
-                        style = MaterialTheme.typography.titleLarge,
+                        text = "ثبت صوتی و هوشمند",
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Black
                     )
                 }
 
-                LiquidGlassPill(
-                    shape = RoundedCornerShape(50),
-                    accentGlow = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                ) {
-                    Text(
-                        text = if (isRecording) "● در حال ضبط" else "آماده ضبط",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
+                FilterChip(
+                    selected = instantAutoSave,
+                    onClick = { instantAutoSave = !instantAutoSave },
+                    label = {
+                        Text(
+                            text = if (instantAutoSave) "⚡ ثبت خودکار آنی: روشن" else "پیش‌نمایش قبل از ثبت",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
             }
 
             Text(
@@ -357,84 +374,89 @@ fun VoiceCaptureModalSheet(
                 }
             )
 
-            // Target Mode Filter Pills (Auto AI / Task Focus / Journal Focus)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilterChip(
-                    selected = selectedTargetMode == "AUTO",
-                    onClick = { selectedTargetMode = "AUTO" },
-                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp)) },
-                    label = { Text("هوشمند Gemini") }
-                )
-                FilterChip(
-                    selected = selectedTargetMode == "TASK",
-                    onClick = { selectedTargetMode = "TASK" },
-                    leadingIcon = { Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(16.dp)) },
-                    label = { Text("تسک سریع") }
-                )
-                FilterChip(
-                    selected = selectedTargetMode == "JOURNAL",
-                    onClick = { selectedTargetMode = "JOURNAL" },
-                    leadingIcon = { Icon(Icons.Default.Book, null, modifier = Modifier.size(16.dp)) },
-                    label = { Text("یادداشت روزانه") }
-                )
-            }
-
-            // Editable Recognized Text Preview
+            // Editable Recognized Text Input
             OutlinedTextField(
                 value = transcriptText,
                 onValueChange = { transcriptText = it },
-                label = { Text("متن گفتار تشخیص داده شده (قابل ویرایش)") },
+                label = { Text("بگویید یا تایپ کنید (خرج، طلب، بدهی، تسک، آب...)") },
                 placeholder = {
-                    Text(
-                        when (selectedTargetMode) {
-                            "TASK" -> "مثلاً: فردا ساعت ۵ جلسه کاری با تیم دارم..."
-                            "JOURNAL" -> "مثلاً: یادداشت روزانه: امروز بعدازظهر قدم زدم و حس خوبی داشتم..."
-                            else -> "مثلاً: فردا ساعت ۹ قبض رو پرداخت کنم یا ۵۰۰ میل آب خوردم..."
-                        }
-                    )
+                    Text("مثلاً: ۵۰۰ سیگار | ۳۰۰ از علی طلبکارم | فردا ساعت ۱۰ جلسه")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("voice_transcript_input"),
                 minLines = 2,
-                maxLines = 4
+                maxLines = 3
             )
 
-            // Direct 1-Tap Execution Action Buttons (Task, Journal, AI)
+            // Primary Fast Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onInstantExecuteTranscript(transcriptText)
+                    },
+                    enabled = transcriptText.isNotBlank() && !isProcessing,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EmeraldSuccess,
+                        contentColor = Color(0xFF06130C)
+                    ),
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .testTag("instant_execute_voice_button")
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("⚡ ثبت آنی (۱ لمسی)", fontWeight = FontWeight.Black)
+                }
+
+                OutlinedButton(
+                    onClick = { onAnalyzeTranscript(transcriptText) },
+                    enabled = transcriptText.isNotBlank() && !isProcessing,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("analyze_voice_command_button")
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("پیش‌نمایش")
+                    }
+                }
+            }
+
             if (transcriptText.isNotBlank()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val taskOp = ProposedAiOperation(
                                 operationType = "CreateTask",
                                 title = transcriptText.trim(),
-                                category = if (selectedTargetMode == "JOURNAL") "یادداشت روزانه" else "عمومی",
-                                humanReadablePreview = "ایجاد تسک صوتی: «${transcriptText.trim()}»"
+                                category = "عمومی",
+                                humanReadablePreview = "ایجاد تسک: «${transcriptText.trim()}»"
                             )
                             onConfirmOperations(listOf(taskOp), transcriptText)
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("quick_save_task_voice_button")
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("ثبت تسک", style = MaterialTheme.typography.labelMedium)
+                        Text("ثبت مستقیم تسک", style = MaterialTheme.typography.labelSmall)
                     }
 
-                    Button(
+                    OutlinedButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val journalOp = ProposedAiOperation(
@@ -442,98 +464,71 @@ fun VoiceCaptureModalSheet(
                                 title = transcriptText.trim().take(80),
                                 category = "یادداشت روزانه",
                                 priority = "LOW",
-                                humanReadablePreview = "ثبت یادداشت روزانه: «${transcriptText.trim()}»"
+                                humanReadablePreview = "ثبت یادداشت: «${transcriptText.trim()}»"
                             )
                             onConfirmOperations(listOf(journalOp), transcriptText)
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("quick_save_journal_voice_button")
                     ) {
-                        Icon(Icons.Default.EditNote, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("ثبت یادداشت", style = MaterialTheme.typography.labelMedium)
+                        Text("ثبت یادداشت روزانه", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
 
-            // Quick Persian Sample Prompts for Instant Testing
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // Quick Sample Chips for 1-Tap Testing (Finance + Tasks)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
-                    text = "نمونه‌های پرکاربرد (لمس برای پر کردن و آزمون سریع):",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "نمونه‌های سریع مالی و بدهی/طلب (لمس برای ثبت آنی):",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EmeraldSuccess,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text("تسک‌ها و برنامه‌ریزی:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sampleFinanceCommands.forEach { cmd ->
+                        AssistChip(
+                            onClick = {
+                                transcriptText = cmd
+                                if (instantAutoSave) {
+                                    onInstantExecuteTranscript(cmd)
+                                } else {
+                                    onAnalyzeTranscript(cmd)
+                                }
+                            },
+                            label = { Text(text = cmd, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                Text(
+                    text = "نمونه‌های تسک و روزانه:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ElectricTeal,
+                    fontWeight = FontWeight.Bold
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     sampleTaskCommands.forEach { cmd ->
                         AssistChip(
                             onClick = {
                                 transcriptText = cmd
-                                onAnalyzeTranscript(cmd)
+                                if (instantAutoSave) {
+                                    onInstantExecuteTranscript(cmd)
+                                } else {
+                                    onAnalyzeTranscript(cmd)
+                                }
                             },
-                            label = { Text(text = cmd, style = MaterialTheme.typography.bodySmall) }
+                            label = { Text(text = cmd, style = MaterialTheme.typography.labelSmall) }
                         )
-                    }
-                }
-
-                Text("یادداشت و خاطرات روزانه:", style = MaterialTheme.typography.labelSmall, color = ElectricTeal)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    sampleJournalCommands.forEach { cmd ->
-                        AssistChip(
-                            onClick = {
-                                transcriptText = cmd
-                                onAnalyzeTranscript(cmd)
-                            },
-                            label = { Text(text = cmd, style = MaterialTheme.typography.bodySmall) }
-                        )
-                    }
-                }
-            }
-
-            // Primary Bottom Actions (Dismiss & Analyze)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismissSheet,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("بستن")
-                }
-
-                Button(
-                    onClick = { onAnalyzeTranscript(transcriptText) },
-                    enabled = transcriptText.isNotBlank() && !isProcessing,
-                    modifier = Modifier
-                        .weight(1.5f)
-                        .testTag("analyze_voice_command_button")
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("تحلیل هوشمند چندمنظوره")
                     }
                 }
             }
@@ -553,7 +548,7 @@ fun VoiceCaptureModalSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }

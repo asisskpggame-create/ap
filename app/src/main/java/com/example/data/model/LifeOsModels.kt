@@ -144,26 +144,58 @@ data class ExpenseEntry(
     val notes: String = "",
     val inputSource: String = "MANUAL", // MANUAL, VOICE, AI_ASSISTANT
     val idempotencyKey: String = "",
-    val transactionType: String = "EXPENSE", // EXPENSE or INCOME
+    val transactionType: String = "EXPENSE", // EXPENSE, INCOME, DEBT, RECEIVABLE, DEBT_SETTLED, RECEIVABLE_SETTLED
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     val isIncome: Boolean
         get() = transactionType.equals("INCOME", ignoreCase = true) || notes.startsWith("[INCOME]")
 
+    val isDebt: Boolean
+        get() = transactionType.equals("DEBT", ignoreCase = true) ||
+            transactionType.equals("DEBT_SETTLED", ignoreCase = true) ||
+            notes.startsWith("[DEBT]")
+
+    val isReceivable: Boolean
+        get() = transactionType.equals("RECEIVABLE", ignoreCase = true) ||
+            transactionType.equals("RECEIVABLE_SETTLED", ignoreCase = true) ||
+            notes.startsWith("[RECEIVABLE]")
+
+    val isSettled: Boolean
+        get() = transactionType.endsWith("_SETTLED", ignoreCase = true) || notes.contains("[SETTLED]")
+
+    val isExpense: Boolean
+        get() = !isIncome && !isDebt && !isReceivable
+
     val cleanNotes: String
-        get() = notes.removePrefix("[INCOME] ").removePrefix("[INCOME]").trim()
+        get() = notes
+            .removePrefix("[INCOME] ").removePrefix("[INCOME]")
+            .removePrefix("[DEBT] ").removePrefix("[DEBT]")
+            .removePrefix("[RECEIVABLE] ").removePrefix("[RECEIVABLE]")
+            .replace("[SETTLED]", "")
+            .trim()
 
     fun toCreateMap(): Map<String, Any> {
         val validCategories = setOf("FOOD", "COFFEE", "TRANSPORT", "SHOPPING", "BILLS", "HEALTH", "OTHER")
         val safeCategory = if (category in validCategories) category else "OTHER"
         val validSources = setOf("MANUAL", "VOICE", "AI_ASSISTANT")
         val safeInputSource = if (inputSource in validSources) inputSource else "MANUAL"
-        val serializedNotes = if (isIncome && !notes.startsWith("[INCOME]")) {
-            if (notes.isBlank()) "[INCOME]" else "[INCOME] ${notes.take(1980)}"
-        } else {
-            notes.take(2000)
+        val prefix = when {
+            isDebt && !notes.startsWith("[DEBT]") -> "[DEBT]"
+            isReceivable && !notes.startsWith("[RECEIVABLE]") -> "[RECEIVABLE]"
+            isIncome && !notes.startsWith("[INCOME]") -> "[INCOME]"
+            else -> ""
         }
+        val settledSuffix = if (isSettled && !notes.contains("[SETTLED]")) " [SETTLED]" else ""
+        val baseNotes = notes.take(1960)
+        val serializedNotes = buildString {
+            if (prefix.isNotEmpty()) {
+                append(prefix)
+                if (baseNotes.isNotBlank()) append(" ")
+            }
+            append(baseNotes)
+            append(settledSuffix)
+        }.trim().take(2000)
         return mapOf(
             "userId" to userId,
             "title" to title.ifBlank { safeCategory }.take(250),

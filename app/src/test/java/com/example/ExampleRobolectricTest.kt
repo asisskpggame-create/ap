@@ -28,6 +28,42 @@ class ExampleRobolectricTest {
     assertEquals(sampleJson, decrypted)
   }
 
+  @Test
+  fun `verify colloquial Toman voice parsing and Iranian bank SMS parser`() {
+    val parsedVoice1 = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "۵۰۰ تومان سیگار خریدم",
+      todayEpochDay = 20000L,
+      defaultCurrency = "TOMAN"
+    )
+    assertEquals(1, parsedVoice1.operations.size)
+    assertEquals("AddExpense", parsedVoice1.operations[0].operationType)
+    assertEquals(500_000.0, parsedVoice1.operations[0].amount, 0.01)
+    assertEquals("TOMAN", parsedVoice1.operations[0].currency)
+    assertEquals("خرید سیگار", parsedVoice1.operations[0].title)
+
+    val parsedVoiceWords = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "پانصد تومن سیگار خریدم",
+      todayEpochDay = 20000L,
+      defaultCurrency = "TOMAN"
+    )
+    assertEquals(500_000.0, parsedVoiceWords.operations[0].amount, 0.01)
+    assertEquals("خرید سیگار", parsedVoiceWords.operations[0].title)
+
+    val parsedEuro = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "یه قهوه ۳ یورویی خریدم",
+      todayEpochDay = 20000L,
+      defaultCurrency = "TOMAN"
+    )
+    assertEquals(3.0, parsedEuro.operations[0].amount, 0.01)
+    assertEquals("EUR", parsedEuro.operations[0].currency)
+
+    val smsParsed = com.example.ui.components.IranianBankSmsParser.parseBankSms(
+      "بانک ملت\nخرید با کارت\nمبلغ: 5,000,000 ریال\nمانده: 42,000,000 ریال"
+    )
+    assertEquals(500_000.0, smsParsed?.amountInToman ?: 0.0, 0.01)
+    assertEquals("بانک ملت", smsParsed?.bankName)
+  }
+
   @get:org.junit.Rule
   val composeTestRule = androidx.compose.ui.test.junit4.createAndroidComposeRule<MainActivity>()
 

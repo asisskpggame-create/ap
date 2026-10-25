@@ -6,9 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import com.example.ui.theme.GlassTheme
 import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.GlassTokens
@@ -24,6 +31,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -106,6 +118,8 @@ import com.example.data.model.Task
 import com.example.data.repository.LifeOsRepository
 import com.example.notifications.QuickVoiceTileService
 import com.example.notifications.ReminderScheduler
+import androidx.compose.material.icons.filled.Lock
+import com.example.ui.components.VaultBiometricLockOverlay
 import com.example.ui.screens.AiAssistantScreen
 import com.example.ui.screens.DailyLogAndHealthScreen
 import com.example.ui.screens.FirstRunOnboardingDialog
@@ -136,10 +150,10 @@ enum class AppSection(
     val isPrimaryBottomNav: Boolean
 ) {
     HOME("HOME", "خانه", Icons.Default.Home, true),
-    TASKS("TASKS", "تسک‌ها", Icons.Default.CheckCircle, true),
+    TASKS("TASKS", "کارها", Icons.Default.CheckCircle, true),
     DAILY_LOG("DAILY_LOG", "ثبت روزانه", Icons.Default.EditCalendar, true),
     HABITS("HABITS", "عادت‌ها", Icons.Default.Repeat, true),
-    AI_ASSISTANT("AI_ASSISTANT", "Gemini", Icons.Default.AutoAwesome, true),
+    AI_ASSISTANT("AI_ASSISTANT", "دستیار", Icons.Default.AutoAwesome, true),
     HISTORY("HISTORY", "تاریخچه", Icons.Default.History, false),
     REPORTS("REPORTS", "گزارش‌ها", Icons.Default.Analytics, false),
     SETTINGS("SETTINGS", "تنظیمات", Icons.Default.Settings, false)
@@ -241,6 +255,8 @@ fun AuthenticatedLifeOsShell(
     }
 
     val prefs by vm.preferencesState.collectAsStateWithLifecycle()
+    var isVaultUnlockedInSession by rememberSaveable { mutableStateOf(false) }
+    var manualLockTriggered by rememberSaveable { mutableStateOf(false) }
     val tasksUiState by vm.tasksState.collectAsStateWithLifecycle()
     val consumptionUiState by vm.consumptionState.collectAsStateWithLifecycle()
     val expensesUiState by vm.expensesState.collectAsStateWithLifecycle()
@@ -318,6 +334,10 @@ fun AuthenticatedLifeOsShell(
             onAnalyzeTranscript = { text ->
                 vm.analyzeVoiceOrChatCommand(text, "VOICE")
             },
+            onInstantExecuteTranscript = { text ->
+                vm.executeQuickSmartInput(text, "VOICE")
+                showVoiceModal = false
+            },
             onConfirmOperations = { ops, raw ->
                 vm.confirmAndExecuteOperations(ops, raw, "VOICE")
                 showVoiceModal = false
@@ -329,6 +349,20 @@ fun AuthenticatedLifeOsShell(
                 showVoiceModal = false
             }
         )
+    }
+
+    if ((prefs.vaultLockEnabled && !isVaultUnlockedInSession) || manualLockTriggered) {
+        VaultBiometricLockOverlay(
+            expectedPin = prefs.vaultPinCode,
+            onUnlocked = {
+                isVaultUnlockedInSession = true
+                manualLockTriggered = false
+            },
+            onSetupNewPin = { newPin ->
+                vm.updatePreferences(prefs.copy(vaultLockEnabled = true, vaultPinCode = newPin))
+            }
+        )
+        return
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -353,32 +387,10 @@ fun AuthenticatedLifeOsShell(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Circular 4-dot Grid Button with Specular Liquid Rim
-                                GlassSurface(
-                                    shape = CircleShape,
-                                    color = Color(0x33FFFFFF),
-                                    accentBorderColor = MaterialTheme.colorScheme.primary,
-                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
-                                    onClick = {
-                                        WorldClassOsUtils.HapticSignature.crispTick(context)
-                                        currentSectionRoute = AppSection.HOME.route
-                                    },
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Icon(
-                                            imageVector = Icons.Default.GridView,
-                                            contentDescription = "داشبورد",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                // "X Active Tasks" Frosted Capsule Pill with glowing dot
+                                // Active Tasks Frosted Glass Pill
                                 GlassSurface(
                                     shape = GlassTheme.tokens.pillShape,
-                                    color = Color(0x24FFFFFF),
+                                    color = Color(0x28FFFFFF),
                                     accentBorderColor = MaterialTheme.colorScheme.primary,
                                     borderWidth = GlassTheme.tokens.subtleBorderWidth,
                                     onClick = {
@@ -397,7 +409,7 @@ fun AuthenticatedLifeOsShell(
                                             modifier = Modifier.size(7.dp)
                                         ) {}
                                         Text(
-                                            text = "${PersianDateAndUnitUtils.toPersianDigits(activePendingTasksCount.toString())} تسک فعال",
+                                            text = "${PersianDateAndUnitUtils.toPersianDigits(activePendingTasksCount.toString())} کار باز",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             fontWeight = FontWeight.Bold
@@ -409,72 +421,49 @@ fun AuthenticatedLifeOsShell(
                         actions = {
                             Row(
                                 modifier = Modifier.padding(end = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                GlassSurface(
-                                    shape = CircleShape,
-                                    color = Color(0x28FFFFFF),
-                                    accentBorderColor = if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else null,
-                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { currentSectionRoute = AppSection.REPORTS.route },
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .testTag("nav_reports_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Analytics,
-                                            contentDescription = "گزارش‌ها",
-                                            tint = if (currentSectionRoute == AppSection.REPORTS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                AnimatedGlassTopIconButton(
+                                    icon = Icons.Default.Analytics,
+                                    contentDescription = "گزارش‌ها",
+                                    isSelected = currentSectionRoute == AppSection.REPORTS.route,
+                                    testTag = "nav_reports_button",
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        currentSectionRoute = AppSection.REPORTS.route
                                     }
-                                }
-                                GlassSurface(
-                                    shape = CircleShape,
-                                    color = Color(0x28FFFFFF),
-                                    accentBorderColor = if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else null,
-                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { currentSectionRoute = AppSection.HISTORY.route },
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .testTag("nav_history_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.History,
-                                            contentDescription = "تاریخچه فعالیت‌ها",
-                                            tint = if (currentSectionRoute == AppSection.HISTORY.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                )
+                                AnimatedGlassTopIconButton(
+                                    icon = Icons.Default.History,
+                                    contentDescription = "تاریخچه",
+                                    isSelected = currentSectionRoute == AppSection.HISTORY.route,
+                                    testTag = "nav_history_button",
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        currentSectionRoute = AppSection.HISTORY.route
                                     }
-                                }
-                                GlassSurface(
-                                    shape = CircleShape,
-                                    color = Color(0x28FFFFFF),
-                                    accentBorderColor = if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else null,
-                                    borderWidth = GlassTheme.tokens.subtleBorderWidth,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { currentSectionRoute = AppSection.SETTINGS.route },
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .testTag("nav_settings_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "تنظیمات",
-                                            tint = if (currentSectionRoute == AppSection.SETTINGS.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                )
+                                AnimatedGlassTopIconButton(
+                                    icon = Icons.Default.Lock,
+                                    contentDescription = "قفل برنامه",
+                                    isSelected = prefs.vaultLockEnabled,
+                                    testTag = "nav_vault_lock_button",
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        manualLockTriggered = true
                                     }
-                                }
+                                )
+                                AnimatedGlassTopIconButton(
+                                    icon = Icons.Default.Settings,
+                                    contentDescription = "تنظیمات",
+                                    isSelected = currentSectionRoute == AppSection.SETTINGS.route,
+                                    testTag = "nav_settings_button",
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        currentSectionRoute = AppSection.SETTINGS.route
+                                    }
+                                )
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -491,23 +480,23 @@ fun AuthenticatedLifeOsShell(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Mic,
-                                contentDescription = "ثبت صوتی هوشمند"
+                                contentDescription = "ثبت صوتی"
                             )
                         },
                         text = {
                             Text(
-                                text = "فرمان صوتی",
+                                text = "ثبت صوتی",
                                 fontWeight = FontWeight.Bold
                             )
                         },
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.90f),
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         shape = CircleShape,
                         modifier = Modifier
                             .border(
                                 BorderStroke(
-                                    1.2.dp,
-                                    GlassmorphismDefaults.specularBorderBrush(Color.White, topIntensity = 0.75f)
+                                    1.3.dp,
+                                    GlassmorphismDefaults.specularBorderBrush(Color.White, topIntensity = 0.85f)
                                 ),
                                 CircleShape
                             )
@@ -516,68 +505,14 @@ fun AuthenticatedLifeOsShell(
                 },
                 bottomBar = {
                     if (!isWideTablet) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            GlassSurface(
-                                shape = GlassTheme.tokens.dockShape,
-                                color = Color(0xCC0D1410),
-                                border = BorderStroke(
-                                    GlassTheme.tokens.specularBorderWidth,
-                                    GlassTheme.specularBorderBrush(null, topIntensity = 0.5f)
-                                ),
-                                tonalElevation = 0.dp,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box {
-                                    // Top Liquid Gloss Sheen reflection
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .background(GlassmorphismDefaults.GlossSheenBrush)
-                                    )
-                                    NavigationBar(
-                                        containerColor = Color.Transparent,
-                                        tonalElevation = 0.dp,
-                                        windowInsets = WindowInsets(0, 0, 0, 0)
-                                    ) {
-                                        AppSection.entries.filter { it.isPrimaryBottomNav }.forEach { section ->
-                                            val isSelected = currentSectionRoute == section.route
-                                            NavigationBarItem(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    WorldClassOsUtils.HapticSignature.crispTick(context)
-                                                    currentSectionRoute = section.route
-                                                },
-                                                icon = {
-                                                    Icon(
-                                                        imageVector = section.icon,
-                                                        contentDescription = section.titleFa
-                                                    )
-                                                },
-                                                label = {
-                                                    Text(
-                                                        text = section.titleFa,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                    )
-                                                },
-                                                colors = NavigationBarItemDefaults.colors(
-                                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                                ),
-                                                modifier = Modifier.testTag("bottom_nav_${section.route.lowercase()}")
-                                            )
-                                        }
-                                    }
-                                }
+                        AnimatedGlassBottomBar(
+                            currentSectionRoute = currentSectionRoute,
+                            darkTheme = prefs.darkTheme,
+                            onSelectSection = { section ->
+                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                currentSectionRoute = section.route
                             }
-                        }
+                        )
                     }
                 }
             ) { innerPadding ->
@@ -674,6 +609,29 @@ fun AuthenticatedLifeOsShell(
                                 onDeleteCustomItem = { itemToDelete ->
                                     vm.deleteCustomConsumptionItem(itemToDelete)
                                 },
+                                onAddExpense = { title, cat, amount, curr, notes, txType ->
+                                    vm.addExpense(title, cat, amount, curr, notes, txType)
+                                },
+                                onSettleDebtOrReceivable = { vm.settleDebtOrReceivable(it) },
+                                onDeleteExpense = { vm.deleteExpense(it) },
+                                onQuickCreateTaskForDay = { title, dueEpochDay ->
+                                    vm.createTask(
+                                        title = title,
+                                        description = "",
+                                        category = "عمومی",
+                                        tags = emptyList(),
+                                        priority = "MEDIUM",
+                                        dueDateEpochDay = dueEpochDay,
+                                        dueTimeMinutes = -1,
+                                        reminderAtMillis = 0L
+                                    )
+                                },
+                                onQuickAddMealCalories = { name, kcal, notes ->
+                                    vm.quickAddConsumption(name, "FOOD", kcal, "kcal", notes)
+                                },
+                                onExecuteQuickSmartInput = { rawText ->
+                                    vm.executeQuickSmartInput(rawText, "QUICK_BAR")
+                                },
                                 onOpenVoiceCapture = { showVoiceModal = true },
                                 onNavigateToSection = { route -> currentSectionRoute = route }
                             )
@@ -732,6 +690,7 @@ fun AuthenticatedLifeOsShell(
                                 onAddExpense = { title, cat, amount, curr, notes, txType ->
                                     vm.addExpense(title, cat, amount, curr, notes, txType)
                                 },
+                                onSettleDebtOrReceivable = { vm.settleDebtOrReceivable(it) },
                                 onDeleteExpense = { vm.deleteExpense(it) },
                                 onAddSleep = { dur, qual, notes ->
                                     vm.addSleepRecord(dur, qual, notes)
@@ -789,6 +748,7 @@ fun AuthenticatedLifeOsShell(
                                 userEmail = userEmail,
                                 userId = vm.currentUserId,
                                 prefs = prefs,
+                                activityEvents = activityEvents,
                                 pendingSyncCount = pendingSyncCount,
                                 lastSyncMillis = lastSyncMillis,
                                 isSyncing = isSyncing,
@@ -826,6 +786,264 @@ fun AuthenticatedLifeOsShell(
                 }
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun AnimatedGlassTopIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    isSelected: Boolean,
+    testTag: String? = null,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = when {
+            isPressed -> 0.88f
+            isSelected -> 1.08f
+            else -> 1f
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "top_icon_scale"
+    )
+    val iconColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "top_icon_color"
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+        } else {
+            Color.White.copy(alpha = 0.10f)
+        },
+        label = "top_icon_bg"
+    )
+
+    val buttonModifier = Modifier
+        .size(40.dp)
+        .scale(scale)
+        .clip(CircleShape)
+        .background(
+            Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = if (isSelected) 0.22f else 0.14f),
+                    bgColor
+                )
+            ),
+            CircleShape
+        )
+        .border(
+            BorderStroke(
+                width = if (isSelected) 1.4.dp else 1.dp,
+                brush = GlassmorphismDefaults.specularBorderBrush(
+                    accentColor = if (isSelected) MaterialTheme.colorScheme.primary else null,
+                    topIntensity = if (isSelected) 0.85f else 0.55f
+                )
+            ),
+            CircleShape
+        )
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick
+        )
+        .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+
+    Box(
+        modifier = buttonModifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconColor,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+@Composable
+private fun AnimatedGlassBottomBar(
+    currentSectionRoute: String,
+    darkTheme: Boolean,
+    onSelectSection: (AppSection) -> Unit
+) {
+    val sections = remember { AppSection.entries.filter { it.isPrimaryBottomNav } }
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(30.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = if (darkTheme) {
+                            listOf(
+                                Color(0xB816241E),
+                                Color(0x9E0B130F),
+                                Color(0xB8121D24)
+                            )
+                        } else {
+                            listOf(
+                                Color(0xCCF4FBF8),
+                                Color(0xB8E5F2EE)
+                            )
+                        }
+                    )
+                )
+                .border(
+                    BorderStroke(
+                        1.35.dp,
+                        GlassmorphismDefaults.specularBorderBrush(
+                            accentColor = primaryColor,
+                            topIntensity = 0.72f,
+                            bottomAlpha = 0.16f
+                        )
+                    ),
+                    RoundedCornerShape(30.dp)
+                )
+        ) {
+            // Diagonal Glass Specular Reflection Overlay
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(GlassmorphismDefaults.GlossSheenBrush)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                sections.forEach { section ->
+                    val isSelected = currentSectionRoute == section.route
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isPressed by interactionSource.collectIsPressedAsState()
+
+                    val itemScale by animateFloatAsState(
+                        targetValue = when {
+                            isPressed -> 0.90f
+                            isSelected -> 1.06f
+                            else -> 1f
+                        },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "bottom_nav_scale_${section.route}"
+                    )
+
+                    val iconOffsetY by animateDpAsState(
+                        targetValue = if (isSelected) (-2).dp else 0.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        ),
+                        label = "bottom_nav_offset_${section.route}"
+                    )
+
+                    val activeCapsuleAlpha by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "bottom_nav_capsule_${section.route}"
+                    )
+
+                    val contentColor by animateColorAsState(
+                        targetValue = if (isSelected) {
+                            primaryColor
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+                        },
+                        label = "bottom_nav_color_${section.route}"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(itemScale)
+                            .clip(RoundedCornerShape(22.dp))
+                            .then(
+                                if (activeCapsuleAlpha > 0.02f) {
+                                    Modifier
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    primaryColor.copy(alpha = 0.28f * activeCapsuleAlpha),
+                                                    primaryColor.copy(alpha = 0.10f * activeCapsuleAlpha)
+                                                )
+                                            ),
+                                            RoundedCornerShape(22.dp)
+                                        )
+                                        .border(
+                                            BorderStroke(
+                                                1.dp,
+                                                primaryColor.copy(alpha = 0.55f * activeCapsuleAlpha)
+                                            ),
+                                            RoundedCornerShape(22.dp)
+                                        )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                                onClick = { onSelectSection(section) }
+                            )
+                            .padding(vertical = 8.dp, horizontal = 4.dp)
+                            .testTag("bottom_nav_${section.route.lowercase()}"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            // Top glowing indicator dot when selected
+                            Box(
+                                modifier = Modifier
+                                    .width(if (isSelected) 16.dp else 4.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(
+                                        if (isSelected) primaryColor else Color.Transparent
+                                    )
+                            )
+
+                            Icon(
+                                imageVector = section.icon,
+                                contentDescription = section.titleFa,
+                                tint = contentColor,
+                                modifier = Modifier
+                                    .size(if (isSelected) 22.dp else 20.dp)
+                                    .offset(y = iconOffsetY)
+                            )
+
+                            Text(
+                                text = section.titleFa,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = contentColor,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -910,7 +1128,7 @@ private fun FloatingFocusTimerBar(
                         }
                     }
                     Text(
-                        text = "در حال تمرکز: ${task.title}",
+                        text = task.title,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,

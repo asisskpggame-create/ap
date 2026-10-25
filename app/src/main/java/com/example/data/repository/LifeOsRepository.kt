@@ -1053,8 +1053,21 @@ class LifeOsRepository(
         if (cleanTitle.isBlank()) {
             return Result.failure(IllegalArgumentException("وارد کردن تیتر / دلیل برای ثبت خرج یا درآمد الزامی است."))
         }
-        val normType = if (transactionType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
-        val expenseId = cleanDocId(if (normType == "INCOME") "inc" else "exp")
+        val normType = when {
+            transactionType.equals("INCOME", ignoreCase = true) -> "INCOME"
+            transactionType.equals("DEBT", ignoreCase = true) -> "DEBT"
+            transactionType.equals("RECEIVABLE", ignoreCase = true) -> "RECEIVABLE"
+            transactionType.equals("DEBT_SETTLED", ignoreCase = true) -> "DEBT_SETTLED"
+            transactionType.equals("RECEIVABLE_SETTLED", ignoreCase = true) -> "RECEIVABLE_SETTLED"
+            else -> "EXPENSE"
+        }
+        val docPrefix = when (normType) {
+            "INCOME" -> "inc"
+            "DEBT", "DEBT_SETTLED" -> "dbt"
+            "RECEIVABLE", "RECEIVABLE_SETTLED" -> "rcv"
+            else -> "exp"
+        }
+        val expenseId = cleanDocId(docPrefix)
         val expense = ExpenseEntry(
             id = expenseId,
             userId = uid,
@@ -1071,8 +1084,18 @@ class LifeOsRepository(
             transactionType = normType
         )
 
-        val labelFa = if (normType == "INCOME") "ثبت درآمد" else "ثبت خرج"
-        val evType = if (normType == "INCOME") "INCOME_ADDED" else "EXPENSE_ADDED"
+        val labelFa = when (normType) {
+            "INCOME" -> "ثبت درآمد"
+            "DEBT" -> "ثبت بدهکاری"
+            "RECEIVABLE" -> "ثبت طلبکاری"
+            else -> "ثبت خرج"
+        }
+        val evType = when (normType) {
+            "INCOME" -> "INCOME_ADDED"
+            "DEBT" -> "DEBT_ADDED"
+            "RECEIVABLE" -> "RECEIVABLE_ADDED"
+            else -> "EXPENSE_ADDED"
+        }
 
         if (localDao != null) {
             localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(expense, synced = false))
@@ -1085,7 +1108,7 @@ class LifeOsRepository(
                 entityId = expenseId,
                 inputSource = inputSource,
                 afterSummary = "$normType: ${expense.amount} ${expense.currency} (${expense.title})",
-                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(expense.amount, expense.currency)} بابت «${expense.title}»"
+                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(expense.amount, expense.currency)} • «${expense.title}»"
             )
             return Result.success(expenseId)
         }
@@ -1102,7 +1125,7 @@ class LifeOsRepository(
                 entityId = expenseId,
                 inputSource = inputSource,
                 afterSummary = "$normType: ${expense.amount} ${expense.currency} (${expense.title})",
-                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(expense.amount, expense.currency)} بابت «${expense.title}»"
+                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(expense.amount, expense.currency)} • «${expense.title}»"
             )
             Result.success(expenseId)
         } catch (e: CancellationException) {
@@ -1113,9 +1136,62 @@ class LifeOsRepository(
         }
     }
 
+    suspend fun settleDebtOrReceivable(entry: ExpenseEntry): Result<Unit> {
+        val uid = resolveActiveUserId()
+        require(entry.id.isNotBlank()) { "Entry ID must not be blank" }
+        val settledType = if (entry.isDebt) "DEBT_SETTLED" else "RECEIVABLE_SETTLED"
+        val updatedNotes = if (entry.notes.contains("[SETTLED]")) entry.notes else "${entry.notes} [SETTLED]".trim()
+        val settledEntry = entry.copy(
+            userId = uid,
+            transactionType = settledType,
+            notes = updatedNotes
+        )
+        val labelFa = if (entry.isDebt) "تسویه بدهکاری" else "وصول طلبکاری"
+        val evType = if (entry.isDebt) "DEBT_SETTLED" else "RECEIVABLE_SETTLED"
+
+        if (localDao != null) {
+            localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(settledEntry, synced = false))
+            logActivityEvent(
+                eventType = evType,
+                entityType = "EXPENSE",
+                entityId = entry.id,
+                inputSource = "MANUAL",
+                beforeSummary = "${entry.transactionType}: ${entry.amount} ${entry.currency}",
+                afterSummary = "$settledType: ${entry.amount} ${entry.currency}",
+                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(entry.amount, entry.currency)} • «${entry.title}»"
+            )
+            return Result.success(Unit)
+        }
+
+        val docRef = db.collection("users").document(uid).collection("expenses").document(entry.id)
+        return try {
+            docRef.set(settledEntry.toCreateMap()).await()
+            logActivityEvent(
+                eventType = evType,
+                entityType = "EXPENSE",
+                entityId = entry.id,
+                inputSource = "MANUAL",
+                beforeSummary = "${entry.transactionType}: ${entry.amount} ${entry.currency}",
+                afterSummary = "$settledType: ${entry.amount} ${entry.currency}",
+                humanSummary = "$labelFa: ${PersianDateAndUnitUtils.formatCurrencyAmount(entry.amount, entry.currency)} • «${entry.title}»"
+            )
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteExpense(expense: ExpenseEntry): Result<Unit> {
         val uid = resolveActiveUserId()
-        val labelFa = if (expense.isIncome) "حذف درآمد" else "حذف خرج"
+        val labelFa = when {
+            expense.isDebt -> "حذف بدهکاری"
+            expense.isReceivable -> "حذف طلبکاری"
+            expense.isIncome -> "حذف درآمد"
+            else -> "حذف خرج"
+        }
         if (localDao != null) {
             localDao.deleteCachedExpense(uid, expense.id)
             logActivityEvent(

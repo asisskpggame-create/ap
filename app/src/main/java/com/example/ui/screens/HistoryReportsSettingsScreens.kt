@@ -1,9 +1,15 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,14 +34,18 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,8 +64,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +78,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,6 +93,7 @@ import com.example.data.model.Task
 import com.example.data.model.UserPreferencesDoc
 import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.AmberWarning
+import com.example.ui.theme.CollapsibleGlassSection
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.GlassSurface
@@ -89,6 +104,9 @@ import com.example.ui.theme.RoseError
 import com.example.ui.theme.SkyInfo
 import com.example.util.PersianDateAndUnitUtils
 import com.example.util.WorldClassOsUtils
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -138,18 +156,11 @@ fun HistoryScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.History, contentDescription = null, tint = ElectricTeal)
                 Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "تاریخچه فعالیت‌ها و گزارش ممیزی هوش مصنوعی",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "ثبت غیرقابل‌حذف (Append-Only) تمامی تغییرات دستی، صوتی و عملیات Gemini",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = "تاریخچه فعالیت‌ها",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
@@ -157,7 +168,7 @@ fun HistoryScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("جستجو در خلاصه عملیات، متن صوتی یا نوع رویداد...") },
+                label = { Text("جستجو در فعالیت‌ها...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 modifier = Modifier
@@ -174,11 +185,11 @@ fun HistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
-                        "ALL" to "همه بخش‌ها",
-                        "AI" to "عملیات Gemini",
-                        "TASK" to "تسک‌ها",
-                        "LOG" to "مصرف و هزینه",
-                        "HEALTH" to "عادت، خواب و ورزش"
+                        "ALL" to "همه",
+                        "AI" to "هوش مصنوعی",
+                        "TASK" to "کارها",
+                        "LOG" to "مالی و مصرف",
+                        "HEALTH" to "عادت و سلامت"
                     ).forEach { (code, label) ->
                         FilterChip(
                             selected = selectedEntityFilter == code,
@@ -194,9 +205,9 @@ fun HistoryScreen(
                 ) {
                     listOf(
                         "ALL" to "همه ورودی‌ها",
-                        "VOICE" to "فقط صوتی",
-                        "AI_ASSISTANT" to "چت هوش مصنوعی",
-                        "MANUAL" to "ثبت دستی / سریع"
+                        "VOICE" to "صوتی",
+                        "AI_ASSISTANT" to "چت",
+                        "MANUAL" to "دستی"
                     ).forEach { (code, label) ->
                         FilterChip(
                             selected = selectedSourceFilter == code,
@@ -357,6 +368,7 @@ fun ReportsScreen(
     sleepRecords: List<SleepRecord>,
     exerciseRecords: List<ExerciseRecord>
 ) {
+    val context = LocalContext.current
     val todayEpochDay = PersianDateAndUnitUtils.currentLocalEpochDay()
     var rangeDays by remember { mutableStateOf(7) } // 7-day weekly vs 30-day monthly
     val startEpochDay = todayEpochDay - (rangeDays - 1)
@@ -416,14 +428,39 @@ fun ReportsScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Analytics, contentDescription = null, tint = ElectricTeal)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "گزارش‌ها و تحلیل عملکرد",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Analytics, contentDescription = null, tint = ElectricTeal)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "گزارش‌ها و تحلیل عملکرد",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            com.example.ui.components.ReportCsvExporter.shareMonthlyCsvReport(
+                                context = context,
+                                todayEpochDay = todayEpochDay,
+                                tasks = tasks,
+                                expenses = expenses,
+                                consumption = consumption,
+                                sleepRecords = sleepRecords
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("reports_csv_export_button")
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("خروجی اکسل (CSV)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 FlowRow(
@@ -793,6 +830,7 @@ fun SettingsScreen(
     userEmail: String?,
     userId: String,
     prefs: UserPreferencesDoc,
+    activityEvents: List<ActivityEvent> = emptyList(),
     pendingSyncCount: Int = 0,
     lastSyncMillis: Long = 0L,
     isSyncing: Boolean = false,
@@ -814,448 +852,637 @@ fun SettingsScreen(
     var exportedJsonPreview by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    // Collapsible Drawer Section states
+    var syncSectionExpanded by rememberSaveable { mutableStateOf(true) }
+    var appearanceSectionExpanded by rememberSaveable { mutableStateOf(true) }
+    var targetsSectionExpanded by rememberSaveable { mutableStateOf(true) }
+    var securitySectionExpanded by rememberSaveable { mutableStateOf(true) }
+
+    // Silent 9-tap Developer Mode state
+    var developerModeEnabled by rememberSaveable { mutableStateOf(false) }
+    var versionTapCount by rememberSaveable { mutableIntStateOf(0) }
+    var lastVersionTapMillis by rememberSaveable { mutableLongStateOf(0L) }
+    var devLogsCopied by remember { mutableStateOf(false) }
+
+    val currentPaletteTitle = com.example.ui.theme.AppThemePalette.fromCode(prefs.themePalette).titleFa
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .testTag("settings_screen_list"),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Settings, contentDescription = null, tint = ElectricTeal)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "تنظیمات، پردازش محلی و انتقال ۶ ساعته",
+                    text = "تنظیمات",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // On-Device Processing & 6-Hour Periodic Data Transfer Card
+        // 1. Collapsible Drawer: Account & Backup
         item {
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                accentBorderColor = EmeraldSuccess,
-                borderWidth = 1.2.dp
+            CollapsibleGlassSection(
+                title = "حساب کاربری و پشتیبان‌گیری",
+                subtitle = if (isLocalOnlyMode) "ذخیره روی گوشی" else (userEmail ?: "متصل به حساب گوگل"),
+                badgeText = if (syncSectionExpanded) "بستن" else "باز کردن",
+                icon = Icons.Default.Security,
+                accentColor = EmeraldSuccess,
+                expanded = syncSectionExpanded,
+                onToggle = { syncSectionExpanded = !syncSectionExpanded }
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                val lastSyncLabel = if (lastSyncMillis > 0L) {
+                    val day = PersianDateAndUnitUtils.currentLocalEpochDay(lastSyncMillis)
+                    PersianDateAndUnitUtils.formatEpochDay(day, prefs.calendarDisplay)
+                } else {
+                    "هنوز انجام نشده"
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = EmeraldSuccess)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "پردازش روی گوشی + انتقال خودکار هر ۶ ساعت",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                     Text(
-                        text = if (isLocalOnlyMode) {
-                            "وضعیت فعلی: فعال بدون نیاز به اکانت (تمامی داده‌ها و پردازش‌ها مستقیماً روی حافظه گوشی انجام می‌شود)"
-                        } else {
-                            "وضعیت فعلی: پردازش روی گوشی + متصل به حساب ابری (${userEmail ?: "حساب گوگل"})"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = EmeraldSuccess
-                    )
-                    Text(
-                        text = "رکوردهای آماده انتقال در چرخه ۶ ساعته: ${PersianDateAndUnitUtils.toPersianDigits(pendingSyncCount.toString())} مورد",
+                        text = "آخرین همگام‌سازی: $lastSyncLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val lastSyncLabel = if (lastSyncMillis > 0L) {
-                        val day = PersianDateAndUnitUtils.currentLocalEpochDay(lastSyncMillis)
-                        PersianDateAndUnitUtils.formatEpochDay(day, prefs.calendarDisplay)
-                    } else {
-                        "در انتظار اولین چرخه ۶ ساعته"
+                    if (pendingSyncCount > 0) {
+                        Text(
+                            text = "${PersianDateAndUnitUtils.toPersianDigits(pendingSyncCount.toString())} مورد در صف",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldSuccess,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
-                    Text(
-                        text = "آخرین انتقال اطلاعات: $lastSyncLabel",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                }
 
-                    Button(
-                        onClick = onTriggerSixHourSync,
-                        enabled = !isSyncing,
+                Button(
+                    onClick = onTriggerSixHourSync,
+                    enabled = !isSyncing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sync_now_button")
+                ) {
+                    Text(if (isSyncing) "در حال همگام‌سازی..." else "همگام‌سازی الان")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val json = onExportJson()
+                        WorldClassOsUtils.EncryptedBackupManager.shareBackupToTelegramOrSystem(context, json)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("share_encrypted_telegram_backup_button")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("ارسال فایل پشتیبان")
+                }
+
+                if (isLocalOnlyMode) {
+                    OutlinedButton(
+                        onClick = onConnectOptionalGoogleAccount,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("sync_now_button")
+                            .testTag("connect_optional_google_button")
                     ) {
-                        Text(if (isSyncing) "در حال انتقال اطلاعات..." else "انتقال و پشتیبان‌گیری اطلاعات الان (چرخه ۶ ساعته)")
+                        Text("اتصال به حساب گوگل")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onSignOut,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("sign_out_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("خروج از حساب")
+                    }
+                }
+            }
+        }
+
+        // 2. Collapsible Drawer: Appearance, Theme, Layout, Calendar & Currency
+        item {
+            CollapsibleGlassSection(
+                title = "ظاهر، تم و تقویم",
+                subtitle = "$currentPaletteTitle • ${prefs.defaultCurrency}",
+                badgeText = if (appearanceSectionExpanded) "بستن" else "باز کردن",
+                icon = Icons.Default.Palette,
+                accentColor = ElectricTeal,
+                expanded = appearanceSectionExpanded,
+                onToggle = { appearanceSectionExpanded = !appearanceSectionExpanded }
+            ) {
+                Text("تم رنگی", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    com.example.ui.theme.AppThemePalette.entries.forEach { palette ->
+                        FilterChip(
+                            selected = prefs.themePalette == palette.code,
+                            onClick = {
+                                onUpdatePrefs(
+                                    prefs.copy(
+                                        themePalette = palette.code,
+                                        darkTheme = palette.isDark
+                                    )
+                                )
+                            },
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .background(palette.previewPrimary, CircleShape)
+                                )
+                            },
+                            label = { Text(palette.titleFa) },
+                            modifier = Modifier.testTag("settings_theme_chip_${palette.code}")
+                        )
+                    }
+                }
+
+                Text("چیدمان صفحه", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    com.example.ui.theme.AppLayoutStyle.entries.forEach { styleOption ->
+                        FilterChip(
+                            selected = prefs.layoutStyle == styleOption.code,
+                            onClick = { onUpdatePrefs(prefs.copy(layoutStyle = styleOption.code)) },
+                            label = { Text(styleOption.titleFa) },
+                            modifier = Modifier.testTag("settings_layout_chip_${styleOption.code}")
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("حالت تاریک", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = prefs.darkTheme,
+                        onCheckedChange = {
+                            val nextPalette = if (it && prefs.themePalette == "MINIMAL_DAYLIGHT") {
+                                "OBSIDIAN_TEAL"
+                            } else if (!it) {
+                                "MINIMAL_DAYLIGHT"
+                            } else {
+                                prefs.themePalette
+                            }
+                            onUpdatePrefs(prefs.copy(darkTheme = it, themePalette = nextPalette))
+                        },
+                        modifier = Modifier.testTag("dark_theme_switch")
+                    )
+                }
+
+                Text("تقویم", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "JALALI" to "شمسی",
+                        "GREGORIAN" to "میلادی",
+                        "BOTH" to "هر دو"
+                    ).forEach { (code, label) ->
+                        FilterChip(
+                            selected = prefs.calendarDisplay == code,
+                            onClick = { onUpdatePrefs(prefs.copy(calendarDisplay = code)) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
+                Text("اول هفته", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        6 to "شنبه",
+                        1 to "دوشنبه",
+                        7 to "یکشنبه"
+                    ).forEach { (code, label) ->
+                        FilterChip(
+                            selected = prefs.weekStartDay == code,
+                            onClick = { onUpdatePrefs(prefs.copy(weekStartDay = code)) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
+                Text("واحد پول", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "TOMAN" to "تومان",
+                        "IRR" to "ریال",
+                        "EUR" to "یورو (€)",
+                        "USD" to "دلار ($)"
+                    ).forEach { (code, label) ->
+                        FilterChip(
+                            selected = prefs.defaultCurrency == code,
+                            onClick = { onUpdatePrefs(prefs.copy(defaultCurrency = code)) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Collapsible Drawer: Daily Targets & Monthly Budget
+        item {
+            CollapsibleGlassSection(
+                title = "اهداف روزانه و بودجه",
+                subtitle = "آب: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyWaterTargetMl.toString())}ml • ورزش: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyExerciseTargetMinutes.toString())} دقیقه",
+                badgeText = if (targetsSectionExpanded) "بستن" else "باز کردن",
+                icon = Icons.Default.TrackChanges,
+                accentColor = EmeraldSuccess,
+                expanded = targetsSectionExpanded,
+                onToggle = { targetsSectionExpanded = !targetsSectionExpanded }
+            ) {
+                OutlinedTextField(
+                    value = monthlyBudgetInput,
+                    onValueChange = { monthlyBudgetInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                    label = { Text("بودجه ماهانه (${prefs.defaultCurrency})") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = waterInput,
+                    onValueChange = { waterInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                    label = { Text("هدف آب روزانه (ml)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = sleepInput,
+                    onValueChange = { sleepInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                    label = { Text("هدف خواب روزانه (ساعت)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = exerciseInput,
+                    onValueChange = { exerciseInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                    label = { Text("هدف ورزش روزانه (دقیقه)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Button(
+                    onClick = {
+                        val w = waterInput.toIntOrNull()?.coerceIn(500, 10000) ?: prefs.dailyWaterTargetMl
+                        val sHours = sleepInput.toIntOrNull()?.coerceIn(3, 14) ?: (prefs.dailySleepTargetMinutes / 60)
+                        val exMin = exerciseInput.toIntOrNull()?.coerceIn(5, 300) ?: prefs.dailyExerciseTargetMinutes
+                        val budget = monthlyBudgetInput.toDoubleOrNull()?.coerceAtLeast(100_000.0) ?: prefs.monthlyBudgetTarget
+                        onUpdatePrefs(
+                            prefs.copy(
+                                dailyWaterTargetMl = w,
+                                dailySleepTargetMinutes = sHours * 60,
+                                dailyExerciseTargetMinutes = exMin,
+                                monthlyBudgetTarget = budget
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("ذخیره تغییرات")
+                }
+            }
+        }
+
+        // 4. Collapsible Drawer: Security & Data Management
+        item {
+            CollapsibleGlassSection(
+                title = "امنیت و داده‌ها",
+                subtitle = if (prefs.vaultLockEnabled) "قفل رمز فعال است" else "قفل رمز غیرفعال",
+                badgeText = if (securitySectionExpanded) "بستن" else "باز کردن",
+                icon = Icons.Default.Lock,
+                accentColor = ElectricTeal,
+                expanded = securitySectionExpanded,
+                onToggle = { securitySectionExpanded = !securitySectionExpanded }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
+                        Text("قفل رمز عبور برنامه", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Switch(
+                        checked = prefs.vaultLockEnabled,
+                        onCheckedChange = { enabled ->
+                            val pin = vaultPinInput.ifBlank { "1234" }
+                            vaultPinInput = pin
+                            onUpdatePrefs(prefs.copy(vaultLockEnabled = enabled, vaultPinCode = pin))
+                        },
+                        modifier = Modifier.testTag("vault_lock_switch")
+                    )
+                }
+
+                if (prefs.vaultLockEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = vaultPinInput,
+                            onValueChange = { vaultPinInput = PersianDateAndUnitUtils.toEnglishDigits(it).take(6) },
+                            label = { Text("رمز عبور") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = {
+                                if (vaultPinInput.isNotBlank()) {
+                                    onUpdatePrefs(prefs.copy(vaultPinCode = vaultPinInput))
+                                }
+                            }
+                        ) {
+                            Text("ثبت رمز")
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("ذخیره متن صوتی", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = prefs.retainVoiceTranscripts,
+                        onCheckedChange = { onUpdatePrefs(prefs.copy(retainVoiceTranscripts = it)) }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("ذخیره تاریخچه چت", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = prefs.retainConversations,
+                        onCheckedChange = { onUpdatePrefs(prefs.copy(retainConversations = it)) }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onClearConversations,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("پاک کردن چت‌ها")
                     }
 
-                    // Anti-Filtering Encrypted Local Backup & Direct Share to Telegram Saved Messages
-                    OutlinedButton(
+                    Button(
                         onClick = {
                             val json = onExportJson()
-                            WorldClassOsUtils.EncryptedBackupManager.shareBackupToTelegramOrSystem(context, json)
+                            exportedJsonPreview = json
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("share_encrypted_telegram_backup_button")
+                            .weight(1f)
+                            .testTag("export_json_button")
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("پشتیبان رمزنگاری‌شده AES-256 (ارسال به تلگرام / فایل)")
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("خروجی JSON")
                     }
+                }
 
-                    if (isLocalOnlyMode) {
-                        OutlinedButton(
-                            onClick = onConnectOptionalGoogleAccount,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("connect_optional_google_button")
-                        ) {
-                            Text("اتصال اختیاری به حساب گوگل (جهت همگام‌سازی ابری)")
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = onSignOut,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("sign_out_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("خروج از حساب ابری (ادامه روی گوشی بدون اکانت)")
-                        }
-                    }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+
+                Button(
+                    onClick = { showDeleteConfirmDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoseError),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("delete_all_data_button")
+                ) {
+                    Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("حذف همه اطلاعات")
                 }
             }
         }
 
-        // Appearance, Themes, Layout Architecture, Calendar & Currency Preferences
+        // 5. App Version Row (9 consecutive silent clicks unlock Developer Mode & Logging)
         item {
+            val versionInteractionSource = remember { MutableInteractionSource() }
             LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                accentBorderColor = ElectricTeal.copy(alpha = 0.5f),
-                borderWidth = 1.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("تم‌های رنگی، نوع چیدمان، تقویم و واحد پول", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    Text("انتخاب تم رنگی (۶ پوسته استاندارد):", style = MaterialTheme.typography.labelMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        com.example.ui.theme.AppThemePalette.entries.forEach { palette ->
-                            FilterChip(
-                                selected = prefs.themePalette == palette.code,
-                                onClick = {
-                                    onUpdatePrefs(
-                                        prefs.copy(
-                                            themePalette = palette.code,
-                                            darkTheme = palette.isDark
-                                        )
-                                    )
-                                },
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .background(palette.previewPrimary, CircleShape)
-                                    )
-                                },
-                                label = { Text(palette.titleFa) },
-                                modifier = Modifier.testTag("settings_theme_chip_${palette.code}")
-                            )
-                        }
-                    }
-
-                    Text("نوع چیدمان و معماری داشبورد (۴ حالت چیدمان):", style = MaterialTheme.typography.labelMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        com.example.ui.theme.AppLayoutStyle.entries.forEach { styleOption ->
-                            FilterChip(
-                                selected = prefs.layoutStyle == styleOption.code,
-                                onClick = { onUpdatePrefs(prefs.copy(layoutStyle = styleOption.code)) },
-                                label = { Text(styleOption.titleFa) },
-                                modifier = Modifier.testTag("settings_layout_chip_${styleOption.code}")
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("پوسته تاریک OLED (Dark Theme)", style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = prefs.darkTheme,
-                            onCheckedChange = {
-                                val nextPalette = if (it && prefs.themePalette == "MINIMAL_DAYLIGHT") {
-                                    "OBSIDIAN_TEAL"
-                                } else if (!it) {
-                                    "MINIMAL_DAYLIGHT"
-                                } else {
-                                    prefs.themePalette
-                                }
-                                onUpdatePrefs(prefs.copy(darkTheme = it, themePalette = nextPalette))
-                            },
-                            modifier = Modifier.testTag("dark_theme_switch")
-                        )
-                    }
-
-                    Text("نمایش تقویم:", style = MaterialTheme.typography.labelMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            "JALALI" to "شمسی (جلالی)",
-                            "GREGORIAN" to "میلادی",
-                            "BOTH" to "هر دو تقویم"
-                        ).forEach { (code, label) ->
-                            FilterChip(
-                                selected = prefs.calendarDisplay == code,
-                                onClick = { onUpdatePrefs(prefs.copy(calendarDisplay = code)) },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-
-                    Text("روز شروع هفته:", style = MaterialTheme.typography.labelMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            6 to "شنبه",
-                            1 to "دوشنبه",
-                            7 to "یکشنبه"
-                        ).forEach { (code, label) ->
-                            FilterChip(
-                                selected = prefs.weekStartDay == code,
-                                onClick = { onUpdatePrefs(prefs.copy(weekStartDay = code)) },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-
-                    Text("واحد پول پیش‌فرض:", style = MaterialTheme.typography.labelMedium)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            "TOMAN" to "تومان",
-                            "IRR" to "ریال",
-                            "EUR" to "یورو (€)",
-                            "USD" to "دلار ($)"
-                        ).forEach { (code, label) ->
-                            FilterChip(
-                                selected = prefs.defaultCurrency == code,
-                                onClick = { onUpdatePrefs(prefs.copy(defaultCurrency = code)) },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Daily Targets & Monthly Safe-to-Spend Budget Configuration
-        item {
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                accentBorderColor = EmeraldSuccess.copy(alpha = 0.5f),
-                borderWidth = 1.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("اهداف روزانه و سقف بودجه ماهانه (Safe-to-Spend)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    OutlinedTextField(
-                        value = monthlyBudgetInput,
-                        onValueChange = { monthlyBudgetInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
-                        label = { Text("سقف بودجه ماهانه (${prefs.defaultCurrency})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = waterInput,
-                        onValueChange = { waterInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
-                        label = { Text("هدف روزانه آب (میلی‌لیتر)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = sleepInput,
-                        onValueChange = { sleepInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
-                        label = { Text("هدف روزانه خواب (ساعت)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = exerciseInput,
-                        onValueChange = { exerciseInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
-                        label = { Text("هدف روزانه ورزش (دقیقه)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Button(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = versionInteractionSource,
+                        indication = null,
                         onClick = {
-                            val w = waterInput.toIntOrNull()?.coerceIn(500, 10000) ?: prefs.dailyWaterTargetMl
-                            val sHours = sleepInput.toIntOrNull()?.coerceIn(3, 14) ?: (prefs.dailySleepTargetMinutes / 60)
-                            val exMin = exerciseInput.toIntOrNull()?.coerceIn(5, 300) ?: prefs.dailyExerciseTargetMinutes
-                            val budget = monthlyBudgetInput.toDoubleOrNull()?.coerceAtLeast(100_000.0) ?: prefs.monthlyBudgetTarget
-                            onUpdatePrefs(
-                                prefs.copy(
-                                    dailyWaterTargetMl = w,
-                                    dailySleepTargetMinutes = sHours * 60,
-                                    dailyExerciseTargetMinutes = exMin,
-                                    monthlyBudgetTarget = budget
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                            val now = System.currentTimeMillis()
+                            // Reset streak if more than 4 seconds elapsed between taps
+                            val nextCount = if (lastVersionTapMillis > 0L && (now - lastVersionTapMillis) > 4000L) {
+                                1
+                            } else {
+                                versionTapCount + 1
+                            }
+                            lastVersionTapMillis = now
+                            versionTapCount = nextCount
+                            // Completely silent on taps 1..8; activate Developer Mode on 9th consecutive tap
+                            if (nextCount >= 9) {
+                                developerModeEnabled = true
+                            }
+                        }
+                    )
+                    .testTag("settings_app_version_row"),
+                shape = RoundedCornerShape(20.dp),
+                accentBorderColor = if (developerModeEnabled) AmberWarning.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("ذخیره اهداف روزانه و بودجه ماهانه")
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "نسخه برنامه",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
+                    Text(
+                        text = "۲.۵.۰",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
 
-        // Privacy Vault PIN Lock, AI Retention & Backup Card
-        item {
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                accentBorderColor = ElectricTeal.copy(alpha = 0.5f),
-                borderWidth = 1.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("قفل حریم خصوصی، هوش مصنوعی و پشتیبان‌گیری", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(18.dp))
-                            Text("قفل پین‌کد روی بخش مالی (خرج و درآمد)", style = MaterialTheme.typography.bodyMedium)
-                        }
-                        Switch(
-                            checked = prefs.vaultLockEnabled,
-                            onCheckedChange = { enabled ->
-                                val pin = vaultPinInput.ifBlank { "1234" }
-                                vaultPinInput = pin
-                                onUpdatePrefs(prefs.copy(vaultLockEnabled = enabled, vaultPinCode = pin))
-                            },
-                            modifier = Modifier.testTag("vault_lock_switch")
-                        )
-                    }
-
-                    if (prefs.vaultLockEnabled) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = vaultPinInput,
-                                onValueChange = { vaultPinInput = PersianDateAndUnitUtils.toEnglishDigits(it).take(6) },
-                                label = { Text("پین‌کد قفل مالی (مثلاً 1234)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    if (vaultPinInput.isNotBlank()) {
-                                        onUpdatePrefs(prefs.copy(vaultPinCode = vaultPinInput))
-                                    }
-                                }
-                            ) {
-                                Text("ثبت پین")
+        // 6. Hidden Developer Mode & Live Logging Panel (Appears ONLY after 9 consecutive clicks on App Version)
+        if (developerModeEnabled) {
+            item {
+                val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
+                val formattedLogs = remember(activityEvents, userId, pendingSyncCount, lastSyncMillis) {
+                    buildList {
+                        add("[SYS] Developer Mode: ACTIVE | User: $userId")
+                        add("[SYNC] PendingQueue=$pendingSyncCount | LastSync=$lastSyncMillis")
+                        add("[PREFS] Theme=${prefs.themePalette} | Layout=${prefs.layoutStyle} | Currency=${prefs.defaultCurrency}")
+                        if (activityEvents.isEmpty()) {
+                            add("[LOG] No operation events recorded yet.")
+                        } else {
+                            activityEvents.take(25).forEach { ev ->
+                                val ts = if (ev.timestampMillis > 0L) timeFormatter.format(Date(ev.timestampMillis)) else "--:--:--"
+                                add("[$ts] [${ev.inputSource}] ${ev.eventType} (${ev.operationStatus}) -> ${ev.humanSummary}")
                             }
                         }
                     }
+                }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("نگهداری متن دستورات صوتی در تاریخچه", style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = prefs.retainVoiceTranscripts,
-                            onCheckedChange = { onUpdatePrefs(prefs.copy(retainVoiceTranscripts = it)) }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("ذخیره تاریخچه گفتگو با Gemini", style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = prefs.retainConversations,
-                            onCheckedChange = { onUpdatePrefs(prefs.copy(retainConversations = it)) }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onClearConversations,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("پاک‌سازی چت هوش مصنوعی")
-                        }
-
-                        Button(
-                            onClick = {
-                                val json = onExportJson()
-                                exportedJsonPreview = json
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("export_json_button")
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("خروجی JSON")
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-
-                    Button(
-                        onClick = { showDeleteConfirmDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = RoseError),
+                LiquidGlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("developer_mode_panel"),
+                    shape = RoundedCornerShape(22.dp),
+                    accentBorderColor = AmberWarning,
+                    borderWidth = 1.4.dp
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("delete_all_data_button")
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("حذف کامل داده‌های حساب کاربری")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BugReport,
+                                    contentDescription = null,
+                                    tint = AmberWarning,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "حالت توسعه‌دهنده و لاگ‌ها",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AmberWarning
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    developerModeEnabled = false
+                                    versionTapCount = 0
+                                    devLogsCopied = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = RoseError),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("disable_developer_mode_button")
+                            ) {
+                                Text(
+                                    text = "غیرفعال کردن",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Live Console Log Box
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF070C09).copy(alpha = 0.85f),
+                            border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                formattedLogs.forEach { logLine ->
+                                    Text(
+                                        text = logLine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = Color(0xFFA7F3D0)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("app_logs", formattedLogs.joinToString("\n"))
+                                    )
+                                    devLogsCopied = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("copy_developer_logs_button")
+                            ) {
+                                Text(if (devLogsCopied) "کپی شد ✓" else "کپی لاگ‌ها")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    developerModeEnabled = false
+                                    versionTapCount = 0
+                                    devLogsCopied = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("بستن حالت توسعه‌دهنده")
+                            }
+                        }
                     }
                 }
             }
@@ -1271,7 +1498,7 @@ fun SettingsScreen(
             containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
             titleContentColor = ElectricTeal,
             textContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("خروجی JSON داده‌های شما") },
+            title = { Text("خروجی JSON") },
             text = {
                 OutlinedTextField(
                     value = exportedJsonPreview!!,
@@ -1289,11 +1516,11 @@ fun SettingsScreen(
                             type = "application/json"
                             putExtra(Intent.EXTRA_TEXT, exportedJsonPreview)
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "اشتراک‌گذاری فایل پشتیبان JSON"))
+                        context.startActivity(Intent.createChooser(sendIntent, "اشتراک‌گذاری JSON"))
                         exportedJsonPreview = null
                     }
                 ) {
-                    Text("اشتراک‌گذاری / ذخیره")
+                    Text("اشتراک‌گذاری")
                 }
             },
             dismissButton = {
@@ -1311,9 +1538,9 @@ fun SettingsScreen(
             containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
             titleContentColor = RoseError,
             textContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("تأیید حذف کامل داده‌ها") },
+            title = { Text("حذف همه اطلاعات") },
             text = {
-                Text("آیا مطمئن هستید که می‌خواهید تمامی تسک‌ها، رکوردهای مصرف، هزینه‌ها، عادت‌ها و تاریخچه حساب خود را حذف کنید؟ این عمل غیرقابل بازگشت است.")
+                Text("آیا مطمئن هستید؟ این کار قابل بازگشت نیست.")
             },
             confirmButton = {
                 Button(
@@ -1323,7 +1550,7 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RoseError)
                 ) {
-                    Text("بله، همه را حذف کن")
+                    Text("حذف")
                 }
             },
             dismissButton = {

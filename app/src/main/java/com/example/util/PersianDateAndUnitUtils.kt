@@ -331,13 +331,13 @@ object PersianDateAndUnitUtils {
     // --- Expense & Multi-Currency Calculations ---
 
     /**
-     * Aggregates expenses (excluding income entries) strictly grouped by currency.
+     * Aggregates expenses (excluding income, debt, and receivable entries) strictly grouped by currency.
      * Never sums different currencies together without an explicit exchange rate.
      */
     fun aggregateExpensesByCurrency(expenses: List<ExpenseEntry>): Map<String, Double> {
         val result = linkedMapOf<String, Double>()
         for (expense in expenses) {
-            if (!expense.isIncome) {
+            if (expense.isExpense) {
                 val curr = expense.currency.uppercase(Locale.US)
                 result[curr] = (result[curr] ?: 0.0) + expense.amount
             }
@@ -360,11 +360,40 @@ object PersianDateAndUnitUtils {
     }
 
     /**
+     * Aggregates active (unsettled) debt entries (بدهکاری) strictly grouped by currency.
+     */
+    fun aggregateDebtsByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
+        val result = linkedMapOf<String, Double>()
+        for (entry in entries) {
+            if (entry.isDebt && !entry.isSettled) {
+                val curr = entry.currency.uppercase(Locale.US)
+                result[curr] = (result[curr] ?: 0.0) + entry.amount
+            }
+        }
+        return result
+    }
+
+    /**
+     * Aggregates active (unsettled) receivable entries (طلبکاری) strictly grouped by currency.
+     */
+    fun aggregateReceivablesByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
+        val result = linkedMapOf<String, Double>()
+        for (entry in entries) {
+            if (entry.isReceivable && !entry.isSettled) {
+                val curr = entry.currency.uppercase(Locale.US)
+                result[curr] = (result[curr] ?: 0.0) + entry.amount
+            }
+        }
+        return result
+    }
+
+    /**
      * Aggregates net balance (Income - Expense) strictly grouped by currency.
      */
     fun aggregateNetBalanceByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
         val result = linkedMapOf<String, Double>()
         for (entry in entries) {
+            if (!entry.isIncome && !entry.isExpense) continue
             val curr = entry.currency.uppercase(Locale.US)
             val signed = if (entry.isIncome) entry.amount else -entry.amount
             result[curr] = (result[curr] ?: 0.0) + signed
@@ -384,7 +413,7 @@ object PersianDateAndUnitUtils {
         var total = 0.0
         val normTarget = targetCurrency.uppercase(Locale.US)
         for (expense in expenses) {
-            if (expense.isIncome) continue
+            if (!expense.isExpense) continue
             val curr = expense.currency.uppercase(Locale.US)
             if (curr == normTarget) {
                 total += expense.amount
@@ -395,6 +424,100 @@ object PersianDateAndUnitUtils {
             }
         }
         return total
+    }
+
+    /**
+     * Normalizes colloquial Iranian Toman amounts:
+     * In everyday spoken/written Persian in Iran, saying "۵۰۰ تومان" or "۹۰ تومن" for an expense
+     * always means 500,000 Toman (۵۰۰ هزار تومان) or 90,000 Toman (۹۰ هزار تومان),
+     * because amounts 1..999 single Tomans do not exist in real-world transactions.
+     * Foreign currencies (EUR, USD, GBP, AED) are never multiplied unless "هزار" or "میلیون" is spoken.
+     */
+    fun normalizeColloquialTomanAmount(
+        rawAmount: Double,
+        currency: String,
+        rawTextContext: String = ""
+    ): Double {
+        if (rawAmount <= 0.0) return 0.0
+        val normCurrency = currency.uppercase(Locale.US)
+        val hasMillion = rawTextContext.contains("میلیون") || rawTextContext.contains("ملیون")
+        val hasThousand = rawTextContext.contains("هزار") || rawTextContext.contains("تومن") || rawTextContext.contains("تومان")
+
+        if (hasMillion && rawAmount < 10_000.0) {
+            return rawAmount * 1_000_000.0
+        }
+        if (rawTextContext.contains("هزار") && rawAmount < 1_000.0) {
+            return rawAmount * 1_000.0
+        }
+        // In Iran, any TOMAN amount between 1 and 999 (e.g., "۵۰۰ تومان سیگار خریدم" or "۹۰ تومن قهوه")
+        // is colloquially in thousands of Tomans (× 1,000 -> 500,000 Toman).
+        if (normCurrency == "TOMAN" && rawAmount >= 1.0 && rawAmount < 1_000.0 && (hasThousand || rawTextContext.isBlank())) {
+            return rawAmount * 1_000.0
+        }
+        return rawAmount
+    }
+
+    /**
+     * Extracts a numeric amount from a Persian spoken or typed clause, supporting:
+     * - Digits with commas ("500,000", "500")
+     * - Compound million/thousand phrases ("۲ میلیون و ۵۰۰", "یک و نیم میلیون")
+     * - Spoken Persian number words ("پانصد تومن", "دویست تومان", "صد و پنجاه تومن", "نود تومن")
+     * - Automatic colloquial Toman scaling ("۵۰۰ تومان سیگار خریدم" -> 500,000.0)
+     */
+    fun extractSpokenOrTypedCurrencyAmount(clause: String, currency: String): Double? {
+        val norm = toEnglishDigits(clause).replace(",", "").replace("،", "")
+
+        // 1. Check compound "X میلیون و Y" (e.g. "2 میلیون و 500")
+        val compoundMillionRegex = Regex("""(\d+(?:\.\d+)?)\s*(?:میلیون|ملیون)\s*و\s*(\d+(?:\.\d+)?)""")
+        val compoundMatch = compoundMillionRegex.find(norm)
+        if (compoundMatch != null) {
+            val millions = compoundMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+            val remainder = compoundMatch.groupValues[2].toDoubleOrNull() ?: 0.0
+            val remScaled = if (remainder < 1000.0) remainder * 1_000.0 else remainder
+            return millions * 1_000_000.0 + remScaled
+        }
+
+        // 2. Check explicit digits
+        val numberRegex = Regex("""(\d+(?:\.\d+)?)""")
+        val firstNum = numberRegex.find(norm)?.groupValues?.get(1)?.toDoubleOrNull()
+        if (firstNum != null && firstNum > 0.0) {
+            return normalizeColloquialTomanAmount(firstNum, currency, norm)
+        }
+
+        // 3. Check spoken Persian number words (when Android SpeechRecognizer transcribes words instead of digits)
+        val spokenMap = listOf(
+            "نهصد" to 900.0,
+            "هشتصد" to 800.0,
+            "هفتصد" to 700.0,
+            "ششصد" to 600.0,
+            "شیشصد" to 600.0,
+            "پانصد" to 500.0,
+            "پونصد" to 500.0,
+            "چهارصد" to 400.0,
+            "چارصد" to 400.0,
+            "سیصد" to 300.0,
+            "دویست" to 200.0,
+            "صد و پنجاه" to 150.0,
+            "صد" to 100.0,
+            "نود" to 90.0,
+            "هشتاد" to 80.0,
+            "هفتاد" to 70.0,
+            "شصت" to 60.0,
+            "پنجاه" to 50.0,
+            "چهل" to 40.0,
+            "سی " to 30.0,
+            "بیست" to 20.0,
+            "پانزده" to 15.0,
+            "پونزده" to 15.0,
+            "ده " to 10.0
+        )
+        for ((word, value) in spokenMap) {
+            if (norm.contains(word)) {
+                return normalizeColloquialTomanAmount(value, currency, norm)
+            }
+        }
+
+        return null
     }
 
     fun formatCurrencyAmount(amount: Double, currency: String, usePersianDigits: Boolean = true): String {

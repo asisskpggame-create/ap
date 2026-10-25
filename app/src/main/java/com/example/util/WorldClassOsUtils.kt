@@ -268,7 +268,7 @@ object WorldClassOsUtils {
         val normCurrency = defaultCurrency.uppercase(Locale.US)
         val monthExpensesBeforeToday = expenses
             .filter {
-                !it.isIncome &&
+                it.isExpense &&
                     it.currency.uppercase(Locale.US) == normCurrency &&
                     it.localEpochDay in monthStartEpochDay until todayEpochDay
             }
@@ -276,7 +276,7 @@ object WorldClassOsUtils {
 
         val spentToday = expenses
             .filter {
-                !it.isIncome &&
+                it.isExpense &&
                     it.currency.uppercase(Locale.US) == normCurrency &&
                     it.localEpochDay == todayEpochDay
             }
