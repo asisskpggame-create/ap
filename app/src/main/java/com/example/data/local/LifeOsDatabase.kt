@@ -801,6 +801,102 @@ abstract class LifeOsDatabase : RoomDatabase() {
     companion object {
         const val LOCAL_DEVICE_USER_ID = "local_device_user"
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_habits (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        targetPerPeriod INTEGER NOT NULL,
+                        scheduleType TEXT NOT NULL,
+                        scheduleDays TEXT NOT NULL,
+                        reminderTimeMinutes INTEGER NOT NULL,
+                        reminderEnabled INTEGER NOT NULL,
+                        notes TEXT NOT NULL,
+                        archived INTEGER NOT NULL,
+                        createdAtEpochDay INTEGER NOT NULL,
+                        colorHex TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_habit_records (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        habitId TEXT NOT NULL,
+                        localEpochDay INTEGER NOT NULL,
+                        completed INTEGER NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        notes TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_sleep_records (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        sleepStartMillis INTEGER NOT NULL,
+                        wakeUpMillis INTEGER NOT NULL,
+                        durationMinutes INTEGER NOT NULL,
+                        localEpochDay INTEGER NOT NULL,
+                        qualityRating INTEGER NOT NULL,
+                        notes TEXT NOT NULL,
+                        inputSource TEXT NOT NULL,
+                        idempotencyKey TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_exercise_records (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        activityType TEXT NOT NULL,
+                        durationMinutes INTEGER NOT NULL,
+                        distanceMeters REAL NOT NULL,
+                        intensity TEXT NOT NULL,
+                        repetitions INTEGER NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        localEpochDay INTEGER NOT NULL,
+                        notes TEXT NOT NULL,
+                        inputSource TEXT NOT NULL,
+                        idempotencyKey TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_activity_events (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        eventType TEXT NOT NULL,
+                        entityType TEXT NOT NULL,
+                        entityId TEXT NOT NULL,
+                        inputSource TEXT NOT NULL,
+                        operationStatus TEXT NOT NULL,
+                        verificationSource TEXT NOT NULL,
+                        correlationId TEXT NOT NULL,
+                        beforeSummary TEXT NOT NULL,
+                        afterSummary TEXT NOT NULL,
+                        humanSummary TEXT NOT NULL,
+                        recognizedTranscript TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 try {
@@ -865,6 +961,20 @@ abstract class LifeOsDatabase : RoomDatabase() {
             }
         }
 
+        val SAFE_SCHEMA_CALLBACK = object : RoomDatabase.Callback() {
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                // Runtime safety net: Ensure all columns exist without destructive table drops
+                try { db.execSQL("ALTER TABLE cached_tasks ADD COLUMN actualDurationMinutes INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_tasks ADD COLUMN linkedDebtId TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_expenses ADD COLUMN transactionType TEXT NOT NULL DEFAULT 'EXPENSE'") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_expenses ADD COLUMN paidAmount REAL NOT NULL DEFAULT 0.0") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_expenses ADD COLUMN dueEpochDay INTEGER NOT NULL DEFAULT -1") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_expenses ADD COLUMN installmentCount INTEGER NOT NULL DEFAULT 1") } catch (_: Exception) {}
+                try { db.execSQL("ALTER TABLE cached_expenses ADD COLUMN linkedDebtId TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
+            }
+        }
+
         @Volatile
         private var INSTANCE: LifeOsDatabase? = null
 
@@ -875,8 +985,9 @@ abstract class LifeOsDatabase : RoomDatabase() {
                     LifeOsDatabase::class.java,
                     "personal_life_os_cache.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-                    .fallbackToDestructiveMigration(true)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .fallbackToDestructiveMigrationOnDowngrade()
+                    .addCallback(SAFE_SCHEMA_CALLBACK)
                     .build()
                     .also { INSTANCE = it }
             }

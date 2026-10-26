@@ -386,19 +386,19 @@ fun VoiceCaptureModalSheet(
                     )
                     Column {
                         Text(
-                            text = "تبدیل گفتار به متن فارسی (آفلاین)",
+                            text = "تبدیل گفتار به متن فارسی",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Black
                         )
                         Text(
                             text = if (preferOfflinePersian) {
-                                if (isOnDeviceEngineSupported) "موتور آفلاین روی دستگاه (fa-IR On-Device)" else "اولویت پردازش آفلاین فارسی (fa-IR)"
+                                "ترجیح حالت آفلاین (نیازمند بسته صوتی fa-IR در گوشی)"
                             } else {
-                                "حالت ترکیبی (آفلاین + آنلاین فارسی)"
+                                "حالت آنلاین / ترکیبی (Google Speech)"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldSuccess
+                            color = if (preferOfflinePersian) EmeraldSuccess else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -540,13 +540,13 @@ fun VoiceCaptureModalSheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "راهنمای فعال‌سازی تشخیص گفتار آفلاین فارسی (بدون اینترنت)",
+                            text = "راهنمای نحوه کارکرد تبدیل گفتار و آفلاین بودن:",
                             style = MaterialTheme.typography.labelLarge,
                             color = AmberWarning,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "۱. برای کارکرد ۱۰۰٪ آفلاین روی گوشی، بسته زبان «فارسی (ایران) / Persian» را در بخش Offline Speech Recognition سیستم اندروید دانلود کنید.\n۲. پس از ثبت متن، موتور هوشمند برنامه نیز تمام دستورات مالی، تسک‌ها و یادداشت‌ها را کاملاً آفلاین پردازش و ذخیره می‌کند.",
+                            text = "• تبدیل صوت به متن: اپلیکیشن از سرویس رسمی گفتار اندروید (SpeechRecognizer) با درخواست اولویت آفلاین استفاده می‌کند. برای کار بدون اینترنت، بسته زبان فارسی (fa-IR) باید در تنظیمات گفتار گوشی نصب باشد.\n• پردازش هوشمند و ذخیره: پس از تولید متن، استخراج مبالغ، دسته‌بندی درآمد/هزینه، ایجاد تسک و ذخیره‌سازی داده‌ها ۱۰۰٪ به‌صورت داخلی، آفلاین و بدون اینترنت در دیتابیس Room انجام می‌شود.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

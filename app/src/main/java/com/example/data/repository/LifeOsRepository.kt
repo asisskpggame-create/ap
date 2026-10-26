@@ -1129,8 +1129,8 @@ class LifeOsRepository(
             else -> "exp"
         }
         val expenseId = cleanDocId(docPrefix)
-        val safeAmount = amount.coerceAtLeast(0.0)
-        val safePaid = paidAmount.coerceIn(0.0, safeAmount)
+        val safeAmount = PersianDateAndUnitUtils.roundFinancialAmount(amount)
+        val safePaid = PersianDateAndUnitUtils.roundFinancialAmount(paidAmount.coerceIn(0.0, safeAmount))
         val expense = ExpenseEntry(
             id = expenseId,
             userId = uid,
@@ -1525,8 +1525,8 @@ class LifeOsRepository(
         val uid = resolveActiveUserId()
         require(updated.id.isNotBlank()) { "Expense ID must not be blank" }
         val cleanTitle = updated.title.trim().take(250).ifBlank { "تراکنش" }
-        val safeAmount = updated.amount.coerceAtLeast(0.0)
-        val safePaid = updated.paidAmount.coerceIn(0.0, safeAmount)
+        val safeAmount = PersianDateAndUnitUtils.roundFinancialAmount(updated.amount)
+        val safePaid = PersianDateAndUnitUtils.roundFinancialAmount(updated.paidAmount.coerceIn(0.0, safeAmount))
         val normalized = updated.copy(
             userId = uid,
             title = cleanTitle,

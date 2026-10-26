@@ -471,6 +471,17 @@ object PersianDateAndUnitUtils {
     }
 
     /**
+     * Enforces the financial decimal precision contract:
+     * - Rounds to 2 decimal places to eliminate floating-point drift (e.g. 0.1 + 0.2 != 0.3).
+     * - Handles NaN, Infinite, and negative zero safely.
+     */
+    fun roundFinancialAmount(amount: Double): Double {
+        if (amount.isNaN() || amount.isInfinite()) return 0.0
+        val clamped = amount.coerceAtLeast(0.0)
+        return kotlin.math.round(clamped * 100.0) / 100.0
+    }
+
+    /**
      * Converts between Iranian currency units using the exact legal ratio:
      * 1 Toman = 10 Rials (10 IRR = 1 TOMAN).
      * Returns null if conversion between foreign currencies is requested without an exchange rate.

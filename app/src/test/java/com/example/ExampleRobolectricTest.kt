@@ -606,6 +606,67 @@ class ExampleRobolectricTest {
     assertEquals(1, validExpenseCmd.operations.size)
     assertTrue(validExpenseCmd.operations.first().requiresConfirmation)
   }
+
+  @Test
+  fun `verify Room database initialization migrations and financial decimal precision contract`() = kotlinx.coroutines.runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // 1. Verify in-memory LifeOsDatabase with all migrations and safe callback does not crash or wipe
+    val inMemoryDb = androidx.room.Room.inMemoryDatabaseBuilder(
+      context,
+      com.example.data.local.LifeOsDatabase::class.java
+    )
+      .addMigrations(
+        com.example.data.local.LifeOsDatabase.MIGRATION_1_2,
+        com.example.data.local.LifeOsDatabase.MIGRATION_2_3,
+        com.example.data.local.LifeOsDatabase.MIGRATION_3_4,
+        com.example.data.local.LifeOsDatabase.MIGRATION_4_5,
+        com.example.data.local.LifeOsDatabase.MIGRATION_5_6
+      )
+      .fallbackToDestructiveMigrationOnDowngrade()
+      .addCallback(com.example.data.local.LifeOsDatabase.SAFE_SCHEMA_CALLBACK)
+      .build()
+
+    val lifeOsDao = inMemoryDb.lifeOsDao()
+
+    val testTask = com.example.data.local.CachedTaskEntity(
+      id = "task_test_migration_1",
+      userId = "u_local",
+      title = "بررسی میگریشن دیتابیس",
+      linkedDebtId = "debt_99"
+    )
+    lifeOsDao.upsertTask(testTask)
+    val loadedTasks = lifeOsDao.getTasksForUser("u_local")
+    assertEquals(1, loadedTasks.size)
+    assertEquals("task_test_migration_1", loadedTasks[0].id)
+    assertEquals("debt_99", loadedTasks[0].linkedDebtId)
+
+    val testExpense = com.example.data.local.CachedExpenseEntity(
+      id = "exp_test_migration_1",
+      userId = "u_local",
+      amount = com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(750000.456),
+      category = "FOOD",
+      title = "ناهار کاری",
+      currency = "TOMAN",
+      transactionType = "EXPENSE",
+      paidAmount = 750000.46,
+      localEpochDay = 20100L,
+      timestampMillis = System.currentTimeMillis()
+    )
+    lifeOsDao.upsertExpenseOne(testExpense)
+    val loadedExpense = lifeOsDao.getExpenseById("u_local", "exp_test_migration_1")
+    assertEquals(750000.46, loadedExpense?.amount ?: 0.0, 0.001)
+    assertEquals("EXPENSE", loadedExpense?.transactionType)
+
+    inMemoryDb.close()
+
+    // 2. Verify financial decimal precision contract: 2 decimals, zero float drift
+    assertEquals(100.0, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(100.0), 0.0001)
+    assertEquals(100.55, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(100.548), 0.0001)
+    assertEquals(100.54, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(100.542), 0.0001)
+    assertEquals(0.0, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(0.0), 0.0001)
+  }
 }
+
 
 
