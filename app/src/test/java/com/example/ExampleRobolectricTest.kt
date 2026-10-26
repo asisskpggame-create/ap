@@ -806,7 +806,154 @@ class ExampleRobolectricTest {
     migratedDb.close()
     if (dbFile.exists()) dbFile.delete()
   }
+
+  @Test
+  fun `verify Iranian bank SMS extensible parser normalizer and template registry across banks`() {
+    // 1. Normalizer check: Persian, Arabic, Latin digits, ZWNJ, Ye/Kaf unification
+    val rawSample = "بانك ملت\nبرداشت مبلغ ۲،۵۰۰،۰۰۰ ریال\nاز كارت ۶۱۰۴****۱۲۳۴\nمانده: ۱۵،۰۰۰،۰۰۰ ریال"
+    val normalized = com.example.sms.BankSmsNormalizer.normalize(rawSample)
+    assertTrue(normalized.contains("بانک ملت"))
+    assertTrue(normalized.contains("2,500,000"))
+    assertTrue(normalized.contains("15,000,000"))
+
+    // 2. Disambiguation: Crucial test: amount MUST be 250,000 Toman, NEVER 1,500,000 (the balance)
+    val mellatResult = com.example.sms.BankSmsParser.parse(rawSample)
+    assertEquals(com.example.sms.BankSmsParseStatus.SUCCESS, mellatResult.status)
+    assertEquals("بانک ملت", mellatResult.bankName)
+    assertEquals(com.example.sms.BankTransactionType.EXPENSE, mellatResult.transactionType)
+    assertEquals(2_500_000.0, mellatResult.rawAmountDetected, 0.01)
+    assertEquals(250_000.0, mellatResult.amountInToman, 0.01) // 2,500,000 Rial / 10 = 250,000 Toman
+    assertEquals(1_500_000.0, mellatResult.balanceInToman ?: 0.0, 0.01) // 15,000,000 Rial / 10 = 1,500,000 Toman
+    assertTrue(mellatResult.fingerprint.isNotBlank())
+
+    // 3. Bank Melli
+    val melliSms = "بانک ملی ایران\nواریز مبلغ 10,000,000 ریال\nبه حساب 9876\nمانده: 18,300,000 ریال\n1403/08/01"
+    val melliResult = com.example.sms.BankSmsParser.parse(melliSms)
+    assertEquals(com.example.sms.BankSmsParseStatus.SUCCESS, melliResult.status)
+    assertEquals("بانک ملی ایران", melliResult.bankName)
+    assertEquals(com.example.sms.BankTransactionType.INCOME, melliResult.transactionType)
+    assertEquals(1_000_000.0, melliResult.amountInToman, 0.01)
+
+    // 4. BluBank with explicit Toman
+    val bluSms = "بلوبانک\nواریز 1,500,000 تومان بابت حقوق\nموجودی: 3,200,000 تومان"
+    val bluResult = com.example.sms.BankSmsParser.parse(bluSms)
+    assertEquals(com.example.sms.BankSmsParseStatus.SUCCESS, bluResult.status)
+    assertEquals("بلوبانک سامان", bluResult.bankName)
+    assertEquals(com.example.sms.BankTransactionType.INCOME, bluResult.transactionType)
+    assertEquals(1_500_000.0, bluResult.amountInToman, 0.01) // Explicit Toman, NOT divided by 10
+
+    // 5. BluBank expense with ride
+    val bluExpense = "بلوبانک\nبرداشت 850,000 ریال بابت اسنپ\nموجودی: 12,300,000 ریال"
+    val bluExpResult = com.example.sms.BankSmsParser.parse(bluExpense)
+    assertEquals(com.example.sms.BankTransactionType.EXPENSE, bluExpResult.transactionType)
+    assertEquals(85_000.0, bluExpResult.amountInToman, 0.01)
+
+    // 6. Bank Saman
+    val samanSms = "بانک سامان\nواریز به حساب\nمبلغ: 150,000,000 ریال\nمانده: 195,000,000 ریال"
+    val samanResult = com.example.sms.BankSmsParser.parse(samanSms)
+    assertEquals(com.example.sms.BankTransactionType.INCOME, samanResult.transactionType)
+    assertEquals(15_000_000.0, samanResult.amountInToman, 0.01)
+
+    // 7. Bank Pasargad & Vipod
+    val pasargadSms = "بانک پاسارگاد\nبرداشت از حساب 201.8000.1234\nمبلغ: 750,000 ریال\nمانده: 24,000,000 ریال"
+    val pasargadResult = com.example.sms.BankSmsParser.parse(pasargadSms)
+    assertEquals(com.example.sms.BankTransactionType.EXPENSE, pasargadResult.transactionType)
+    assertEquals(75_000.0, pasargadResult.amountInToman, 0.01)
+
+    // 8. Bank Tejarat, Sepah, Saderat, Parsian, Resalat
+    val tejaratSms = "بانک تجارت\nبرداشت مبلغ 620,000 ریال\nکارت 5859****9999\nمانده: 14,100,000 ریال"
+    assertEquals(62_000.0, com.example.sms.BankSmsParser.parse(tejaratSms).amountInToman, 0.01)
+
+    val sepahSms = "بانک سپه\nبرداشت: 900,000 ریال\nکارت: 5892****1111\nمانده: 5,100,000 ریال"
+    assertEquals(90_000.0, com.example.sms.BankSmsParser.parse(sepahSms).amountInToman, 0.01)
+
+    val saderatSms = "بانک صادرات\nبرداشت مبلغ 1,800,000 ریال\nکارت 6037****2222\nمانده: 3,200,000 ریال"
+    assertEquals(180_000.0, com.example.sms.BankSmsParser.parse(saderatSms).amountInToman, 0.01)
+
+    val parsianSms = "بانک پارسیان\nبرداشت 450,000 ریال\nمانده 18,000,000 ریال"
+    assertEquals(45_000.0, com.example.sms.BankSmsParser.parse(parsianSms).amountInToman, 0.01)
+
+    val resalatSms = "بانک قرض الحسنه رسالت\nواریز مبلغ 4,000,000 ریال\nمانده: 9,000,000 ریال"
+    assertEquals(400_000.0, com.example.sms.BankSmsParser.parse(resalatSms).amountInToman, 0.01)
+
+    // 9. IGNORED messages: OTP
+    val otpSms = "رمز پویا بانک ملت: 987654 معتبر به مدت ۱۲۰ ثانیه"
+    val otpResult = com.example.sms.BankSmsParser.parse(otpSms)
+    assertEquals(com.example.sms.BankSmsParseStatus.IGNORED_OTP, otpResult.status)
+
+    // 10. IGNORED messages: Failed Transaction
+    val failedSms = "بانک ملت\nتراکنش ناموفق\nمبلغ: 1,500,000 ریال\nعلت: عدم موجودی کافی"
+    val failedResult = com.example.sms.BankSmsParser.parse(failedSms)
+    assertEquals(com.example.sms.BankSmsParseStatus.IGNORED_NON_FINANCIAL, failedResult.status)
+
+    // 11. IGNORED messages: Promotional
+    val promoSms = "جشنواره حساب‌های قرض‌الحسنه بانک سامان با جوایز ویژه نقدی و خودرو"
+    val promoResult = com.example.sms.BankSmsParser.parse(promoSms)
+    assertEquals(com.example.sms.BankSmsParseStatus.IGNORED_NON_FINANCIAL, promoResult.status)
+
+    // 12. IGNORED messages: Balance Only
+    val balanceOnlySms = "بانک سپه\nاعلام مانده حساب: 15,400,000 ریال"
+    val balanceOnlyResult = com.example.sms.BankSmsParser.parse(balanceOnlySms)
+    assertEquals(com.example.sms.BankSmsParseStatus.IGNORED_NON_FINANCIAL, balanceOnlyResult.status)
+
+    // 13. Idempotency Fingerprint stability: exact same SMS yields identical fingerprint
+    val fp1 = mellatResult.fingerprint
+    val fp2 = com.example.sms.BankSmsParser.parse(rawSample).fingerprint
+    assertEquals(fp1, fp2)
+  }
+
+  @Test
+  fun `verify Persian Transaction Intent Engine across income expense transfer receivable and debt`() {
+    // 1. «۶۰۰ تومن بابت فروش جمینای گرفتم.» -> INCOME, 600,000 Toman
+    val incomeIntent = com.example.ai.TransactionIntentEngine.detectIntent("۶۰۰ تومن بابت فروش جمینای گرفتم.")
+    assertEquals(com.example.ai.TransactionIntentType.INCOME, incomeIntent.type)
+    assertEquals(600_000.0, incomeIntent.amount, 0.01)
+    assertEquals("TOMAN", incomeIntent.currency)
+    assertTrue(incomeIntent.title.contains("Gemini") || incomeIntent.title.contains("جمینای"))
+    assertEquals(false, incomeIntent.isAmbiguous)
+
+    // 2. «۵۰۰ هزار بابت اینترنت دادم.» -> EXPENSE, 500,000 Toman
+    val expenseIntent = com.example.ai.TransactionIntentEngine.detectIntent("۵۰۰ هزار بابت اینترنت دادم.")
+    assertEquals(com.example.ai.TransactionIntentType.EXPENSE, expenseIntent.type)
+    assertEquals(500_000.0, expenseIntent.amount, 0.01)
+    assertEquals("TOMAN", expenseIntent.currency)
+    assertEquals(false, expenseIntent.isAmbiguous)
+
+    // 3. «۳ میلیون از بانک ملت به ملی انتقال دادم.» -> TRANSFER, 3,000,000 Toman
+    val transferIntent = com.example.ai.TransactionIntentEngine.detectIntent("۳ میلیون از بانک ملت به ملی انتقال دادم.")
+    assertEquals(com.example.ai.TransactionIntentType.TRANSFER, transferIntent.type)
+    assertEquals(3_000_000.0, transferIntent.amount, 0.01)
+    assertTrue(transferIntent.account.contains("ملت") && transferIntent.account.contains("ملی"))
+
+    // 4. «۲۰۰ تومن از علی گرفتم.» -> RECEIVABLE, 200,000 Toman
+    val receivableIntent = com.example.ai.TransactionIntentEngine.detectIntent("۲۰۰ تومن از علی گرفتم.")
+    assertEquals(com.example.ai.TransactionIntentType.RECEIVABLE, receivableIntent.type)
+    assertEquals(200_000.0, receivableIntent.amount, 0.01)
+    assertEquals("علی", receivableIntent.person)
+
+    // 5. «۲۰۰ تومن به علی دادم.» -> DEBT, 200,000 Toman
+    val debtIntent = com.example.ai.TransactionIntentEngine.detectIntent("۲۰۰ تومن به علی دادم قرض.")
+    assertEquals(com.example.ai.TransactionIntentType.DEBT, debtIntent.type)
+    assertEquals(200_000.0, debtIntent.amount, 0.01)
+    assertEquals("علی", debtIntent.person)
+
+    // 6. Ambiguous command without amount or clarity
+    val ambiguousIntent = com.example.ai.TransactionIntentEngine.detectIntent("تسویه حساب")
+    assertTrue(ambiguousIntent.isAmbiguous)
+    assertEquals(0.0, ambiguousIntent.amount, 0.01)
+  }
+
+  @Test
+  fun `verify Jalali month names and exact typo fix for Ordibehesht`() {
+    val months = com.example.util.PersianDateAndUnitUtils.jalaliMonthNamesFa
+    assertEquals(12, months.size)
+    assertEquals("فروردین", months[0])
+    assertEquals("اردیبهشت", months[1]) // Verified: 'ی' before 'ب'
+    assertEquals("خرداد", months[2])
+    assertEquals("اسفند", months[11])
+  }
 }
+
 
 
 

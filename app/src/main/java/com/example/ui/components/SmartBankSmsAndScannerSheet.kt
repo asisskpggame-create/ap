@@ -88,17 +88,34 @@ data class ParsedBankSms(
 object IranianBankSmsParser {
 
     fun parseBankSms(rawSms: String): ParsedBankSms? {
-        val suggestion = com.example.util.BankSmsScannerUtility.parseBankSms(rawSms) ?: return null
+        val result = com.example.sms.BankSmsParser.parse(rawSms)
+        if (result.status != com.example.sms.BankSmsParseStatus.SUCCESS &&
+            result.status != com.example.sms.BankSmsParseStatus.NEEDS_REVIEW
+        ) {
+            return null
+        }
+        if (result.amountInToman <= 0.0) return null
+
+        val txTypeStr = when (result.transactionType) {
+            com.example.sms.BankTransactionType.INCOME -> "INCOME"
+            com.example.sms.BankTransactionType.TRANSFER -> "TRANSFER"
+            else -> "EXPENSE"
+        }
+
         return ParsedBankSms(
-            bankName = suggestion.bankName,
-            transactionType = suggestion.transactionType,
-            rawAmountDetected = suggestion.rawAmountDetected,
-            wasInRial = suggestion.wasInRial,
-            amountInToman = suggestion.amountInToman,
-            balanceInToman = suggestion.balanceInToman,
-            suggestedTitle = suggestion.suggestedTitle,
-            suggestedCategory = suggestion.suggestedCategory
+            bankName = result.bankName,
+            transactionType = txTypeStr,
+            rawAmountDetected = result.rawAmountDetected,
+            wasInRial = result.wasInRial,
+            amountInToman = result.amountInToman,
+            balanceInToman = result.balanceInToman,
+            suggestedTitle = result.suggestedTitle,
+            suggestedCategory = result.suggestedCategory
         )
+    }
+
+    fun parseFull(rawSms: String): com.example.sms.BankSmsParseResult {
+        return com.example.sms.BankSmsParser.parse(rawSms)
     }
 }
 

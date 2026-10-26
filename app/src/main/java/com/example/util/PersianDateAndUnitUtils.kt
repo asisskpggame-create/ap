@@ -21,7 +21,7 @@ object PersianDateAndUnitUtils {
     private val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
 
     val jalaliMonthNamesFa = listOf(
-        "فروردین", "اردبیهشت", "خرداد", "تیر", "مرداد", "شهریور",
+        "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
         "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"
     )
 
