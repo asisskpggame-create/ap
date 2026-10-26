@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import com.example.ui.components.AiMealAndReceiptScannerModalSheet
+import com.example.ui.components.MonthlySpendingTrendsLineChart
 import com.example.ui.components.SmartBankSmsParserModalSheet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -130,35 +131,33 @@ fun DailyLogAndHealthScreen(
             Tab(
                 selected = selectedSubTab == 0,
                 onClick = { selectedSubTab = 0 },
-                text = { Text("ثبت روزانه") },
-                modifier = Modifier.testTag("tab_daily_quick_log")
+                text = { Text("تراکنش‌های روزانه") },
+                modifier = Modifier.testTag("tab_daily_transactions")
             )
             Tab(
                 selected = selectedSubTab == 1,
                 onClick = { selectedSubTab = 1 },
-                text = { Text("مالی و حساب‌ها") },
-                modifier = Modifier.testTag("tab_expenses_income")
+                text = { Text("مدیریت بدهی") },
+                modifier = Modifier.testTag("tab_debt_management")
             )
             Tab(
                 selected = selectedSubTab == 2,
                 onClick = { selectedSubTab = 2 },
-                text = { Text("خواب و ورزش") },
-                modifier = Modifier.testTag("tab_sleep_exercise")
+                text = { Text("دارایی‌ها و پس‌انداز") },
+                modifier = Modifier.testTag("tab_asset_savings_tracking")
             )
         }
 
         when (selectedSubTab) {
-            0 -> ConsumptionTrackerSubScreen(
+            0 -> ExpenseTrackerSubScreen(
                 prefs = prefs,
                 todayEpochDay = todayEpochDay,
-                consumption = consumption,
-                customItems = customItems,
-                onQuickAdd = onQuickAddConsumption,
-                onDelete = onDeleteConsumption,
-                onCreateCustomItem = onCreateCustomItem,
-                onUpdateCustomItem = onUpdateCustomItem,
-                onDeleteCustomItem = onDeleteCustomItem,
-                onSwitchToExpensesTab = { selectedSubTab = 1 }
+                expenses = expenses,
+                onAddExpense = onAddExpense,
+                onSettleDebtOrReceivable = onSettleDebtOrReceivable,
+                onDeleteExpense = onDeleteExpense,
+                onUpdatePrefs = onUpdatePrefs,
+                initialFilter = "ALL"
             )
             1 -> ExpenseTrackerSubScreen(
                 prefs = prefs,
@@ -167,15 +166,15 @@ fun DailyLogAndHealthScreen(
                 onAddExpense = onAddExpense,
                 onSettleDebtOrReceivable = onSettleDebtOrReceivable,
                 onDeleteExpense = onDeleteExpense,
-                onUpdatePrefs = onUpdatePrefs
+                onUpdatePrefs = onUpdatePrefs,
+                initialFilter = "IOU"
             )
-            2 -> SleepAndExerciseSubScreen(
+            2 -> SmartFinancialToolsSubScreen(
                 prefs = prefs,
                 todayEpochDay = todayEpochDay,
-                sleepRecords = sleepRecords,
-                exerciseRecords = exerciseRecords,
-                onAddSleep = onAddSleep,
-                onAddExercise = onAddExercise
+                expenses = expenses,
+                onAddExpense = onAddExpense,
+                onUpdatePrefs = onUpdatePrefs
             )
         }
     }
@@ -932,7 +931,8 @@ private fun ExpenseTrackerSubScreen(
     onAddExpense: (title: String, category: String, amount: Double, currency: String, notes: String, transactionType: String) -> Unit,
     onSettleDebtOrReceivable: (ExpenseEntry) -> Unit = {},
     onDeleteExpense: (ExpenseEntry) -> Unit,
-    onUpdatePrefs: (UserPreferencesDoc) -> Unit = {}
+    onUpdatePrefs: (UserPreferencesDoc) -> Unit = {},
+    initialFilter: String = "ALL"
 ) {
     val context = LocalContext.current
     var isVaultUnlocked by remember(prefs.vaultLockEnabled, prefs.vaultPinCode) {
@@ -1024,7 +1024,9 @@ private fun ExpenseTrackerSubScreen(
     }
 
     var selectedPeriod by remember { mutableStateOf(FinancialPeriodFilter.MONTHLY) }
-    var selectedTypeFilter by remember { mutableStateOf("ALL") } // ALL, EXPENSE, INCOME
+    var selectedTypeFilter by remember(initialFilter) {
+        mutableStateOf(if (initialFilter == "IOU") "RECEIVABLE" else "ALL")
+    }
 
     val safeToSpend = remember(prefs.monthlyBudgetTarget, prefs.defaultCurrency, todayEpochDay, expenses) {
         WorldClassOsUtils.calculateDailySafeToSpend(
@@ -1596,6 +1598,15 @@ private fun ExpenseTrackerSubScreen(
             }
         }
 
+        // 2.b Monthly Spending & Income Trends Native Line Chart
+        item {
+            MonthlySpendingTrendsLineChart(
+                expenses = expenses,
+                defaultCurrency = prefs.defaultCurrency,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
         // 3. Period & Type Filter Bar + Selected Period Balance Card
         item {
             LiquidGlassCard(
@@ -2102,7 +2113,7 @@ private fun SleepAndExerciseSubScreen(
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("🏃 ${ex.activityType}: ${PersianDateAndUnitUtils.toPersianDigits(ex.durationMinutes.toString())} دقیقه")
+                    Text("${ex.activityType}: ${PersianDateAndUnitUtils.toPersianDigits(ex.durationMinutes.toString())} دقیقه")
                     Text(ex.intensity, color = ElectricTeal)
                 }
             }
@@ -2111,3 +2122,334 @@ private fun SleepAndExerciseSubScreen(
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SmartFinancialToolsSubScreen(
+    prefs: UserPreferencesDoc,
+    todayEpochDay: Long,
+    expenses: List<ExpenseEntry>,
+    onAddExpense: (String, String, Double, String, String, String) -> Unit,
+    onUpdatePrefs: (UserPreferencesDoc) -> Unit
+) {
+    var showSmsParser by remember { mutableStateOf(false) }
+    var showReceiptScanner by remember { mutableStateOf(false) }
+    var showBudgetDialog by remember { mutableStateOf(false) }
+    var budgetInputText by remember(prefs.monthlyBudgetTarget) {
+        mutableStateOf(prefs.monthlyBudgetTarget.toLong().toString())
+    }
+
+    val safeToSpend = remember(prefs.monthlyBudgetTarget, prefs.defaultCurrency, todayEpochDay, expenses) {
+        WorldClassOsUtils.calculateDailySafeToSpend(
+            monthlyBudget = prefs.monthlyBudgetTarget,
+            defaultCurrency = prefs.defaultCurrency,
+            todayEpochDay = todayEpochDay,
+            expenses = expenses
+        )
+    }
+
+    if (showSmsParser) {
+        SmartBankSmsParserModalSheet(
+            defaultCurrency = prefs.defaultCurrency,
+            onDismiss = { showSmsParser = false },
+            onConfirmSaveExpense = { title, cat, amountToman, notes, txType ->
+                onAddExpense(title, cat, amountToman, "TOMAN", notes, txType)
+                showSmsParser = false
+            }
+        )
+    }
+
+    if (showReceiptScanner) {
+        AiMealAndReceiptScannerModalSheet(
+            onDismiss = { showReceiptScanner = false },
+            onLogScannedMeal = { _, _, _ -> },
+            onLogScannedReceipt = { title, cat, amountToman, notes ->
+                onAddExpense(title, cat, amountToman, "TOMAN", notes, "EXPENSE")
+                showReceiptScanner = false
+            }
+        )
+    }
+
+    if (showBudgetDialog) {
+        AlertDialog(
+            onDismissRequest = { showBudgetDialog = false },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("تنظیم سقف بودجه ماهانه (${prefs.defaultCurrency})") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "محاسبه خودکار سهم خرج مجاز روزانه بر اساس روزهای باقی‌مانده از ماه شمسی.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = budgetInputText,
+                        onValueChange = { budgetInputText = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                        label = { Text("سقف بودجه ماهانه (${prefs.defaultCurrency})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val newBudget = budgetInputText.toDoubleOrNull()?.coerceAtLeast(100_000.0) ?: prefs.monthlyBudgetTarget
+                        onUpdatePrefs(prefs.copy(monthlyBudgetTarget = newBudget))
+                        showBudgetDialog = false
+                    }
+                ) {
+                    Text("ذخیره بودجه")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBudgetDialog = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+
+    val totalIncome = remember(expenses) { expenses.filter { it.isIncome }.sumOf { it.amount } }
+    val totalExpense = remember(expenses) { expenses.filter { it.isExpense }.sumOf { it.amount } }
+    val totalReceivable = remember(expenses) { expenses.filter { it.isReceivable && !it.isSettled }.sumOf { it.amount } }
+    val totalDebt = remember(expenses) { expenses.filter { it.isDebt && !it.isSettled }.sumOf { it.amount } }
+    val estimatedNetBalance = totalIncome - totalExpense + totalReceivable - totalDebt
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // 1. Net Worth & Assets Overview Card
+        item {
+            LiquidGlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("net_worth_savings_card"),
+                shape = RoundedCornerShape(22.dp),
+                accentBorderColor = ElectricTeal.copy(alpha = 0.7f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "خلاصه ارزش خالص دارایی‌ها و پس‌انداز",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "تراز نقدینگی و دارایی خالص:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = PersianDateAndUnitUtils.formatCurrencyAmount(estimatedNetBalance, prefs.defaultCurrency),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Black,
+                                color = if (estimatedNetBalance >= 0) ElectricTeal else RoseError
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = ElectricTeal.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = "پس‌انداز و پایداری",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricTeal,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text("کل ورودی و درآمد:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = PersianDateAndUnitUtils.formatCurrencyAmount(totalIncome, prefs.defaultCurrency),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldSuccess
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text("کل خروجی و مخارج:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = PersianDateAndUnitUtils.formatCurrencyAmount(totalExpense, prefs.defaultCurrency),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = RoseError
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text("مطالبات خالص:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = PersianDateAndUnitUtils.formatCurrencyAmount(totalReceivable - totalDebt, prefs.defaultCurrency),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = SkyInfo
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. SMS Bank Parser Tool
+        item {
+            LiquidGlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                accentBorderColor = ElectricTeal.copy(alpha = 0.6f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Sms, contentDescription = null, tint = ElectricTeal)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "استخراج هوشمند از پیامک بانک",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "متن پیامک واریز یا برداشت بانک (ملی، ملت، سامان، پاسارگاد، بلوبانک و...) را وارد کرده تا مبلغ، کارت و نوع تراکنش خودکار ثبت شود.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = { showSmsParser = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_sms_parser_tool_button")
+                    ) {
+                        Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("بازکردن ابزار استخراج پیامک بانک")
+                    }
+                }
+            }
+        }
+
+        // Receipt OCR Scanner Tool
+        item {
+            LiquidGlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                accentBorderColor = MutedViolet.copy(alpha = 0.6f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = MutedViolet)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "اسکن هوشمند رسید خرید و فاکتور",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "تصویر یا متن فاکتور خرید را اسکن کنید تا آیتم‌ها و مجموع مبلغ خرید به صورت خودکار در تراکنش‌های شما ثبت گردد.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = { showReceiptScanner = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = MutedViolet),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_receipt_scanner_tool_button")
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("بازکردن اسکنر فاکتور و رسید خرید")
+                    }
+                }
+            }
+        }
+
+        // Safe to spend & Monthly Budget Management
+        item {
+            LiquidGlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                accentBorderColor = EmeraldSuccess.copy(alpha = 0.6f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "مدیریت بودجه و سهم روزانه",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "سقف بودجه ماهانه: ${PersianDateAndUnitUtils.formatCurrencyAmount(safeToSpend.monthlyBudget, prefs.defaultCurrency)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(onClick = { showBudgetDialog = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تنظیم بودجه")
+                        }
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { safeToSpend.burnRateRatio },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
+                        color = if (safeToSpend.isOverDailyLimit) RoseError else EmeraldSuccess
+                    )
+
+                    Text(
+                        text = "سهم مجاز باقی‌مانده برای امروز: ${PersianDateAndUnitUtils.formatCurrencyAmount(safeToSpend.remainingTodayAllowance, prefs.defaultCurrency)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (safeToSpend.isOverDailyLimit) RoseError else EmeraldSuccess
+                    )
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(80.dp)) }
+    }
+}
+

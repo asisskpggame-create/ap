@@ -58,6 +58,13 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import com.example.ui.theme.AmberWarning
+import com.example.ui.theme.ElectricTeal
+import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.RoseError
+import com.example.ui.theme.SkyInfo
+
+
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -419,10 +426,10 @@ fun TasksScreen(
 
                     "GROUPED" -> {
                         val priorityOrder = listOf(
-                            "CRITICAL" to "🔥 اولویت بحرانی",
-                            "HIGH" to "⚡ اولویت بالا",
-                            "MEDIUM" to "📌 اولویت متوسط",
-                            "LOW" to "🌿 اولویت کم"
+                            "CRITICAL" to "اولویت بحرانی",
+                            "HIGH" to "اولویت بالا",
+                            "MEDIUM" to "اولویت متوسط",
+                            "LOW" to "اولویت کم"
                         )
                         priorityOrder.forEach { (prioCode, prioHeader) ->
                             val groupTasks = filteredTasks.filter { it.priority == prioCode }
@@ -914,6 +921,11 @@ private fun TaskEditorDialog(
             if (initialTask != null && initialTask.dueTimeMinutes >= 0) (initialTask.dueTimeMinutes / 60).toString() else "9"
         )
     }
+    var dueMinuteText by remember {
+        mutableStateOf(
+            if (initialTask != null && initialTask.dueTimeMinutes >= 0) (initialTask.dueTimeMinutes % 60).toString().padStart(2, '0') else "00"
+        )
+    }
     var enableReminder by remember { mutableStateOf((initialTask?.reminderAtMillis ?: -1L) > 0) }
     var durationText by remember { mutableStateOf((initialTask?.estimatedDurationMinutes ?: 30).toString()) }
     var subtasksRaw by remember {
@@ -1074,7 +1086,15 @@ private fun TaskEditorDialog(
                 OutlinedTextField(
                     value = dueHourText,
                     onValueChange = { dueHourText = PersianDateAndUnitUtils.toEnglishDigits(it) },
-                    label = { Text("ساعت (۰ تا ۲۳)") },
+                    label = { Text("ساعت (۰-۲۳)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = dueMinuteText,
+                    onValueChange = { dueMinuteText = PersianDateAndUnitUtils.toEnglishDigits(it) },
+                    label = { Text("دقیقه (۰-۵۹)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
@@ -1150,6 +1170,8 @@ private fun TaskEditorDialog(
                         if (title.isNotBlank()) {
                             val tags = tagsText.split(",", "،").map { it.trim() }.filter { it.isNotBlank() }
                             val hour = dueHourText.toIntOrNull()?.coerceIn(0, 23) ?: 9
+                            val minute = dueMinuteText.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                            val totalMinutes = hour * 60 + minute
                             val subItems = subtasksRaw.lines()
                                 .map { it.trim() }
                                 .filter { it.isNotBlank() }
@@ -1162,7 +1184,7 @@ private fun TaskEditorDialog(
                                 tags,
                                 priority,
                                 todayEpochDay + dateOffset,
-                                hour * 60,
+                                totalMinutes,
                                 enableReminder,
                                 durationText.toIntOrNull() ?: 30,
                                 encodeSubtasksJson(subItems),
@@ -1225,4 +1247,28 @@ private data class TaskEmptyStateInfo(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val color: androidx.compose.ui.graphics.Color
 )
+
+@Composable
+private fun PriorityBadge(priority: String) {
+    val (label, color) = when (priority) {
+        "CRITICAL" -> "بحرانی" to RoseError
+        "HIGH" -> "فوری" to AmberWarning
+        "LOW" -> "کم" to SkyInfo
+        else -> "متوسط" to ElectricTeal
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = color.copy(alpha = 0.16f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
 

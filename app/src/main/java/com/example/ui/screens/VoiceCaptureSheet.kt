@@ -175,7 +175,7 @@ fun VoiceCaptureModalSheet(
                 if (best.isNotBlank()) {
                     transcriptText = best
                     if (selectedTargetMode == "AUTO" && instantAutoSave) {
-                        statusMessage = "⚡ ثبت آنی: «$best»"
+                        statusMessage = "ثبت آنی: «$best»"
                         onInstantExecuteTranscript(best)
                     } else if (selectedTargetMode == "AUTO") {
                         statusMessage = "تشخیص داده شد. پیش‌نمایش آماده است."
@@ -336,7 +336,7 @@ fun VoiceCaptureModalSheet(
                     onClick = { instantAutoSave = !instantAutoSave },
                     label = {
                         Text(
-                            text = if (instantAutoSave) "⚡ ثبت خودکار آنی: روشن" else "پیش‌نمایش قبل از ثبت",
+                            text = if (instantAutoSave) "ثبت خودکار آنی: روشن" else "پیش‌نمایش قبل از ثبت",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -410,7 +410,7 @@ fun VoiceCaptureModalSheet(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("⚡ ثبت آنی (۱ لمسی)", fontWeight = FontWeight.Black)
+                    Text("ثبت آنی (۱ لمسی)", fontWeight = FontWeight.Black)
                 }
 
                 OutlinedButton(

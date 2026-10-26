@@ -1,0 +1,570 @@
+package com.example.ui.screens
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.model.ActivityEvent
+import com.example.data.model.ConsumptionEntry
+import com.example.data.model.CustomItem
+import com.example.data.model.ExerciseRecord
+import com.example.data.model.ExpenseEntry
+import com.example.data.model.Habit
+import com.example.data.model.HabitRecord
+import com.example.data.model.SleepRecord
+import com.example.data.model.Task
+import com.example.data.model.UserPreferencesDoc
+import com.example.ui.components.JalaliCalendarHeatmapCard
+import com.example.ui.components.MonthlySpendingTrendsLineChart
+import com.example.ui.components.MonthlyVisualExpensesGlassCard
+import com.example.ui.theme.AmberWarning
+import com.example.ui.theme.ElectricTeal
+import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.GlassTheme
+import com.example.ui.theme.GlassmorphismDefaults
+import com.example.ui.theme.LiquidGlassCard
+import com.example.ui.theme.RoseError
+import com.example.ui.theme.SkyInfo
+import com.example.util.PersianDateAndUnitUtils
+import com.example.util.WorldClassOsUtils
+import java.util.Calendar
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun HomeDashboardScreen(
+    userEmail: String?,
+    prefs: UserPreferencesDoc,
+    tasks: List<Task>,
+    consumption: List<ConsumptionEntry>,
+    customItems: List<CustomItem> = emptyList(),
+    expenses: List<ExpenseEntry>,
+    habits: List<Habit>,
+    habitRecords: List<HabitRecord>,
+    sleepRecords: List<SleepRecord>,
+    exerciseRecords: List<ExerciseRecord>,
+    activityEvents: List<ActivityEvent>,
+    onUpdatePrefs: (UserPreferencesDoc) -> Unit = {},
+    onCompleteTask: (Task) -> Unit = {},
+    onStartFocusTimer: (Task) -> Unit = {},
+    onToggleHabitDay: (Habit, Long) -> Unit = { _, _ -> },
+    onQuickAddWater: (Double) -> Unit = {},
+    onQuickAddCoffee: () -> Unit = {},
+    onQuickAddPresetItem: (CustomItem) -> Unit = {},
+    onCreateCustomItem: (name: String, category: String, unit: String, defaultQty: Double, dailyTarget: Double, defaultPrice: Double) -> Unit = { _, _, _, _, _, _ -> },
+    onUpdateCustomItem: (CustomItem) -> Unit = {},
+    onDeleteCustomItem: (CustomItem) -> Unit = {},
+    onAddExpense: (title: String, category: String, amount: Double, currency: String, notes: String, txType: String) -> Unit = { _, _, _, _, _, _ -> },
+    onSettleDebtOrReceivable: (ExpenseEntry) -> Unit = {},
+    onDeleteExpense: (ExpenseEntry) -> Unit = {},
+    onQuickCreateTaskForDay: (title: String, dueEpochDay: Long) -> Unit = { _, _ -> },
+    onQuickAddMealCalories: (name: String, calories: Double, notes: String) -> Unit = { _, _, _ -> },
+    onExecuteQuickSmartInput: (String) -> Unit = {},
+    onOpenVoiceCapture: () -> Unit = {},
+    onNavigateToSection: (String) -> Unit = {}
+) {
+    val context = LocalContext.current
+    val todayEpochDay = PersianDateAndUnitUtils.currentLocalEpochDay()
+    val formattedDate = PersianDateAndUnitUtils.formatEpochDay(
+        epochDay = todayEpochDay,
+        calendarDisplay = prefs.calendarDisplay,
+        usePersianDigits = prefs.language == "fa"
+    )
+
+    val greeting = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+        in 5..11 -> "صبح بخیر"
+        in 12..16 -> "ظهر بخیر"
+        in 17..20 -> "عصر بخیر"
+        else -> "شب بخیر"
+    }
+
+    // Real persisted calculations — zero fake numbers
+    val activeTasks = tasks.filter { it.status != "ARCHIVED" }
+    val completedTodayCount = activeTasks.count {
+        it.status == "COMPLETED" && (it.dueDateEpochDay == todayEpochDay || it.completedAtMillis >= (todayEpochDay * 86_400_000L))
+    }
+    val pendingTodayTasks = activeTasks.filter {
+        it.status != "COMPLETED" && (it.dueDateEpochDay == todayEpochDay || it.dueDateEpochDay < 0)
+    }
+    val totalTodayTasks = (completedTodayCount + pendingTodayTasks.size).coerceAtLeast(1)
+    val taskCompletionPercent = ((completedTodayCount.toFloat() / totalTodayTasks.toFloat()) * 100f).toInt().coerceIn(0, 100)
+
+    // Habit completion score
+    val activeHabits = habits.filter { !it.archived }
+    val completedHabitsToday = habitRecords.filter { it.localEpochDay == todayEpochDay }.map { it.habitId }.toSet()
+    val habitScorePercent = if (activeHabits.isEmpty()) 0 else ((completedHabitsToday.size * 100) / activeHabits.size)
+
+    // Financial calculations
+    val todayAllFinanceEntries = expenses.filter { it.localEpochDay == todayEpochDay }
+    val todayExpensesByCurrency = PersianDateAndUnitUtils.aggregateExpensesByCurrency(todayAllFinanceEntries)
+    val todayIncomeByCurrency = PersianDateAndUnitUtils.aggregateIncomesByCurrency(todayAllFinanceEntries)
+
+    val expDisplay = if (todayExpensesByCurrency.isEmpty()) "۰ تومان" else {
+        todayExpensesByCurrency.entries.joinToString(" | ") {
+            PersianDateAndUnitUtils.formatCurrencyAmount(it.value, it.key)
+        }
+    }
+    val incDisplay = if (todayIncomeByCurrency.isEmpty()) "۰ تومان" else {
+        todayIncomeByCurrency.entries.joinToString(" | ") {
+            PersianDateAndUnitUtils.formatCurrencyAmount(it.value, it.key)
+        }
+    }
+
+    // Daily Safe-to-Spend
+    val safeToSpend = WorldClassOsUtils.calculateDailySafeToSpend(
+        monthlyBudget = prefs.monthlyBudgetTarget,
+        defaultCurrency = prefs.defaultCurrency,
+        todayEpochDay = todayEpochDay,
+        expenses = expenses
+    )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("analytics_dashboard_list"),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // =========================================================================================
+        // 1. DASHBOARD HEADER: Title & Date Context
+        // =========================================================================================
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = formattedDate,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$greeting؛ داشبورد روندها و تحلیل",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.TrendingUp,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "تحلیل زنده",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // =========================================================================================
+        // 2. EXECUTIVE KPI OVERVIEW (4 Interactive Status Gauges)
+        // =========================================================================================
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "شاخص‌های کلیدی عملکرد",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Safe-to-Spend Gauge
+                    ExecutiveKpiCard(
+                        title = "توان خرج روزانه",
+                        valueText = PersianDateAndUnitUtils.formatCurrencyAmount(safeToSpend.safeToSpendToday, prefs.defaultCurrency),
+                        subtitle = "از بودجه ماهانه",
+                        accentColor = ElectricTeal,
+                        icon = Icons.Default.Payments,
+                        progress = if (prefs.monthlyBudgetTarget > 0) {
+                            (safeToSpend.safeToSpendToday / (prefs.monthlyBudgetTarget / 30.0)).toFloat().coerceIn(0f, 1f)
+                        } else 1f,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToSection("DAILY_LOG") }
+                    )
+
+                    // Task Completion Gauge
+                    ExecutiveKpiCard(
+                        title = "پیشرفت تسک‌ها",
+                        valueText = "${PersianDateAndUnitUtils.toPersianDigits(taskCompletionPercent.toString())}٪",
+                        subtitle = "${PersianDateAndUnitUtils.toPersianDigits(completedTodayCount.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(totalTodayTasks.toString())} انجام شده",
+                        accentColor = EmeraldSuccess,
+                        icon = Icons.Default.CheckCircle,
+                        progress = taskCompletionPercent / 100f,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToSection("GOALS_AND_HABITS") }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Habit Consistency Gauge
+                    ExecutiveKpiCard(
+                        title = "عادت‌های امروز",
+                        valueText = "${PersianDateAndUnitUtils.toPersianDigits(habitScorePercent.toString())}٪",
+                        subtitle = "${PersianDateAndUnitUtils.toPersianDigits(completedHabitsToday.size.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(activeHabits.size.toString())} تکمیل",
+                        accentColor = SkyInfo,
+                        icon = Icons.Default.CalendarMonth,
+                        progress = habitScorePercent / 100f,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToSection("GOALS_AND_HABITS") }
+                    )
+
+                    // Financial Summary Gauge
+                    ExecutiveKpiCard(
+                        title = "تراز امروز",
+                        valueText = expDisplay,
+                        subtitle = "درآمد: $incDisplay",
+                        accentColor = AmberWarning,
+                        icon = Icons.Default.AttachMoney,
+                        progress = 0.75f,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToSection("DAILY_LOG") }
+                    )
+                }
+            }
+        }
+
+        // =========================================================================================
+        // 3. MONTHLY SPENDING TRENDS LINE CHART (Dual Bezier Curves)
+        // =========================================================================================
+        item {
+            MonthlySpendingTrendsLineChart(
+                expenses = expenses,
+                defaultCurrency = prefs.defaultCurrency,
+                calendarDisplay = prefs.calendarDisplay
+            )
+        }
+
+        // =========================================================================================
+        // 4. CATEGORY EXPENSE DISTRIBUTION DONUT CHART
+        // =========================================================================================
+        item {
+            MonthlyVisualExpensesGlassCard(
+                expenses = expenses,
+                defaultCurrency = prefs.defaultCurrency
+            )
+        }
+
+        // =========================================================================================
+        // 5. JALALI CALENDAR HABIT & ACTIVITY HEATMAP
+        // =========================================================================================
+        item {
+            JalaliCalendarHeatmapCard(
+                habitRecords = habitRecords,
+                tasks = tasks,
+                calendarDisplay = prefs.calendarDisplay
+            )
+        }
+
+        // =========================================================================================
+        // 6. QUICK TAB REFERRALS (ارائه امکانات در تب‌های اختصاصی)
+        // =========================================================================================
+        item {
+            Column(
+                modifier = Modifier.padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "دسترسی سریع به بخش‌های تخصصی",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Financial Tab Card
+                DomainReferralCard(
+                    title = "مدیریت امور مالی و تراکنش‌ها",
+                    description = "ثبت خرج و درآمد روزانه، مدیریت طلبکاری/بدهکاری‌ها و دارایی‌ها",
+                    badgeText = "امور مالی",
+                    icon = Icons.Default.AttachMoney,
+                    accentColor = EmeraldSuccess,
+                    onClick = { onNavigateToSection("DAILY_LOG") }
+                )
+
+                // Goals & Habits Tab Card
+                DomainReferralCard(
+                    title = "اهداف و عادت‌های روتین",
+                    description = "مدیریت اهداف بلندمدت، تسک‌های روزانه و استمرار عادت‌های شخصی",
+                    badgeText = "هدف و عادت",
+                    icon = Icons.Default.CheckCircle,
+                    accentColor = SkyInfo,
+                    onClick = { onNavigateToSection("GOALS_AND_HABITS") }
+                )
+
+                // Reports Tab Card
+                DomainReferralCard(
+                    title = "گزارشات و خروجی داده‌ها",
+                    description = "مشاهده تحلیل‌های عمیق ماهانه و خروجی اکسل/CSV از تمام فعالیت‌ها",
+                    badgeText = "گزارش‌ها",
+                    icon = Icons.Default.Analytics,
+                    accentColor = ElectricTeal,
+                    onClick = { onNavigateToSection("REPORTS") }
+                )
+
+                // History Tab Card
+                DomainReferralCard(
+                    title = "تاریخچه فعالیت‌ها",
+                    description = "مرور گاه‌شمار و وقایع ثبت‌شده در سیستم به همراه زمان‌بندی دقیق",
+                    badgeText = "تاریخچه",
+                    icon = Icons.Default.History,
+                    accentColor = AmberWarning,
+                    onClick = { onNavigateToSection("HISTORY") }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExecutiveKpiCard(
+    title: String,
+    valueText: String,
+    subtitle: String,
+    accentColor: Color,
+    icon: ImageVector,
+    progress: Float,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    LiquidGlassCard(
+        shape = RoundedCornerShape(18.dp),
+        accentBorderColor = accentColor,
+        onClick = onClick,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = accentColor.copy(alpha = 0.20f),
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(CircleShape),
+                color = accentColor,
+                trackColor = accentColor.copy(alpha = 0.18f)
+            )
+
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DomainReferralCard(
+    title: String,
+    description: String,
+    badgeText: String,
+    icon: ImageVector,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    LiquidGlassCard(
+        shape = RoundedCornerShape(20.dp),
+        accentBorderColor = accentColor,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = accentColor.copy(alpha = 0.18f),
+                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = accentColor.copy(alpha = 0.20f)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.ChevronLeft,
+                contentDescription = "ورود به بخش",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}

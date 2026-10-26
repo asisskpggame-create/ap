@@ -49,8 +49,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
@@ -123,6 +125,7 @@ import com.example.ui.components.VaultBiometricLockOverlay
 import com.example.ui.screens.AiAssistantScreen
 import com.example.ui.screens.DailyLogAndHealthScreen
 import com.example.ui.screens.FirstRunOnboardingDialog
+import com.example.ui.screens.GoalsAndHabitsCombinedScreen
 import com.example.ui.screens.HabitsScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.HomeDashboardScreen
@@ -143,16 +146,17 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import java.util.Locale
 
+import androidx.compose.material.icons.filled.TrendingUp
+
 enum class AppSection(
     val route: String,
     val titleFa: String,
     val icon: ImageVector,
     val isPrimaryBottomNav: Boolean
 ) {
-    HOME("HOME", "خانه", Icons.Default.Home, true),
-    TASKS("TASKS", "کارها", Icons.Default.CheckCircle, true),
-    DAILY_LOG("DAILY_LOG", "ثبت روزانه", Icons.Default.EditCalendar, true),
-    HABITS("HABITS", "عادت‌ها", Icons.Default.Repeat, true),
+    HOME("HOME", "روندها", Icons.Default.TrendingUp, true),
+    GOALS_AND_HABITS("GOALS_AND_HABITS", "هدف و عادت", Icons.Default.CheckCircle, true),
+    DAILY_LOG("DAILY_LOG", "امور مالی", Icons.Default.AttachMoney, true),
     AI_ASSISTANT("AI_ASSISTANT", "دستیار", Icons.Default.AutoAwesome, true),
     HISTORY("HISTORY", "تاریخچه", Icons.Default.History, false),
     REPORTS("REPORTS", "گزارش‌ها", Icons.Default.Analytics, false),
@@ -395,7 +399,7 @@ fun AuthenticatedLifeOsShell(
                                     borderWidth = GlassTheme.tokens.subtleBorderWidth,
                                     onClick = {
                                         WorldClassOsUtils.HapticSignature.crispTick(context)
-                                        currentSectionRoute = AppSection.TASKS.route
+                                        currentSectionRoute = AppSection.GOALS_AND_HABITS.route
                                     }
                                 ) {
                                     Row(
@@ -636,7 +640,8 @@ fun AuthenticatedLifeOsShell(
                                 onNavigateToSection = { route -> currentSectionRoute = route }
                             )
 
-                            AppSection.TASKS.route -> TasksScreen(
+                            AppSection.GOALS_AND_HABITS.route -> GoalsAndHabitsCombinedScreen(
+                                prefs = prefs,
                                 tasks = tasks,
                                 calendarDisplay = prefs.calendarDisplay,
                                 activeFocusTaskId = activeFocusTask?.id,
@@ -663,7 +668,15 @@ fun AuthenticatedLifeOsShell(
                                 onUpdateTask = { vm.updateTask(it) },
                                 onRescheduleTask = { task, newDay -> vm.rescheduleTask(task, newDay) },
                                 onArchiveOrRestore = { task, arch -> vm.archiveOrRestoreTask(task, arch) },
-                                onDeleteTask = { vm.deleteTask(it) }
+                                onDeleteTask = { vm.deleteTask(it) },
+                                habits = habits,
+                                habitRecords = habitRecords,
+                                onCreateHabit = { title, cat, schedType, schedDays, target ->
+                                    vm.createHabit(title, cat, schedType, schedDays, target)
+                                },
+                                onToggleHabitDay = { habit, day ->
+                                    vm.toggleHabitForDay(habit, day)
+                                }
                             )
 
                             AppSection.DAILY_LOG.route -> DailyLogAndHealthScreen(
@@ -697,18 +710,6 @@ fun AuthenticatedLifeOsShell(
                                 },
                                 onAddExercise = { actType, dur, intensity, dist, reps, notes ->
                                     vm.addExerciseRecord(actType, dur, intensity, dist, reps, notes)
-                                }
-                            )
-
-                            AppSection.HABITS.route -> HabitsScreen(
-                                prefs = prefs,
-                                habits = habits,
-                                habitRecords = habitRecords,
-                                onCreateHabit = { title, cat, schedType, schedDays, target ->
-                                    vm.createHabit(title, cat, schedType, schedDays, target)
-                                },
-                                onToggleHabitDay = { habit, day ->
-                                    vm.toggleHabitForDay(habit, day)
                                 }
                             )
 
