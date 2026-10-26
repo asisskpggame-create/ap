@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.example.util.WorldClassOsUtils
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -666,7 +667,147 @@ class ExampleRobolectricTest {
     assertEquals(100.54, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(100.542), 0.0001)
     assertEquals(0.0, com.example.util.PersianDateAndUnitUtils.roundFinancialAmount(0.0), 0.0001)
   }
+
+  @Test
+  fun `verify true schema migration from v1 to v6 preserves existing user data without data loss`() = kotlinx.coroutines.runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val dbFile = context.getDatabasePath("test_migration_preservation.db")
+    if (dbFile.exists()) dbFile.delete()
+
+    // 1. Manually construct version 1 database using raw SQLite
+    val config = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+      .name("test_migration_preservation.db")
+      .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(1) {
+        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+          db.execSQL("""
+            CREATE TABLE cached_tasks (
+              id TEXT PRIMARY KEY NOT NULL,
+              userId TEXT NOT NULL,
+              title TEXT NOT NULL,
+              description TEXT NOT NULL,
+              category TEXT NOT NULL,
+              tagsCsv TEXT NOT NULL,
+              priority TEXT NOT NULL,
+              dueDateEpochDay INTEGER NOT NULL,
+              dueTimeMinutes INTEGER NOT NULL,
+              reminderAtMillis INTEGER NOT NULL,
+              estimatedDurationMinutes INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              subtasksJson TEXT NOT NULL,
+              recurrenceRule TEXT NOT NULL,
+              recurrenceIntervalDays INTEGER NOT NULL,
+              notes TEXT NOT NULL,
+              inputSource TEXT NOT NULL,
+              sortOrder INTEGER NOT NULL,
+              completedAtMillis INTEGER NOT NULL,
+              idempotencyKey TEXT NOT NULL,
+              syncedWithCloud INTEGER NOT NULL,
+              updatedAtMillis INTEGER NOT NULL
+            )
+          """.trimIndent())
+
+          db.execSQL("""
+            CREATE TABLE cached_expenses (
+              id TEXT PRIMARY KEY NOT NULL,
+              userId TEXT NOT NULL,
+              amount REAL NOT NULL,
+              category TEXT NOT NULL,
+              title TEXT NOT NULL,
+              currency TEXT NOT NULL,
+              localEpochDay INTEGER NOT NULL,
+              timestampMillis INTEGER NOT NULL,
+              linkedConsumptionId TEXT NOT NULL DEFAULT '',
+              notes TEXT NOT NULL DEFAULT '',
+              inputSource TEXT NOT NULL DEFAULT 'MANUAL',
+              idempotencyKey TEXT NOT NULL DEFAULT '',
+              syncedWithCloud INTEGER NOT NULL DEFAULT 0
+            )
+          """.trimIndent())
+        }
+
+        override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+      })
+      .build()
+
+    val rawHelper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory().create(config)
+    val v1Db = rawHelper.writableDatabase
+
+    // Insert real user data into Version 1
+    v1Db.execSQL("""
+      INSERT INTO cached_tasks (id, userId, title, description, category, tagsCsv, priority, dueDateEpochDay, dueTimeMinutes, reminderAtMillis, estimatedDurationMinutes, status, subtasksJson, recurrenceRule, recurrenceIntervalDays, notes, inputSource, sortOrder, completedAtMillis, idempotencyKey, syncedWithCloud, updatedAtMillis)
+      VALUES ('task_v1_legacy', 'u_test', 'تسک قدیمی کاربر در نسخه ۱', '', 'عمومی', '', 'HIGH', 20100, -1, -1, 30, 'PENDING', '[]', 'NONE', 0, '', 'MANUAL', 0, -1, '', 0, 1000)
+    """.trimIndent())
+
+    v1Db.execSQL("""
+      INSERT INTO cached_expenses (id, userId, amount, category, title, currency, localEpochDay, timestampMillis, inputSource, notes, syncedWithCloud)
+      VALUES ('exp_v1_legacy', 'u_test', 450000.0, 'FOOD', 'خرید ناهار قدیمی', 'TOMAN', 20100, 2000, 'MANUAL', '', 0)
+    """.trimIndent())
+
+    v1Db.close()
+    rawHelper.close()
+
+    // 2. Open with LifeOsDatabase at version 6 with all migrations applied
+    val migratedDb = androidx.room.Room.databaseBuilder(
+      context,
+      com.example.data.local.LifeOsDatabase::class.java,
+      "test_migration_preservation.db"
+    )
+      .addMigrations(
+        com.example.data.local.LifeOsDatabase.MIGRATION_1_2,
+        com.example.data.local.LifeOsDatabase.MIGRATION_2_3,
+        com.example.data.local.LifeOsDatabase.MIGRATION_3_4,
+        com.example.data.local.LifeOsDatabase.MIGRATION_4_5,
+        com.example.data.local.LifeOsDatabase.MIGRATION_5_6
+      )
+      .fallbackToDestructiveMigrationOnDowngrade()
+      .addCallback(com.example.data.local.LifeOsDatabase.SAFE_SCHEMA_CALLBACK)
+      .build()
+
+    val lifeOsDao = migratedDb.lifeOsDao()
+
+    // 3. Verify that user data from Version 1 is 100% PRESERVED!
+    val preservedTasks = lifeOsDao.getTasksForUser("u_test")
+    assertEquals(1, preservedTasks.size)
+    val task = preservedTasks[0]
+    assertEquals("task_v1_legacy", task.id)
+    assertEquals("تسک قدیمی کاربر در نسخه ۱", task.title)
+    assertEquals("HIGH", task.priority)
+    assertEquals("PENDING", task.status)
+    // Newly added columns in v4 and v6 have safe defaults without data corruption
+    assertEquals(0, task.actualDurationMinutes)
+    assertEquals("", task.linkedDebtId)
+
+    val preservedExpense = lifeOsDao.getExpenseById("u_test", "exp_v1_legacy")
+    assertTrue(preservedExpense != null)
+    assertEquals(450000.0, preservedExpense!!.amount, 0.01)
+    assertEquals("خرید ناهار قدیمی", preservedExpense.title)
+    assertEquals("TOMAN", preservedExpense.currency)
+    // Newly added columns in v3 and v6 have safe defaults
+    assertEquals("EXPENSE", preservedExpense.transactionType)
+    assertEquals(0.0, preservedExpense.paidAmount, 0.01)
+    assertEquals(-1L, preservedExpense.dueEpochDay)
+    assertEquals(1, preservedExpense.installmentCount)
+    assertEquals("", preservedExpense.linkedDebtId)
+
+    // 4. Verify that new tables added in migrations (v2 cached_habits, etc.) are fully functional
+    val newHabit = com.example.data.local.CachedHabitEntity.fromDomain(
+      com.example.data.model.Habit(
+        id = "habit_post_migration",
+        userId = "u_test",
+        title = "مطالعه کتاب",
+        category = "PERSONAL_GROWTH"
+      )
+    )
+    lifeOsDao.upsertHabit(newHabit)
+    val habits = lifeOsDao.observeCachedHabits("u_test").first()
+    assertEquals(1, habits.size)
+    assertEquals("habit_post_migration", habits[0].id)
+
+    migratedDb.close()
+    if (dbFile.exists()) dbFile.delete()
+  }
 }
+
 
 
 

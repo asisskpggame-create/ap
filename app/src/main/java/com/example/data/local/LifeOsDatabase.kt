@@ -1,6 +1,7 @@
 package com.example.data.local
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -46,8 +47,8 @@ data class CachedTaskEntity(
     val sortOrder: Int = 0,
     val completedAtMillis: Long = -1L,
     val idempotencyKey: String = "",
-    val actualDurationMinutes: Int = 0,
-    val linkedDebtId: String = "",
+    @ColumnInfo(defaultValue = "0") val actualDurationMinutes: Int = 0,
+    @ColumnInfo(defaultValue = "''") val linkedDebtId: String = "",
     val syncedWithCloud: Boolean = false,
     val updatedAtMillis: Long = System.currentTimeMillis()
 ) {
@@ -213,15 +214,15 @@ data class CachedExpenseEntity(
     val currency: String,
     val localEpochDay: Long,
     val timestampMillis: Long,
-    val linkedConsumptionId: String = "",
-    val notes: String = "",
-    val inputSource: String = "MANUAL",
-    val idempotencyKey: String = "",
-    val transactionType: String = "EXPENSE",
-    val paidAmount: Double = 0.0,
-    val dueEpochDay: Long = -1L,
-    val installmentCount: Int = 1,
-    val linkedDebtId: String = "",
+    @ColumnInfo(defaultValue = "''") val linkedConsumptionId: String = "",
+    @ColumnInfo(defaultValue = "''") val notes: String = "",
+    @ColumnInfo(defaultValue = "'MANUAL'") val inputSource: String = "MANUAL",
+    @ColumnInfo(defaultValue = "''") val idempotencyKey: String = "",
+    @ColumnInfo(defaultValue = "'EXPENSE'") val transactionType: String = "EXPENSE",
+    @ColumnInfo(defaultValue = "0.0") val paidAmount: Double = 0.0,
+    @ColumnInfo(defaultValue = "-1") val dueEpochDay: Long = -1L,
+    @ColumnInfo(defaultValue = "1") val installmentCount: Int = 1,
+    @ColumnInfo(defaultValue = "''") val linkedDebtId: String = "",
     val syncedWithCloud: Boolean = false
 ) {
     fun toDomain(): ExpenseEntry = ExpenseEntry(
@@ -805,20 +806,104 @@ abstract class LifeOsDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
+                    CREATE TABLE IF NOT EXISTS tasks (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        category TEXT NOT NULL DEFAULT 'شخصی',
+                        priority TEXT NOT NULL DEFAULT 'MEDIUM',
+                        status TEXT NOT NULL DEFAULT 'PENDING',
+                        dueDateEpochDay INTEGER NOT NULL DEFAULT -1,
+                        dueTimeMinutes INTEGER NOT NULL DEFAULT -1,
+                        reminderAtMillis INTEGER NOT NULL DEFAULT -1,
+                        estimatedDurationMinutes INTEGER NOT NULL DEFAULT 30,
+                        actualDurationMinutes INTEGER NOT NULL DEFAULT 0,
+                        tagsCsv TEXT NOT NULL DEFAULT '',
+                        subtasksJson TEXT NOT NULL DEFAULT '[]',
+                        recurrenceRule TEXT NOT NULL DEFAULT 'NONE',
+                        recurrenceIntervalDays INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT NOT NULL DEFAULT '',
+                        inputSource TEXT NOT NULL DEFAULT 'MANUAL',
+                        sortOrder INTEGER NOT NULL DEFAULT 0,
+                        normalizedSearchIndex TEXT NOT NULL DEFAULT '',
+                        completedAtMillis INTEGER NOT NULL DEFAULT -1,
+                        createdAtMillis INTEGER NOT NULL,
+                        updatedAtMillis INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_userId ON tasks(userId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_status ON tasks(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_dueDateEpochDay ON tasks(dueDateEpochDay)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_category ON tasks(category)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_priority ON tasks(priority)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_userId_status_dueDateEpochDay ON tasks(userId, status, dueDateEpochDay)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_normalizedSearchIndex ON tasks(normalizedSearchIndex)")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_consumption (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        itemId TEXT NOT NULL,
+                        itemName TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        quantity REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        localEpochDay INTEGER NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        linkedExpenseId TEXT NOT NULL,
+                        linkedTaskId TEXT NOT NULL,
+                        notes TEXT NOT NULL,
+                        inputSource TEXT NOT NULL,
+                        idempotencyKey TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_custom_items (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        defaultQuantity REAL NOT NULL,
+                        dailyTarget REAL NOT NULL,
+                        defaultPrice REAL NOT NULL,
+                        defaultCurrency TEXT NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cached_conversations (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        userId TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        messageText TEXT NOT NULL,
+                        structuredActionJson TEXT NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        syncedWithCloud INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
                     CREATE TABLE IF NOT EXISTS cached_habits (
                         id TEXT PRIMARY KEY NOT NULL,
                         userId TEXT NOT NULL,
                         title TEXT NOT NULL,
                         category TEXT NOT NULL,
-                        targetPerPeriod INTEGER NOT NULL,
                         scheduleType TEXT NOT NULL,
-                        scheduleDays TEXT NOT NULL,
-                        reminderTimeMinutes INTEGER NOT NULL,
-                        reminderEnabled INTEGER NOT NULL,
-                        notes TEXT NOT NULL,
-                        archived INTEGER NOT NULL,
-                        createdAtEpochDay INTEGER NOT NULL,
-                        colorHex TEXT NOT NULL,
+                        scheduleDaysCsv TEXT NOT NULL,
+                        targetPerPeriod INTEGER NOT NULL,
+                        linkedTaskCategory TEXT NOT NULL DEFAULT '',
+                        reminderTimeMinutes INTEGER NOT NULL DEFAULT -1,
+                        archived INTEGER NOT NULL DEFAULT 0,
                         syncedWithCloud INTEGER NOT NULL DEFAULT 0
                     )
                     """.trimIndent()
@@ -830,9 +915,9 @@ abstract class LifeOsDatabase : RoomDatabase() {
                         userId TEXT NOT NULL,
                         habitId TEXT NOT NULL,
                         localEpochDay INTEGER NOT NULL,
-                        completed INTEGER NOT NULL,
-                        timestampMillis INTEGER NOT NULL,
+                        completedCount INTEGER NOT NULL DEFAULT 1,
                         notes TEXT NOT NULL,
+                        inputSource TEXT NOT NULL DEFAULT 'MANUAL',
                         syncedWithCloud INTEGER NOT NULL DEFAULT 0
                     )
                     """.trimIndent()

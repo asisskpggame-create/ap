@@ -472,13 +472,19 @@ object PersianDateAndUnitUtils {
 
     /**
      * Enforces the financial decimal precision contract:
-     * - Rounds to 2 decimal places to eliminate floating-point drift (e.g. 0.1 + 0.2 != 0.3).
+     * - Uses BigDecimal with RoundingMode.HALF_UP to 2 decimal places to eliminate floating-point drift (e.g. 0.1 + 0.2 != 0.3).
      * - Handles NaN, Infinite, and negative zero safely.
      */
     fun roundFinancialAmount(amount: Double): Double {
         if (amount.isNaN() || amount.isInfinite()) return 0.0
         val clamped = amount.coerceAtLeast(0.0)
-        return kotlin.math.round(clamped * 100.0) / 100.0
+        return try {
+            java.math.BigDecimal(clamped.toString())
+                .setScale(2, java.math.RoundingMode.HALF_UP)
+                .toDouble()
+        } catch (_: Exception) {
+            kotlin.math.round(clamped * 100.0) / 100.0
+        }
     }
 
     /**
