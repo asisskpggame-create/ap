@@ -39,6 +39,8 @@ class PreferencesDataStore(private val context: Context) {
         val DAILY_EXPENSE_REMINDER_ENABLED = booleanPreferencesKey("daily_expense_reminder_enabled")
         val DAILY_EXPENSE_REMINDER_HOUR = intPreferencesKey("daily_expense_reminder_hour")
         val DAILY_EXPENSE_REMINDER_MINUTE = intPreferencesKey("daily_expense_reminder_minute")
+        val CUSTOM_EXPENSE_CATEGORIES = stringPreferencesKey("custom_expense_categories")
+        val FINANCIAL_ACCOUNTS = stringPreferencesKey("financial_accounts")
     }
 
     fun observeLocalPreferences(userId: String): Flow<UserPreferencesDoc> {
@@ -48,6 +50,18 @@ class PreferencesDataStore(private val context: Context) {
                 orderStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             } else {
                 listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR")
+            }
+            val catsStr = prefs[Keys.CUSTOM_EXPENSE_CATEGORIES]
+            val customCats = if (!catsStr.isNullOrBlank()) {
+                catsStr.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+            } else {
+                listOf("غذا و کافه", "خرید", "قبوض و اجاره", "حمل‌ونقل", "سلامت و درمان", "تفریح و سرگرمی", "سرمایه‌گذاری", "آموزش", "سایر")
+            }
+            val accountsStr = prefs[Keys.FINANCIAL_ACCOUNTS]
+            val accountsList = if (!accountsStr.isNullOrBlank()) {
+                accountsStr.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+            } else {
+                listOf("کارت اصلی", "کارت پس‌انداز", "کیف پول / نقدی")
             }
             UserPreferencesDoc(
                 id = "default",
@@ -72,7 +86,9 @@ class PreferencesDataStore(private val context: Context) {
                 dashboardCardOrder = cardOrder,
                 dailyExpenseReminderEnabled = prefs[Keys.DAILY_EXPENSE_REMINDER_ENABLED] ?: true,
                 dailyExpenseReminderHour = prefs[Keys.DAILY_EXPENSE_REMINDER_HOUR] ?: 21,
-                dailyExpenseReminderMinute = prefs[Keys.DAILY_EXPENSE_REMINDER_MINUTE] ?: 0
+                dailyExpenseReminderMinute = prefs[Keys.DAILY_EXPENSE_REMINDER_MINUTE] ?: 0,
+                customExpenseCategories = customCats,
+                financialAccounts = accountsList
             )
         }
     }
@@ -112,6 +128,8 @@ class PreferencesDataStore(private val context: Context) {
             prefs[Keys.DAILY_EXPENSE_REMINDER_ENABLED] = doc.dailyExpenseReminderEnabled
             prefs[Keys.DAILY_EXPENSE_REMINDER_HOUR] = doc.dailyExpenseReminderHour
             prefs[Keys.DAILY_EXPENSE_REMINDER_MINUTE] = doc.dailyExpenseReminderMinute
+            prefs[Keys.CUSTOM_EXPENSE_CATEGORIES] = doc.customExpenseCategories.joinToString("|")
+            prefs[Keys.FINANCIAL_ACCOUNTS] = doc.financialAccounts.joinToString("|")
         }
     }
 }

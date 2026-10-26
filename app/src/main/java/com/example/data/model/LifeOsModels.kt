@@ -415,6 +415,12 @@ data class UserPreferencesDoc(
     val dailyExpenseReminderEnabled: Boolean = true,
     val dailyExpenseReminderHour: Int = 21,
     val dailyExpenseReminderMinute: Int = 0,
+    val customExpenseCategories: List<String> = listOf(
+        "غذا و کافه", "خرید", "قبوض و اجاره", "حمل‌ونقل", "سلامت و درمان", "تفریح و سرگرمی", "سرمایه‌گذاری", "آموزش", "سایر"
+    ),
+    val financialAccounts: List<String> = listOf(
+        "کارت اصلی", "کارت پس‌انداز", "کیف پول / نقدی"
+    ),
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -435,6 +441,8 @@ data class UserPreferencesDoc(
         "dailyExpenseReminderEnabled" to dailyExpenseReminderEnabled,
         "dailyExpenseReminderHour" to dailyExpenseReminderHour,
         "dailyExpenseReminderMinute" to dailyExpenseReminderMinute,
+        "customExpenseCategories" to customExpenseCategories,
+        "financialAccounts" to financialAccounts,
         "createdAt" to FieldValue.serverTimestamp(),
         "updatedAt" to FieldValue.serverTimestamp()
     )

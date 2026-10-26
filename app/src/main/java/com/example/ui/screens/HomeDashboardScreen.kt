@@ -348,7 +348,7 @@ fun HomeDashboardScreen(
                 badgeColor = SkyInfo,
                 icon = Icons.Default.CheckCircle,
                 navigationButtonText = "مدیریت اهداف",
-                onNavigate = { onNavigateToSection("GOALS_AND_HABITS") }
+                onNavigate = { onNavigateToSection("GOALS_HABITS_0") }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -416,8 +416,8 @@ fun HomeDashboardScreen(
                 badgeText = "سلامت و روتین",
                 badgeColor = ElectricTeal,
                 icon = Icons.AutoMirrored.Filled.DirectionsRun,
-                navigationButtonText = "مشاهده عادت‌ها",
-                onNavigate = { onNavigateToSection("GOALS_AND_HABITS") }
+                navigationButtonText = "ثبت سلامت و روتین",
+                onNavigate = { onNavigateToSection("GOALS_HABITS_2") }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(

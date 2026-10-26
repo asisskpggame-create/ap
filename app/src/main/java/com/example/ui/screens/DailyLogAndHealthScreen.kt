@@ -452,11 +452,17 @@ private fun ExpenseTrackerSubScreen(
         return
     }
 
-    var transactionType by remember { mutableStateOf("EXPENSE") }
+    val isIouMode = initialFilter == "IOU"
+    var transactionType by remember(isIouMode) { mutableStateOf(if (isIouMode) "RECEIVABLE" else "EXPENSE") }
     var title by remember { mutableStateOf("") }
     var showTitleError by remember { mutableStateOf(false) }
     var showAmountError by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("غذا و کافه") }
+    var selectedAccount by remember(prefs.financialAccounts) {
+        mutableStateOf(prefs.financialAccounts.firstOrNull() ?: "کارت اصلی")
+    }
+    var showAddAccountDialog by remember { mutableStateOf(false) }
+    var newAccountInputName by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf(prefs.defaultCurrency) }
     var notes by remember { mutableStateOf("") }
@@ -472,14 +478,18 @@ private fun ExpenseTrackerSubScreen(
     var editingTransaction by remember { mutableStateOf<ExpenseEntry?>(null) }
     var showExportReportDialog by remember { mutableStateOf(false) }
 
-    // State for Custom Expense Categories Management
-    var customExpenseCategories by remember {
+    // Persistent Custom Expense Categories Management
+    var customExpenseCategories by remember(prefs.customExpenseCategories) {
         mutableStateOf(
-            listOf("غذا و کافه", "خرید", "قبوض و اجاره", "حمل‌ونقل", "سلامت و درمان", "تفریح و سرگرمی", "سرمایه‌گذاری", "آموزش", "سایر")
+            prefs.customExpenseCategories.ifEmpty {
+                listOf("غذا و کافه", "خرید", "قبوض و اجاره", "حمل‌ونقل", "سلامت و درمان", "تفریح و سرگرمی", "سرمایه‌گذاری", "آموزش", "سایر")
+            }
         )
     }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var newCategoryInputName by remember { mutableStateOf("") }
+    var editingCategoryOriginalName by remember { mutableStateOf<String?>(null) }
+    var editingCategoryNewName by remember { mutableStateOf("") }
 
     // State for Bank SMS Auto-Inbox Reader Feed
     var bankSmsList by remember { mutableStateOf<List<ParsedBankSms>>(emptyList()) }
@@ -875,8 +885,10 @@ private fun ExpenseTrackerSubScreen(
                     onClick = {
                         val cleanCat = newCategoryInputName.trim()
                         if (cleanCat.isNotBlank() && !customExpenseCategories.contains(cleanCat)) {
-                            customExpenseCategories = customExpenseCategories + cleanCat
+                            val updatedCats = customExpenseCategories + cleanCat
+                            customExpenseCategories = updatedCats
                             category = cleanCat
+                            onUpdatePrefs(prefs.copy(customExpenseCategories = updatedCats))
                             newCategoryInputName = ""
                             WorldClassOsUtils.HapticSignature.doublePulse(context)
                         }
@@ -889,6 +901,117 @@ private fun ExpenseTrackerSubScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showAddCategoryDialog = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+
+    // Modal Dialog to Edit / Delete Existing Expense Category
+    if (editingCategoryOriginalName != null) {
+        val origCat = editingCategoryOriginalName!!
+        AlertDialog(
+            onDismissRequest = { editingCategoryOriginalName = null },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("ویرایش دسته‌بندی «$origCat»", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editingCategoryNewName,
+                        onValueChange = { editingCategoryNewName = it },
+                        label = { Text("نام جدید دسته‌بندی") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanNew = editingCategoryNewName.trim()
+                        if (cleanNew.isNotBlank()) {
+                            val updatedCats = customExpenseCategories.map { if (it == origCat) cleanNew else it }.distinct()
+                            customExpenseCategories = updatedCats
+                            if (category == origCat) category = cleanNew
+                            onUpdatePrefs(prefs.copy(customExpenseCategories = updatedCats))
+                            WorldClassOsUtils.HapticSignature.doublePulse(context)
+                        }
+                        editingCategoryOriginalName = null
+                    }
+                ) {
+                    Text("ذخیره نام جدید")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (customExpenseCategories.size > 1) {
+                        TextButton(
+                            onClick = {
+                                val updatedCats = customExpenseCategories.filterNot { it == origCat }
+                                customExpenseCategories = updatedCats
+                                if (category == origCat) category = updatedCats.firstOrNull() ?: "سایر"
+                                onUpdatePrefs(prefs.copy(customExpenseCategories = updatedCats))
+                                editingCategoryOriginalName = null
+                            }
+                        ) {
+                            Text("حذف دسته", color = RoseError)
+                        }
+                    }
+                    TextButton(onClick = { editingCategoryOriginalName = null }) {
+                        Text("انصراف")
+                    }
+                }
+            }
+        )
+    }
+
+    // Modal Dialog to Add New Financial Account / Bank Card
+    if (showAddAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddAccountDialog = false },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFF0F1612).copy(alpha = 0.94f),
+            titleContentColor = ElectricTeal,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("افزودن کارت یا حساب جدید", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "نام کارت بانکی یا حساب (مثلاً: کارت ملت، کارت بلوبانک، حساب حقوق، کیف پول) را وارد کنید:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = newAccountInputName,
+                        onValueChange = { newAccountInputName = it },
+                        label = { Text("نام حساب یا کارت") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanAcc = newAccountInputName.trim()
+                        if (cleanAcc.isNotBlank() && !prefs.financialAccounts.contains(cleanAcc)) {
+                            val updatedAccs = prefs.financialAccounts + cleanAcc
+                            selectedAccount = cleanAcc
+                            onUpdatePrefs(prefs.copy(financialAccounts = updatedAccs))
+                            newAccountInputName = ""
+                            WorldClassOsUtils.HapticSignature.doublePulse(context)
+                        }
+                        showAddAccountDialog = false
+                    }
+                ) {
+                    Text("افزودن کارت")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddAccountDialog = false }) {
                     Text("انصراف")
                 }
             }
@@ -1198,14 +1321,26 @@ private fun ExpenseTrackerSubScreen(
         }
     }
 
-    val filteredTransactions = remember(periodEntries, selectedTypeFilter, searchQuery) {
-        periodEntries.filter { entry ->
-            val matchesType = when (selectedTypeFilter) {
-                "EXPENSE" -> entry.isExpense
-                "INCOME" -> entry.isIncome
-                "RECEIVABLE" -> entry.isReceivable
-                "DEBT" -> entry.isDebt
-                else -> true
+    val filteredTransactions = remember(periodEntries, expenses, isIouMode, selectedTypeFilter, searchQuery) {
+        val sourceList = if (isIouMode) {
+            expenses.filter { it.isReceivable || it.isDebt }
+        } else {
+            periodEntries.filter { !it.isReceivable && !it.isDebt }
+        }
+        sourceList.filter { entry ->
+            val matchesType = if (isIouMode) {
+                when (selectedTypeFilter) {
+                    "RECEIVABLE" -> entry.isReceivable && !entry.isSettled
+                    "DEBT" -> entry.isDebt && !entry.isSettled
+                    "SETTLED" -> entry.isSettled
+                    else -> true
+                }
+            } else {
+                when (selectedTypeFilter) {
+                    "EXPENSE" -> entry.isExpense
+                    "INCOME" -> entry.isIncome
+                    else -> true
+                }
             }
             val q = searchQuery.trim().lowercase()
             val matchesQuery = q.isEmpty() ||
@@ -1315,6 +1450,7 @@ private fun ExpenseTrackerSubScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        if (!isIouMode) {
         // 0.a Quick Smart Bank SMS, Receipt Scanner & Daily Expense Reminder Bar
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1914,8 +2050,119 @@ private fun ExpenseTrackerSubScreen(
                 }
             }
         }
+        } // end if (!isIouMode)
 
-        // 2. Add Expense, Income, Receivable, or Debt Card
+        // When in IOU Mode (Tab 1: طلب و بدهی), show the Open Receivables & Debts Summary Card at the top
+        if (isIouMode) {
+            item {
+                val openReceivables = remember(expenses) {
+                    expenses.filter { it.isReceivable && !it.isSettled }
+                }
+                val openDebts = remember(expenses) {
+                    expenses.filter { it.isDebt && !it.isSettled }
+                }
+                val settledItems = remember(expenses) {
+                    expenses.filter { (it.isReceivable || it.isDebt) && it.isSettled }
+                }
+                val totalReceivableMap = remember(openReceivables) {
+                    openReceivables.groupBy { it.currency }.mapValues { (_, list) -> list.sumOf { it.amount } }
+                }
+                val totalDebtMap = remember(openDebts) {
+                    openDebts.groupBy { it.currency }.mapValues { (_, list) -> list.sumOf { it.amount } }
+                }
+
+                LiquidGlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    accentBorderColor = SkyInfo.copy(alpha = 0.6f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "تراز مطالبات و بدهی‌ها",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SkyInfo
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = EmeraldSuccess.copy(alpha = 0.16f)
+                            ) {
+                                Text(
+                                    text = "${PersianDateAndUnitUtils.toPersianDigits(settledItems.size.toString())} مورد تسویه‌شده",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EmeraldSuccess,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = SkyInfo.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, SkyInfo.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "طلب‌های باز (${PersianDateAndUnitUtils.toPersianDigits(openReceivables.size.toString())})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SkyInfo
+                                    )
+                                    Text(
+                                        text = formatCurrMap(totalReceivableMap),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SkyInfo
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = AmberWarning.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "بدهی‌های باز (${PersianDateAndUnitUtils.toPersianDigits(openDebts.size.toString())})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AmberWarning
+                                    )
+                                    Text(
+                                        text = formatCurrMap(totalDebtMap),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = AmberWarning
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Add Expense/Income (Tab 0) OR Receivable/Debt (Tab 1) Card
         item {
             val isIncome = transactionType == "INCOME"
             val isReceivable = transactionType == "RECEIVABLE"
@@ -1937,109 +2184,149 @@ private fun ExpenseTrackerSubScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "ثبت مالی جدید",
+                        text = if (isIouMode) "ثبت طلب یا بدهی جدید" else "ثبت تراکنش جدید (ورودی / خروجی)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
 
-                    // Row 1: EXPENSE and INCOME
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val isExpSelected = transactionType == "EXPENSE"
-                        Button(
-                            onClick = {
-                                transactionType = "EXPENSE"
-                                category = "غذا و کافه"
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isExpSelected) RoseError else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                            ),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isExpSelected) RoseError else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                                contentColor = if (isExpSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("select_expense_type_button")
+                    if (!isIouMode) {
+                        // Row 1: EXPENSE and INCOME (for Tab 0)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("خرج", fontWeight = FontWeight.Bold)
+                            val isExpSelected = transactionType == "EXPENSE"
+                            Button(
+                                onClick = {
+                                    transactionType = "EXPENSE"
+                                    category = customExpenseCategories.firstOrNull() ?: "غذا و کافه"
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isExpSelected) RoseError else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isExpSelected) RoseError else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                    contentColor = if (isExpSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_expense_type_button")
+                            ) {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("خرج (خروجی)", fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    transactionType = "INCOME"
+                                    category = "سایر"
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isIncome) EmeraldSuccess else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isIncome) EmeraldSuccess else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                    contentColor = if (isIncome) Color.White else MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_income_type_button")
+                            ) {
+                                Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("درآمد (ورودی)", fontWeight = FontWeight.Bold)
+                            }
                         }
 
-                        Button(
-                            onClick = {
-                                transactionType = "INCOME"
-                                category = "سایر"
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isIncome) EmeraldSuccess else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                            ),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isIncome) EmeraldSuccess else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                                contentColor = if (isIncome) Color.White else MaterialTheme.colorScheme.onSurface
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("select_income_type_button")
+                        // Quick Recurring Monthly Bills / Common Templates
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("درآمد", fontWeight = FontWeight.Bold)
+                            val quickTemplates = if (isIncome) {
+                                listOf("حقوق ماهانه" to "سایر", "پاداش / کارانه" to "سایر", "سود بانکی" to "سرمایه‌گذاری", "پروژه آزاد" to "سایر")
+                            } else {
+                                listOf("اجاره و شارژ" to "قبوض و اجاره", "بسته اینترنت" to "قبوض و اجاره", "سوپرمارکت" to "خرید", "اسنپ / تاکسی" to "حمل‌ونقل")
+                            }
+                            quickTemplates.forEach { (tplTitle, tplCat) ->
+                                AssistChip(
+                                    onClick = {
+                                        title = tplTitle
+                                        if (customExpenseCategories.contains(tplCat)) {
+                                            category = tplCat
+                                        }
+                                    },
+                                    label = { Text(tplTitle, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
                         }
-                    }
-
-                    // Row 2: RECEIVABLE and DEBT
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                transactionType = "RECEIVABLE"
-                                category = "سایر"
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isReceivable) SkyInfo else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                            ),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isReceivable) SkyInfo else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                                contentColor = if (isReceivable) Color.Black else MaterialTheme.colorScheme.onSurface
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("select_receivable_type_button")
+                    } else {
+                        // Row 2: RECEIVABLE and DEBT (for Tab 1)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("طلبکاری", fontWeight = FontWeight.Bold)
+                            Button(
+                                onClick = {
+                                    transactionType = "RECEIVABLE"
+                                    category = "سایر"
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isReceivable) SkyInfo else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isReceivable) SkyInfo else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                    contentColor = if (isReceivable) Color.Black else MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_receivable_type_button")
+                            ) {
+                                Text("طلب دارم (طلبکاری)", fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    transactionType = "DEBT"
+                                    category = "سایر"
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isDebt) AmberWarning else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDebt) AmberWarning else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                    contentColor = if (isDebt) Color.Black else MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_debt_type_button")
+                            ) {
+                                Text("بدهکارم (بدهکاری)", fontWeight = FontWeight.Bold)
+                            }
                         }
 
-                        Button(
-                            onClick = {
-                                transactionType = "DEBT"
-                                category = "سایر"
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isDebt) AmberWarning else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                            ),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDebt) AmberWarning else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                                contentColor = if (isDebt) Color.Black else MaterialTheme.colorScheme.onSurface
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("select_debt_type_button")
+                        // Quick IOU Subject Templates
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("بدهکاری", fontWeight = FontWeight.Bold)
+                            listOf("قرض دوستانه", "سهم دونگی", "قسط / چک", "رهن و اجاره", "بیعانه").forEach { iouTpl ->
+                                AssistChip(
+                                    onClick = {
+                                        if (title.isBlank()) title = "$iouTpl - " else title = "${title.trim()} ($iouTpl)"
+                                    },
+                                    label = { Text(iouTpl, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
                         }
                     }
 
@@ -2054,8 +2341,8 @@ private fun ExpenseTrackerSubScreen(
                         label = {
                             Text(
                                 when (transactionType) {
-                                    "RECEIVABLE" -> "نام شخص و موضوع طلب *"
-                                    "DEBT" -> "نام شخص و موضوع بدهی *"
+                                    "RECEIVABLE" -> "نام شخص (بدهکار) و بابت *"
+                                    "DEBT" -> "نام شخص (طلبکار) و بابت *"
                                     "INCOME" -> "عنوان درآمد *"
                                     else -> "عنوان خرج *"
                                 }
@@ -2064,8 +2351,8 @@ private fun ExpenseTrackerSubScreen(
                         placeholder = {
                             Text(
                                 when (transactionType) {
-                                    "RECEIVABLE" -> "مثلاً: علی - قرض دستی..."
-                                    "DEBT" -> "مثلاً: رضا - سهم شام..."
+                                    "RECEIVABLE" -> "مثلاً: علی رضایی - قرض دستی..."
+                                    "DEBT" -> "مثلاً: محمد - سهم شام..."
                                     "INCOME" -> "مثلاً: حقوق ماهانه، پروژه..."
                                     else -> "مثلاً: اسنپ، ناهار، قبض برق..."
                                 }
@@ -2112,7 +2399,7 @@ private fun ExpenseTrackerSubScreen(
                         )
                     }
 
-                    // Multi-Currency Selector Row (from PersianDateAndUnitUtils)
+                    // Multi-Currency Selector Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2134,8 +2421,33 @@ private fun ExpenseTrackerSubScreen(
                         }
                     }
 
-                    // Dynamic Expense Categories Selection
+                    // Account / Card Selector + Dynamic Expense Categories (for Tab 0)
                     if (!isDebt && !isReceivable) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("حساب / کارت:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { showAddAccountDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("کارت جدید", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            prefs.financialAccounts.forEach { accName ->
+                                FilterChip(
+                                    selected = selectedAccount == accName,
+                                    onClick = { selectedAccount = accName },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    },
+                                    label = { Text(accName, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2164,8 +2476,12 @@ private fun ExpenseTrackerSubScreen(
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        label = { Text("توضیحات (اختیاری)") },
-                        placeholder = { Text("توضیحات یا موعد تسویه...") },
+                        label = {
+                            Text(if (isIouMode) "موعد تسویه، شماره کارت یا توضیحات (اختیاری)" else "توضیحات (اختیاری)")
+                        },
+                        placeholder = {
+                            Text(if (isIouMode) "مثلاً: تسویه تا آخر ماه / شماره کارت..." else "توضیحات تراکنش...")
+                        },
                         singleLine = false,
                         maxLines = 3,
                         modifier = Modifier
@@ -2199,7 +2515,12 @@ private fun ExpenseTrackerSubScreen(
                                 return@Button
                             }
                             WorldClassOsUtils.HapticSignature.doublePulse(context)
-                            onAddExpense(cleanTitle, category, amt, currency, notes.trim(), transactionType)
+                            val finalNotes = if (!isIouMode && selectedAccount.isNotBlank()) {
+                                if (notes.isNotBlank()) "${notes.trim()} • [$selectedAccount]" else "[$selectedAccount]"
+                            } else {
+                                notes.trim()
+                            }
+                            onAddExpense(cleanTitle, category, amt, currency, finalNotes, transactionType)
                             title = ""
                             amountText = ""
                             notes = ""
@@ -2230,149 +2551,92 @@ private fun ExpenseTrackerSubScreen(
             }
         }
 
-        // 2.b Monthly Spending & Income Trends Native Line Chart
-        item {
-            MonthlySpendingTrendsLineChart(
-                expenses = expenses,
-                defaultCurrency = prefs.defaultCurrency,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        // 2.b2 Animated Radial Donut Chart of Expense Categories (from MonthlyVisualExpensesGlassCard)
-        item {
-            MonthlyVisualExpensesGlassCard(
-                expenses = monthlyEntries,
-                defaultCurrency = prefs.defaultCurrency,
-                onNavigateToExpenses = {},
-                showNavigationButton = false
-            )
-        }
-
-        // 2.b3 Net Worth, Assets & Open Claims Summary Card
-        item {
-            val openReceivables = remember(expenses) {
-                expenses.filter { it.isReceivable && !it.isSettled }
-            }
-            val openDebts = remember(expenses) {
-                expenses.filter { it.isDebt && !it.isSettled }
-            }
-            val totalReceivableMap = remember(openReceivables) {
-                openReceivables.groupBy { it.currency }.mapValues { (_, list) -> list.sumOf { it.amount } }
-            }
-            val totalDebtMap = remember(openDebts) {
-                openDebts.groupBy { it.currency }.mapValues { (_, list) -> list.sumOf { it.amount } }
-            }
-            val allTimeNetByCurr = remember(expenses) {
-                PersianDateAndUnitUtils.aggregateNetBalanceByCurrency(expenses)
+        if (!isIouMode) {
+            // 2.b Monthly Spending & Income Trends Native Line Chart
+            item {
+                MonthlySpendingTrendsLineChart(
+                    expenses = expenses,
+                    defaultCurrency = prefs.defaultCurrency,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                accentBorderColor = SkyInfo.copy(alpha = 0.55f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            // 2.b2 Animated Radial Donut Chart of Expense Categories
+            item {
+                MonthlyVisualExpensesGlassCard(
+                    expenses = monthlyEntries,
+                    defaultCurrency = prefs.defaultCurrency,
+                    onNavigateToExpenses = {},
+                    showNavigationButton = false
+                )
+            }
+
+            // 2.c Dedicated Custom Expense Categories Management Card (with Click to Edit/Rename/Delete)
+            item {
+                LiquidGlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    accentBorderColor = ElectricTeal.copy(alpha = 0.5f)
                 ) {
-                    Text(
-                        text = "تراز کل و مطالبات باز",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SkyInfo
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("تراز خالص کل:", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            text = formatCurrMap(allTimeNetByCurr),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricTeal
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("طلب‌های باز (${PersianDateAndUnitUtils.toPersianDigits(openReceivables.size.toString())}):", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            text = formatCurrMap(totalReceivableMap),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SkyInfo
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("بدهی‌های باز (${PersianDateAndUnitUtils.toPersianDigits(openDebts.size.toString())}):", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            text = formatCurrMap(totalDebtMap),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = AmberWarning
-                        )
-                    }
-                }
-            }
-        }
-
-        // 2.c Dedicated Custom Expense Categories Management Card
-        item {
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                accentBorderColor = ElectricTeal.copy(alpha = 0.5f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Category, contentDescription = null, tint = ElectricTeal)
-                            Text(
-                                text = "دسته‌بندی‌های مالی",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { showAddCategoryDialog = true },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("دسته‌بندی جدید")
-                        }
-                    }
-
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        customExpenseCategories.forEach { cat ->
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.35f))
-                            ) {
+                            Column {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(getCategoryIcon(cat), contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(14.dp))
-                                    Text(cat, style = MaterialTheme.typography.bodyMedium)
+                                    Icon(Icons.Default.Category, contentDescription = null, tint = ElectricTeal)
+                                    Text(
+                                        text = "مدیریت دسته‌بندی‌های مالی",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "برای ویرایش نام یا حذف هر دسته، روی آن ضربه بزنید",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { showAddCategoryDialog = true },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("دسته جدید")
+                            }
+                        }
+
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            customExpenseCategories.forEach { cat ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                    border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.35f)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            editingCategoryOriginalName = cat
+                                            editingCategoryNewName = cat
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(getCategoryIcon(cat), contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(14.dp))
+                                        Text(cat, style = MaterialTheme.typography.bodyMedium)
+                                        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                                    }
                                 }
                             }
                         }
@@ -2451,80 +2715,100 @@ private fun ExpenseTrackerSubScreen(
                         modifier = Modifier.fillMaxWidth().testTag("transaction_search_input")
                     )
 
-                    Text(
-                        text = "بازه زمانی:",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        FinancialPeriodFilter.entries.forEach { period ->
-                            FilterChip(
-                                selected = selectedPeriod == period,
-                                onClick = { selectedPeriod = period },
-                                label = { Text(period.labelFa) }
+                    if (!isIouMode) {
+                        Text(
+                            text = "بازه زمانی:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FinancialPeriodFilter.entries.forEach { period ->
+                                FilterChip(
+                                    selected = selectedPeriod == period,
+                                    onClick = { selectedPeriod = period },
+                                    label = { Text(period.labelFa) }
+                                )
+                            }
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val inOutEntries = periodEntries.filter { !it.isReceivable && !it.isDebt }
+                            listOf(
+                                "ALL" to "همه (${PersianDateAndUnitUtils.toPersianDigits(inOutEntries.size.toString())})",
+                                "EXPENSE" to "خرج‌ها (${PersianDateAndUnitUtils.toPersianDigits(inOutEntries.count { it.isExpense }.toString())})",
+                                "INCOME" to "درآمدها (${PersianDateAndUnitUtils.toPersianDigits(inOutEntries.count { it.isIncome }.toString())})"
+                            ).forEach { (code, lbl) ->
+                                FilterChip(
+                                    selected = selectedTypeFilter == code,
+                                    onClick = { selectedTypeFilter = code },
+                                    label = { Text(lbl) }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("مجموع خرج (${selectedPeriod.labelFa}):", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = formatCurrMap(periodExpenseByCurr),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = RoseError
                             )
                         }
-                    }
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            "ALL" to "همه (${PersianDateAndUnitUtils.toPersianDigits(periodEntries.size.toString())})",
-                            "EXPENSE" to "خرج‌ها (${PersianDateAndUnitUtils.toPersianDigits(periodEntries.count { it.isExpense }.toString())})",
-                            "INCOME" to "درآمدها (${PersianDateAndUnitUtils.toPersianDigits(periodEntries.count { it.isIncome }.toString())})",
-                            "RECEIVABLE" to "طلبکاری‌ها (${PersianDateAndUnitUtils.toPersianDigits(periodEntries.count { it.isReceivable }.toString())})",
-                            "DEBT" to "بدهکاری‌ها (${PersianDateAndUnitUtils.toPersianDigits(periodEntries.count { it.isDebt }.toString())})"
-                        ).forEach { (code, lbl) ->
-                            FilterChip(
-                                selected = selectedTypeFilter == code,
-                                onClick = { selectedTypeFilter = code },
-                                label = { Text(lbl) }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("مجموع درآمد (${selectedPeriod.labelFa}):", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = formatCurrMap(periodIncomeByCurr),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldSuccess
                             )
                         }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("مجموع خرج (${selectedPeriod.labelFa}):", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = formatCurrMap(periodExpenseByCurr),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = RoseError
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("مجموع درآمد (${selectedPeriod.labelFa}):", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = formatCurrMap(periodIncomeByCurr),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = EmeraldSuccess
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("تراز خالص دوره:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            text = formatCurrMap(periodNetByCurr),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricTeal
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("تراز خالص دوره:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = formatCurrMap(periodNetByCurr),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricTeal
+                            )
+                        }
+                    } else {
+                        val allIous = expenses.filter { it.isReceivable || it.isDebt }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "ALL" to "همه (${PersianDateAndUnitUtils.toPersianDigits(allIous.size.toString())})",
+                                "RECEIVABLE" to "طلب‌های باز (${PersianDateAndUnitUtils.toPersianDigits(allIous.count { it.isReceivable && !it.isSettled }.toString())})",
+                                "DEBT" to "بدهی‌های باز (${PersianDateAndUnitUtils.toPersianDigits(allIous.count { it.isDebt && !it.isSettled }.toString())})",
+                                "SETTLED" to "تسویه‌شده‌ها (${PersianDateAndUnitUtils.toPersianDigits(allIous.count { it.isSettled }.toString())})"
+                            ).forEach { (code, lbl) ->
+                                FilterChip(
+                                    selected = selectedTypeFilter == code,
+                                    onClick = { selectedTypeFilter = code },
+                                    label = { Text(lbl) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2539,7 +2823,7 @@ private fun ExpenseTrackerSubScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (searchQuery.isNotBlank()) "تراکنشی با مشخصات «$searchQuery» یافت نشد." else "در بازه «${selectedPeriod.labelFa}» رکوردی ثبت نشده است.",
+                        text = if (searchQuery.isNotBlank()) "تراکنشی با مشخصات «$searchQuery» یافت نشد." else if (isIouMode) "موردی در این بخش از طلب و بدهی ثبت نشده است." else "در بازه «${selectedPeriod.labelFa}» رکوردی ثبت نشده است.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(20.dp)
@@ -2549,6 +2833,7 @@ private fun ExpenseTrackerSubScreen(
         }
 
         items(filteredTransactions, key = { it.id }) { exp ->
+            val clipboardManager = LocalClipboardManager.current
             val badgeColor = when {
                 exp.isReceivable -> SkyInfo
                 exp.isDebt -> AmberWarning
@@ -2649,6 +2934,21 @@ private fun ExpenseTrackerSubScreen(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         if ((exp.isDebt || exp.isReceivable) && !exp.isSettled) {
+                            IconButton(
+                                onClick = {
+                                    val formattedAmt = PersianDateAndUnitUtils.formatCurrencyAmount(exp.amount, exp.currency)
+                                    val msg = if (exp.isReceivable) {
+                                        "سلام وقت بخیر 🌸\nجهت یادآوری، مبلغ $formattedAmt بابت «${exp.title}» ثبت شده است." +
+                                            if (cleanDesc.isNotBlank()) "\nتوضیحات: $cleanDesc" else ""
+                                    } else {
+                                        "صورت‌حساب بدهی: مبلغ $formattedAmt بابت «${exp.title}»"
+                                    }
+                                    clipboardManager.setText(AnnotatedString(msg))
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                }
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "کپی متن یادآوری", tint = SkyInfo, modifier = Modifier.size(18.dp))
+                            }
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = EmeraldSuccess.copy(alpha = 0.2f),

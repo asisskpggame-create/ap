@@ -264,6 +264,7 @@ fun AuthenticatedLifeOsShell(
     }
 
     var currentSectionRoute by rememberSaveable { mutableStateOf(AppSection.DAILY_LOG.route) }
+    var goalsHabitsInitialSubTab by rememberSaveable { mutableStateOf(0) }
     var showVoiceModal by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openVoiceInitially) {
@@ -674,7 +675,23 @@ fun AuthenticatedLifeOsShell(
                                     vm.executeQuickSmartInput(rawText, "QUICK_BAR")
                                 },
                                 onOpenVoiceCapture = { showVoiceModal = true },
-                                onNavigateToSection = { route -> currentSectionRoute = route }
+                                onNavigateToSection = { route ->
+                                    when (route) {
+                                        "GOALS_HABITS_0" -> {
+                                            goalsHabitsInitialSubTab = 0
+                                            currentSectionRoute = AppSection.GOALS_AND_HABITS.route
+                                        }
+                                        "GOALS_HABITS_1" -> {
+                                            goalsHabitsInitialSubTab = 1
+                                            currentSectionRoute = AppSection.GOALS_AND_HABITS.route
+                                        }
+                                        "GOALS_HABITS_2" -> {
+                                            goalsHabitsInitialSubTab = 2
+                                            currentSectionRoute = AppSection.GOALS_AND_HABITS.route
+                                        }
+                                        else -> currentSectionRoute = route
+                                    }
+                                }
                             )
 
                             AppSection.GOALS_AND_HABITS.route -> GoalsAndHabitsCombinedScreen(
@@ -713,7 +730,21 @@ fun AuthenticatedLifeOsShell(
                                 },
                                 onToggleHabitDay = { habit, day ->
                                     vm.toggleHabitForDay(habit, day)
-                                }
+                                },
+                                consumption = consumption,
+                                sleepRecords = sleepRecords,
+                                exerciseRecords = exerciseRecords,
+                                onQuickAddConsumption = { name, cat, qty, unit, notes ->
+                                    vm.quickAddConsumption(name, cat, qty, unit, notes)
+                                },
+                                onDeleteConsumption = { vm.deleteConsumption(it) },
+                                onAddSleep = { dur, qual, notes ->
+                                    vm.addSleepRecord(dur, qual, notes)
+                                },
+                                onAddExercise = { actType, dur, intensity, dist, reps, notes ->
+                                    vm.addExerciseRecord(actType, dur, intensity, dist, reps, notes)
+                                },
+                                initialTabIndex = goalsHabitsInitialSubTab
                             )
 
                             AppSection.DAILY_LOG.route -> DailyLogAndHealthScreen(
