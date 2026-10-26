@@ -184,8 +184,8 @@ fun TasksScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "مدیریت پیشرفته تسک‌ها",
-                    style = MaterialTheme.typography.headlineMedium,
+                    text = "لیست کارها",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -197,7 +197,7 @@ fun TasksScreen(
                         ) {
                             Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("تکمیل گروهی", style = MaterialTheme.typography.labelMedium)
+                            Text("تکمیل همه", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                     Button(
@@ -218,7 +218,7 @@ fun TasksScreen(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "جستجو", tint = ElectricTeal) },
-                placeholder = { Text("جستجو در عنوان، دسته‌بندی، برچسب‌ها یا یادداشت...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
+                placeholder = { Text("جستجو در تسک‌ها...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1106,7 +1106,7 @@ private fun TaskEditorDialog(
                 )
             }
 
-            Text("تکرار (Recurrence):", style = MaterialTheme.typography.labelLarge)
+            Text("تکرار:", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
                     "NONE" to "بدون تکرار",

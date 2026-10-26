@@ -206,7 +206,7 @@ fun HomeDashboardScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "$greeting؛ مرکز نمایش وضعیت و روندها",
+                        text = "$greeting • خلاصه وضعیت امروز",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -245,11 +245,11 @@ fun HomeDashboardScreen(
         // =========================================================================================
         item {
             DashboardStatusCard(
-                title = "وضعیت امور مالی و بودجه",
+                title = "خلاصه مالی امروز",
                 badgeText = "امور مالی",
                 badgeColor = EmeraldSuccess,
                 icon = Icons.Default.AttachMoney,
-                navigationButtonText = "ورود به بخش امور مالی",
+                navigationButtonText = "مدیریت مالی",
                 onNavigate = { onNavigateToSection("DAILY_LOG") }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -260,7 +260,7 @@ fun HomeDashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = "توان خرج روزانه امروز",
+                                text = "سهم مجاز امروز",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -277,7 +277,7 @@ fun HomeDashboardScreen(
                             color = if (safeToSpend.isOverBudgetToday) RoseError.copy(alpha = 0.15f) else EmeraldSuccess.copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = if (safeToSpend.isOverBudgetToday) "فراتر از بودجه" else "وضعیت پایدار",
+                                text = if (safeToSpend.isOverBudgetToday) "عبور از سقف" else "در محدوده مجاز",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (safeToSpend.isOverBudgetToday) RoseError else EmeraldSuccess,
@@ -291,14 +291,16 @@ fun HomeDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "مجموع خرج امروز: $expDisplay",
+                            text = "خرج امروز: $expDisplay",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontWeight = FontWeight.SemiBold,
+                            color = RoseError
                         )
                         Text(
-                            text = "مجموع درآمد امروز: $incDisplay",
+                            text = "درآمد امروز: $incDisplay",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.SemiBold,
+                            color = EmeraldSuccess
                         )
                     }
 
@@ -341,11 +343,11 @@ fun HomeDashboardScreen(
         // =========================================================================================
         item {
             DashboardStatusCard(
-                title = "وضعیت اهداف و تسک‌های امروز",
+                title = "اهداف و کارهای امروز",
                 badgeText = "اهداف و تسک‌ها",
                 badgeColor = SkyInfo,
                 icon = Icons.Default.CheckCircle,
-                navigationButtonText = "ورود به بخش اهداف و تسک‌ها",
+                navigationButtonText = "مدیریت اهداف",
                 onNavigate = { onNavigateToSection("GOALS_AND_HABITS") }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -356,7 +358,7 @@ fun HomeDashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = "درصد تکمیل کارهای امروز",
+                                text = "پیشرفت امروز",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -397,7 +399,7 @@ fun HomeDashboardScreen(
                     )
 
                     Text(
-                        text = "تکمیل شده: ${PersianDateAndUnitUtils.toPersianDigits(completedTodayCount.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(totalTodayTasks.toString())} کار برنامه امروز",
+                        text = "انجام‌شده: ${PersianDateAndUnitUtils.toPersianDigits(completedTodayCount.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(totalTodayTasks.toString())} کار",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -410,11 +412,11 @@ fun HomeDashboardScreen(
         // =========================================================================================
         item {
             DashboardStatusCard(
-                title = "وضعیت عادت‌های روزانه و سلامت",
+                title = "عادت‌ها و شاخص سلامت",
                 badgeText = "سلامت و روتین",
                 badgeColor = ElectricTeal,
                 icon = Icons.AutoMirrored.Filled.DirectionsRun,
-                navigationButtonText = "ورود به بخش عادت‌ها و سلامت",
+                navigationButtonText = "مشاهده عادت‌ها",
                 onNavigate = { onNavigateToSection("GOALS_AND_HABITS") }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

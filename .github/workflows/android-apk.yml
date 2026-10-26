@@ -126,53 +126,50 @@ jobs:
         run: |
           gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.2.0-SuperApp-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.2.0-SuperApp-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.3.0-FinancePro-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.3.0-FinancePro-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-v1.2.0-APKs
+          name: Personal-Life-OS-v1.3.0-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.${{ github.run_number }}
-          name: "Personal Life OS v1.2.${{ github.run_number }} (Super-App + Colloquial Toman Fix + S24 Ultra Verified)"
+          tag_name: v1.3.${{ github.run_number }}
+          name: "Personal Life OS v1.3.${{ github.run_number }} (Finance Pro + Live Bank SMS Inbox + Analytics Hub)"
           body: |
-            ## 💎 Personal Life OS v1.2.0 — Super-App Liquid Glass Edition (`versionCode = 3`)
+            ## 💎 Personal Life OS v1.3.0 — Finance Pro & Liquid Glass Edition (`versionCode = 4`)
 
-            سیستم‌عامل جامع مدیریت زندگی شخصی، سلامت، مالی و دستیار هوشمند فارسی با طراحی **Multi-Layered Liquid Glass**، پشتیبانی کامل از **محاسبه محاوره‌ای تومان در ویس و ثبت هزینه (`۵۰۰ تومان` ⬅ `۵۰۰,۰۰۰ تومان`)** و معماری **Local-First (آفلاین + همگام‌سازی ابری)**.
-
-            ---
-
-            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.2.0` - `versionCode = 3`)
-            - ⭐ **`Personal-Life-OS-v1.2.0-SuperApp-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
-            - 📦 **`Personal-Life-OS-v1.2.0-SuperApp-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
-            > **نکته نصب:** به دلیل ارتقای `versionCode` به `3`، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی مستقیماً روی آن‌ها آپدیت می‌شود.
+            سیستم‌عامل جامع مدیریت مالی، اهداف، عادت‌ها، سلامت و دستیار هوشمند فارسی با اولویت‌بندی **امور مالی به‌عنوان تب اول**، **اتصال زنده به صندوق پیامک‌های بانکی ایران (`READ_SMS`)**، **مدیریت دسته‌بندی‌ها و دکمه‌های ۱-لمسی خرج** و **مرکز نمودار و روند تحلیلی**.
 
             ---
 
-            ### 🆕 قابلیت‌های جدید و اصلاحات نسخه `v1.2.0`
-            1. **🗣️ اصلاح هوشمند محاسبه محاوره‌ای تومان در ثبت صوتی (Voice) و دستی:**
-               - تشخیص هوشمند گفتار محاوره‌ای ایرانی: وقتی در ویس بگویید **«۵۰۰ تومان سیگار خریدم»** یا **«پانصد تومن سیگار خریدم»** یا **«۹۰ تومن قهوه»**، سیستم به‌صورت خودکار عددهای ۱ تا ۹۹۹ تومان را در مقیاس واقعی بازار ایران (**× ۱,۰۰۰** یعنی **`۵۰۰,۰۰۰ تومان`** و **`۹۰,۰۰۰ تومان`**) محاسبه و ثبت می‌کند.
-               - پشتیبانی از عبارات ترکیبی میلیونی (مثل «۲ میلیون و ۵۰۰» ⬅ `۲,۵۰۰,۰۰۰ تومان`) و اعداد حروفی فارسی (`پانصد`، `دویست`، `صد و پنجاه` و غیره).
-               - تشخیص خودکار عنوان کالا (مثل «خرید سیگار» در دسته‌بندی «قهوه، کافه و سیگار») و نمایش پیش‌نمایش زنده معادل محاوره‌ای هنگام تایپ دستی مبلغ.
-            2. **📅 تقویم تعاملی شمسی (جلالی) با نقشه حرارتی (Jalali Calendar Heatmap):**
-               - نمایش ۳۰ روز ماه جاری شمسی با رنگ‌بندی حرارتی بر اساس فعالیت‌های روز (تسک، کالری، آب، هزینه) و مشاهده خلاصه کامل هر روز با لمس آن.
-            3. **🏦 خواننده هوشمند پیامک بانکی ایران (Smart Bank SMS Parser):**
-               - شناسایی خودکار نام بانک (ملت، ملی، بلوبانک، سامان، پاسارگاد، تجارت، صادرات، رسالت و...)، تبدیل خودکار مبالغ **ریال به تومان (÷ ۱۰)**، استخراج مانده حساب و دسته‌بندی هوشمند.
-            4. **📸 اسکنر تصویری غذا و رسید خرید (Gemini Vision Photo Scanner):**
-               - انتخاب عکس غذا یا رسید خرید با Photo Picker استاندارد اندروید (بدون نیاز به دسترسی حافظه) برای تخمین کالری/ماکروها یا استخراج مبلغ رسید به تومان.
-            5. **🔐 قفل امنیتی بیومتریک و پین ۴ رقمی (Biometric & PIN Vault Lock) + موج زنده آب (Animated Water Wave):**
-               - محافظت از اطلاعات مالی و شخصی با اثر انگشت / تشخیص چهره یا پین ۴ رقمی و ویژوالایزر موج سینوسی زنده برای مصرف آب روزانه.
-            6. **📊 خروجی اکسل/CSV ماهانه + حالت روز و شب شیشه‌ای (Daylight & Obsidian Liquid Glass) + فیلتر بخش‌های داشبورد.**
-            7. **🛡️ پایداری ۱۰۰٪ روی Samsung Galaxy S24 Ultra (One UI / Vulkan / 505 PPI).**
+            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.3.0` - `versionCode = 4`)
+            - ⭐ **`Personal-Life-OS-v1.3.0-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
+            - 📦 **`Personal-Life-OS-v1.3.0-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
+            > **نکته نصب:** به دلیل ارتقای `versionCode` به `4`، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی مستقیماً روی آن‌ها آپدیت می‌شود.
+
+            ---
+
+            ### 🆕 قابلیت‌های جدید و بازطراحی نسخه `v1.3.0`
+            1. **💳 بازطراحی کامل تب «امور مالی» و قرارگیری در اولویت اول منوی برنامه:**
+               - تفکیک حرفه‌ای به ۲ بخش اختصاصی: **«ورودی و خروجی‌ها»** و **«طلب و بدهی»**.
+               - **صندوق پیامک‌های بانکی زنده (Auto-SMS Inbox Reader):** خواندن مستقیم پیامک‌های بانکی گوشی (`READ_SMS`)، تشخیص خودکار ۱۷ بانک ایرانی، استخراج مبلغ (تبدیل خودکار ریال به تومان)، نمایش **مانده حساب**، تشخیص خودکار پذیرنده/دسته‌بندی و ثبت تراکنش با ۱ لمس.
+               - **مدیریت دسته‌بندی‌های خرج و مخارج:** امکان افزودن دسته‌بندی‌های سفارشی جدید همراه با آیکون‌های اختصاصی.
+               - **دکمه‌های ثبت سریع ۱-لمسی (1-Tap Presets):** تعریف، ویرایش نام/قیمت و حذف دکمه‌های آماده برای مخارج پرتکرار روزانه.
+               - **لیست پیشرفته تراکنش‌ها:** مجهز به جستجوی زنده، ویرایش کامل تراکنش، تسویه ۱-لمسی طلب/بدهی، پشتیبانی چندارزی (تومان، دلار، یورو، درهم، ریال)، **خروجی اکسل (`CSV`)** و **کپی گزارش متنی**.
+               - **نمودار خطی روند ۳۰ روزه خرج و درآمد (`MonthlySpendingTrendsLineChart`) + نمودار حلقه‌ای سهم دسته‌بندی‌ها (`MonthlyVisualExpensesGlassCard`) + کارت تراز دارایی خالص (`Net Worth`).**
+            2. **📊 تبدیل صفحه خانه به مرکز «نمودار و روند» (Analytics & Trends Hub):**
+               - حذف فرم‌ها و دکمه‌های پراکنده و تمرکز کامل بر نمایش گرافیکی وضعیت، نمودارها و کارت‌های خلاصه به همراه دکمه‌های ناوبری مستقیم به تب‌های تخصصی.
+            3. **🎯 یکپارچه‌سازی تب «اهداف و عادت‌ها» و تب مستقل «سلامت و کالری»:**
+               - تفکیک کامل «اهداف بلندمدت/تسک‌ها» و «عادت‌های روتین روزانه» در تب اهداف و انتقال کامل ثبت خواب، ورزش، آب و کالری به تب اختصاصی سلامت.
           files: |
-            release-assets/Personal-Life-OS-v1.2.0-SuperApp-Debug.apk
-            release-assets/Personal-Life-OS-v1.2.0-SuperApp-Release.apk
+            release-assets/Personal-Life-OS-v1.3.0-FinancePro-Debug.apk
+            release-assets/Personal-Life-OS-v1.3.0-FinancePro-Release.apk
           draft: false
           prerelease: false
         env:

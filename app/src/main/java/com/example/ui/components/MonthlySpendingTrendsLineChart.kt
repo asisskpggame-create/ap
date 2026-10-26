@@ -150,13 +150,13 @@ fun MonthlySpendingTrendsLineChart(
                     }
                     Column {
                         Text(
-                            text = "روند روزانه خرج و درآمد (ماه جاری)",
+                            text = "روند خرج و درآمد",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "مقایسه خطی مخارج در برابر درآمدها",
+                            text = "۱۵ روز اخیر",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

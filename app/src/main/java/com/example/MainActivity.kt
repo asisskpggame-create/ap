@@ -154,9 +154,9 @@ enum class AppSection(
     val icon: ImageVector,
     val isPrimaryBottomNav: Boolean
 ) {
+    DAILY_LOG("DAILY_LOG", "امور مالی", Icons.Default.AttachMoney, true),
     HOME("HOME", "روندها", Icons.Default.TrendingUp, true),
     GOALS_AND_HABITS("GOALS_AND_HABITS", "هدف و عادت", Icons.Default.CheckCircle, true),
-    DAILY_LOG("DAILY_LOG", "امور مالی", Icons.Default.AttachMoney, true),
     AI_ASSISTANT("AI_ASSISTANT", "دستیار", Icons.Default.AutoAwesome, true),
     HISTORY("HISTORY", "تاریخچه", Icons.Default.History, false),
     REPORTS("REPORTS", "گزارش‌ها", Icons.Default.Analytics, false),
@@ -165,6 +165,7 @@ enum class AppSection(
 
 class MainActivity : ComponentActivity() {
     private val launchVoiceQuickTrigger = mutableStateOf(false)
+    private val launchExpenseTabTrigger = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,11 +174,16 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == QuickVoiceTileService.ACTION_QUICK_VOICE) {
             launchVoiceQuickTrigger.value = true
         }
+        if (intent?.action == com.example.notifications.ReminderReceiver.ACTION_OPEN_EXPENSE_LOG) {
+            launchExpenseTabTrigger.value = true
+        }
         enableEdgeToEdge()
         setContent {
             PersonalLifeOSAppRoot(
                 openVoiceInitially = launchVoiceQuickTrigger.value,
-                onConsumedVoiceTrigger = { launchVoiceQuickTrigger.value = false }
+                onConsumedVoiceTrigger = { launchVoiceQuickTrigger.value = false },
+                openExpenseTabInitially = launchExpenseTabTrigger.value,
+                onConsumedExpenseTabTrigger = { launchExpenseTabTrigger.value = false }
             )
         }
     }
@@ -187,13 +193,18 @@ class MainActivity : ComponentActivity() {
         if (intent.action == QuickVoiceTileService.ACTION_QUICK_VOICE) {
             launchVoiceQuickTrigger.value = true
         }
+        if (intent.action == com.example.notifications.ReminderReceiver.ACTION_OPEN_EXPENSE_LOG) {
+            launchExpenseTabTrigger.value = true
+        }
     }
 }
 
 @Composable
 fun PersonalLifeOSAppRoot(
     openVoiceInitially: Boolean = false,
-    onConsumedVoiceTrigger: () -> Unit = {}
+    onConsumedVoiceTrigger: () -> Unit = {},
+    openExpenseTabInitially: Boolean = false,
+    onConsumedExpenseTabTrigger: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentUser by remember(context) { safeAuthStateFlow(context) }.collectAsStateWithLifecycle(
@@ -225,7 +236,9 @@ fun PersonalLifeOSAppRoot(
             userEmail = currentUser?.email,
             vm = vm,
             openVoiceInitially = openVoiceInitially,
-            onConsumedVoiceTrigger = onConsumedVoiceTrigger
+            onConsumedVoiceTrigger = onConsumedVoiceTrigger,
+            openExpenseTabInitially = openExpenseTabInitially,
+            onConsumedExpenseTabTrigger = onConsumedExpenseTabTrigger
         )
     }
 }
@@ -236,7 +249,9 @@ fun AuthenticatedLifeOsShell(
     userEmail: String?,
     vm: LifeOsViewModel,
     openVoiceInitially: Boolean = false,
-    onConsumedVoiceTrigger: () -> Unit = {}
+    onConsumedVoiceTrigger: () -> Unit = {},
+    openExpenseTabInitially: Boolean = false,
+    onConsumedExpenseTabTrigger: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -248,7 +263,7 @@ fun AuthenticatedLifeOsShell(
         }
     }
 
-    var currentSectionRoute by rememberSaveable { mutableStateOf(AppSection.HOME.route) }
+    var currentSectionRoute by rememberSaveable { mutableStateOf(AppSection.DAILY_LOG.route) }
     var showVoiceModal by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openVoiceInitially) {
@@ -258,7 +273,29 @@ fun AuthenticatedLifeOsShell(
         }
     }
 
+    LaunchedEffect(openExpenseTabInitially) {
+        if (openExpenseTabInitially) {
+            currentSectionRoute = AppSection.DAILY_LOG.route
+            onConsumedExpenseTabTrigger()
+        }
+    }
+
     val prefs by vm.preferencesState.collectAsStateWithLifecycle()
+
+    // Keep Daily Expense Reminder scheduled task synchronized with user preferences
+    LaunchedEffect(
+        prefs.dailyExpenseReminderEnabled,
+        prefs.dailyExpenseReminderHour,
+        prefs.dailyExpenseReminderMinute,
+        prefs.notificationsEnabled
+    ) {
+        ReminderScheduler.scheduleDailyExpenseReminder(
+            context = context,
+            enabled = prefs.dailyExpenseReminderEnabled && prefs.notificationsEnabled,
+            hourOfDay = prefs.dailyExpenseReminderHour,
+            minute = prefs.dailyExpenseReminderMinute
+        )
+    }
     var isVaultUnlockedInSession by rememberSaveable { mutableStateOf(false) }
     var manualLockTriggered by rememberSaveable { mutableStateOf(false) }
     val tasksUiState by vm.tasksState.collectAsStateWithLifecycle()

@@ -412,6 +412,9 @@ data class UserPreferencesDoc(
     val themePalette: String = "OBSIDIAN_TEAL", // OBSIDIAN_TEAL, EMERALD_MATRIX, ROYAL_AMETHYST, AMBER_CYBER, NORDIC_FROST, MINIMAL_DAYLIGHT
     val layoutStyle: String = "BENTO_GRID", // BENTO_GRID, COMPACT_PRO, MINIMAL_ZEN, KANBAN_BOARD
     val dashboardCardOrder: List<String> = listOf("QUICK_BAR", "FINANCE", "GOALS", "HABITS", "WELLNESS", "CALENDAR"),
+    val dailyExpenseReminderEnabled: Boolean = true,
+    val dailyExpenseReminderHour: Int = 21,
+    val dailyExpenseReminderMinute: Int = 0,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -429,6 +432,9 @@ data class UserPreferencesDoc(
         "retainConversations" to retainConversations,
         "notificationsEnabled" to notificationsEnabled,
         "onboardingCompleted" to onboardingCompleted,
+        "dailyExpenseReminderEnabled" to dailyExpenseReminderEnabled,
+        "dailyExpenseReminderHour" to dailyExpenseReminderHour,
+        "dailyExpenseReminderMinute" to dailyExpenseReminderMinute,
         "createdAt" to FieldValue.serverTimestamp(),
         "updatedAt" to FieldValue.serverTimestamp()
     )

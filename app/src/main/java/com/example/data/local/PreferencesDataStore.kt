@@ -36,6 +36,9 @@ class PreferencesDataStore(private val context: Context) {
         val THEME_PALETTE = stringPreferencesKey("theme_palette")
         val LAYOUT_STYLE = stringPreferencesKey("layout_style")
         val DASHBOARD_CARD_ORDER = stringPreferencesKey("dashboard_card_order")
+        val DAILY_EXPENSE_REMINDER_ENABLED = booleanPreferencesKey("daily_expense_reminder_enabled")
+        val DAILY_EXPENSE_REMINDER_HOUR = intPreferencesKey("daily_expense_reminder_hour")
+        val DAILY_EXPENSE_REMINDER_MINUTE = intPreferencesKey("daily_expense_reminder_minute")
     }
 
     fun observeLocalPreferences(userId: String): Flow<UserPreferencesDoc> {
@@ -66,7 +69,10 @@ class PreferencesDataStore(private val context: Context) {
                 vaultPinCode = prefs[Keys.VAULT_PIN_CODE] ?: "",
                 themePalette = prefs[Keys.THEME_PALETTE] ?: "OBSIDIAN_TEAL",
                 layoutStyle = prefs[Keys.LAYOUT_STYLE] ?: "BENTO_GRID",
-                dashboardCardOrder = cardOrder
+                dashboardCardOrder = cardOrder,
+                dailyExpenseReminderEnabled = prefs[Keys.DAILY_EXPENSE_REMINDER_ENABLED] ?: true,
+                dailyExpenseReminderHour = prefs[Keys.DAILY_EXPENSE_REMINDER_HOUR] ?: 21,
+                dailyExpenseReminderMinute = prefs[Keys.DAILY_EXPENSE_REMINDER_MINUTE] ?: 0
             )
         }
     }
@@ -103,6 +109,9 @@ class PreferencesDataStore(private val context: Context) {
             prefs[Keys.THEME_PALETTE] = doc.themePalette
             prefs[Keys.LAYOUT_STYLE] = doc.layoutStyle
             prefs[Keys.DASHBOARD_CARD_ORDER] = doc.dashboardCardOrder.joinToString(",")
+            prefs[Keys.DAILY_EXPENSE_REMINDER_ENABLED] = doc.dailyExpenseReminderEnabled
+            prefs[Keys.DAILY_EXPENSE_REMINDER_HOUR] = doc.dailyExpenseReminderHour
+            prefs[Keys.DAILY_EXPENSE_REMINDER_MINUTE] = doc.dailyExpenseReminderMinute
         }
     }
 }

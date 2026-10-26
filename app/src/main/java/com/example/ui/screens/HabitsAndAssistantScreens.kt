@@ -100,14 +100,6 @@ fun HabitsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            Text(
-                text = "ردیاب هوشمند عادت‌ها و استمرار (Streaks)",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
         // Create Habit Card
         item {
             LiquidGlassCard(
@@ -119,7 +111,7 @@ fun HabitsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("تعریف عادت جدید یا انتخاب از پیشنهادها", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("عادت جدید", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -193,12 +185,12 @@ fun HabitsScreen(
         if (habits.isEmpty()) {
             item {
                 com.example.ui.components.GlassEmptyState(
-                    title = "اولین عادت مثبتت رو شروع کن ✦",
-                    subtitle = "عادت‌های کوچک روزانه، پایه‌های موفقیت بزرگ هستند. یکی از پیشنهادهای آماده را انتخاب کن یا عادت دلخواهت را بنویس.",
-                    badgeText = "✦ ساخت عادات پایدار",
+                    title = "هنوز عادتی ثبت نشده",
+                    subtitle = "یکی از پیشنهادهای بالا را انتخاب کنید یا عادت دلخواه خود را بسازید.",
+                    badgeText = "روتین روزانه",
                     icon = Icons.Default.LocalFireDepartment,
                     accentColor = MutedViolet,
-                    actionButtonText = "شروع با مطالعه روزانه (۲۰ دقیقه)",
+                    actionButtonText = "افزودن مطالعه روزانه",
                     actionButtonIcon = Icons.Default.Add,
                     onActionButtonClick = {
                         onCreateHabit("مطالعه روزانه (۲۰ دقیقه)", "شخصی", "DAILY", listOf(1, 2, 3, 4, 5, 6, 7), 1)
@@ -293,10 +285,10 @@ fun HabitsScreen(
                         }
                     }
 
-                    // 14-Day Interactive Calendar Heatmap (Allows historical corrections)
+                    // 14-Day Interactive Calendar Heatmap
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "نقشه حرارتی ۱۴ روز اخیر (لمس هر روز برای ثبت یا اصلاح تاریخی):",
+                            text = "وضعیت ۱۴ روز اخیر:",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -381,13 +373,13 @@ fun AiAssistantScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "دستیار شخصی Gemini",
-                        style = MaterialTheme.typography.headlineMedium,
+                        text = "دستیار هوشمند",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "متصل به Firebase AI Logic و داده‌های واقعی شما",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "ثبت سریع صوتی و متنی",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -431,13 +423,13 @@ fun AiAssistantScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = "چطور می‌توانم کمکتان کنم؟",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "آماده دریافت دستور",
+                                style = MaterialTheme.typography.titleSmall,
                                 color = ElectricTeal,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "می‌توانید درباره آمار واقعی تسک‌ها، مصرف آب، قهوه، هزینه‌های ماهانه، خواب و عادت‌های خود بپرسید یا دستور ثبت آیتم جدید بدهید. تمامی عملیات‌های تغییردهنده پیش از اجرا به تأیید شما می‌رسند.",
+                                text = "می‌توانید با متن یا صدا تراکنش مالی، تسک و عادت جدید ثبت کنید یا گزارش عملکرد بگیرید.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -459,8 +451,9 @@ fun AiAssistantScreen(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = if (isUser) "شما" else "🤖 دستیار هوشمند Gemini",
+                                text = if (isUser) "شما" else "دستیار هوشمند",
                                 style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = if (isUser) ElectricTeal else MutedViolet
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -504,7 +497,7 @@ fun AiAssistantScreen(
             OutlinedTextField(
                 value = inputPrompt,
                 onValueChange = { inputPrompt = it },
-                placeholder = { Text("پیام یا دستور به Gemini (فارسی / انگلیسی)...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+                placeholder = { Text("پیام یا دستور خود را بنویسید...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("ai_chat_input"),

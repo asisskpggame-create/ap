@@ -60,14 +60,15 @@ fun MonthlyVisualExpensesGlassCard(
     expenses: List<ExpenseEntry>,
     defaultCurrency: String,
     onNavigateToExpenses: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showNavigationButton: Boolean = true
 ) {
     val todayEpochDay = PersianDateAndUnitUtils.currentLocalEpochDay()
     val jalaliToday = PersianDateAndUnitUtils.epochDayToJalali(todayEpochDay)
 
     // Filter expenses belonging to the current Jalali month and year
     val currentMonthExpenses = expenses.filter { exp ->
-        if (exp.isIncome) return@filter false
+        if (!exp.isExpense) return@filter false
         val expJalali = PersianDateAndUnitUtils.epochDayToJalali(exp.localEpochDay)
         expJalali.year == jalaliToday.year && expJalali.month == jalaliToday.month
     }
@@ -84,28 +85,46 @@ fun MonthlyVisualExpensesGlassCard(
     )
 
     val categoryColors = mapOf(
-        "FOOD" to Color(0xFFFFB300),      // Amber
-        "COFFEE" to Color(0xFFFF8A65),    // Peach / Coral
-        "SHOPPING" to Color(0xFF10B981),  // Emerald
-        "TRANSPORT" to Color(0xFF00E5FF), // Cyan
-        "BILLS" to Color(0xFFA78BFA),     // Violet
-        "HEALTH" to Color(0xFFFF5252),    // Rose
-        "OTHER" to Color(0xFF38BDF8)      // Sky
+        "FOOD" to Color(0xFFFFB300),
+        "غذا و کافه" to Color(0xFFFFB300),
+        "COFFEE" to Color(0xFFFF8A65),
+        "SHOPPING" to Color(0xFF10B981),
+        "خرید" to Color(0xFF10B981),
+        "TRANSPORT" to Color(0xFF00E5FF),
+        "حمل‌ونقل" to Color(0xFF00E5FF),
+        "BILLS" to Color(0xFFA78BFA),
+        "قبوض و اجاره" to Color(0xFFA78BFA),
+        "HEALTH" to Color(0xFFFF5252),
+        "سلامت و درمان" to Color(0xFFFF5252),
+        "تفریح و سرگرمی" to Color(0xFFF472B6),
+        "سرمایه‌گذاری" to Color(0xFF34D399),
+        "آموزش" to Color(0xFF60A5FA),
+        "OTHER" to Color(0xFF38BDF8),
+        "سایر" to Color(0xFF38BDF8)
     )
 
     val categoryTitles = mapOf(
-        "FOOD" to "خوراک و رستوران",
+        "FOOD" to "غذا و کافه",
         "COFFEE" to "کافه و نوشیدنی",
-        "SHOPPING" to "خرید و پوشاک",
-        "TRANSPORT" to "حمل‌ونقل و سوخت",
-        "BILLS" to "قبوض و شارژ",
-        "HEALTH" to "سلامت و دارو",
-        "OTHER" to "سایر هزینه‌ها"
+        "SHOPPING" to "خرید",
+        "TRANSPORT" to "حمل‌ونقل",
+        "BILLS" to "قبوض و اجاره",
+        "HEALTH" to "سلامت و درمان",
+        "OTHER" to "سایر"
+    )
+
+    val fallbackPalette = listOf(
+        Color(0xFF38BDF8),
+        Color(0xFFA78BFA),
+        Color(0xFFF472B6),
+        Color(0xFFFB923C),
+        Color(0xFF2DD4BF)
     )
 
     val groupedCategories = currentMonthExpenses
         .groupBy { it.category }
-        .map { (cat, list) ->
+        .entries
+        .mapIndexed { idx, (cat, list) ->
             val sum = list.sumOf { it.amount }
             val ratio = if (totalSpent > 0.0) (sum / totalSpent).toFloat() else 0f
             CategorySlice(
@@ -113,7 +132,7 @@ fun MonthlyVisualExpensesGlassCard(
                 titleFa = categoryTitles[cat] ?: cat,
                 totalAmount = sum,
                 percentage = ratio,
-                color = categoryColors[cat] ?: Color(0xFF818CF8)
+                color = categoryColors[cat] ?: fallbackPalette[idx % fallbackPalette.size]
             )
         }
         .sortedByDescending { it.totalAmount }
@@ -133,14 +152,14 @@ fun MonthlyVisualExpensesGlassCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("visual_expenses_summary_card"),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         accentBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header Row
             Row(
@@ -168,7 +187,7 @@ fun MonthlyVisualExpensesGlassCard(
                     }
                     Column {
                         Text(
-                            text = "تحلیل بصری هزینه‌های این ماه",
+                            text = "سهم دسته‌بندی مخارج",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -176,25 +195,27 @@ fun MonthlyVisualExpensesGlassCard(
                         val monthNameFa = PersianDateAndUnitUtils.jalaliMonthNamesFa.getOrElse(jalaliToday.month - 1) { "ماه جاری" }
                         Text(
                             text = "$monthNameFa ${PersianDateAndUnitUtils.toPersianDigits(jalaliToday.year.toString())}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                    modifier = Modifier.clickable { onNavigateToExpenses() }
-                ) {
-                    Text(
-                        text = "لاگ مخارج ←",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
+                if (showNavigationButton) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier.clickable { onNavigateToExpenses() }
+                    ) {
+                        Text(
+                            text = "امور مالی",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
                 }
             }
 

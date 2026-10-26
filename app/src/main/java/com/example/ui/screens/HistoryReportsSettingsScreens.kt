@@ -848,6 +848,8 @@ fun SettingsScreen(
     var sleepInput by remember(prefs.dailySleepTargetMinutes) { mutableStateOf((prefs.dailySleepTargetMinutes / 60).toString()) }
     var exerciseInput by remember(prefs.dailyExerciseTargetMinutes) { mutableStateOf(prefs.dailyExerciseTargetMinutes.toString()) }
     var monthlyBudgetInput by remember(prefs.monthlyBudgetTarget) { mutableStateOf(prefs.monthlyBudgetTarget.toLong().toString()) }
+    var reminderHourInput by remember(prefs.dailyExpenseReminderHour) { mutableStateOf(prefs.dailyExpenseReminderHour.toString().padStart(2, '0')) }
+    var reminderMinuteInput by remember(prefs.dailyExpenseReminderMinute) { mutableStateOf(prefs.dailyExpenseReminderMinute.toString().padStart(2, '0')) }
     var vaultPinInput by remember(prefs.vaultPinCode) { mutableStateOf(prefs.vaultPinCode) }
     var exportedJsonPreview by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -1096,17 +1098,62 @@ fun SettingsScreen(
             }
         }
 
-        // 3. Collapsible Drawer: Daily Targets & Monthly Budget
+        // 3. Collapsible Drawer: Daily Targets, Budget & Expense Reminder
         item {
             CollapsibleGlassSection(
-                title = "اهداف روزانه و بودجه",
-                subtitle = "آب: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyWaterTargetMl.toString())}ml • ورزش: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyExerciseTargetMinutes.toString())} دقیقه",
+                title = "اهداف روزانه، بودجه و یادآور مالی",
+                subtitle = "آب: ${PersianDateAndUnitUtils.toPersianDigits(prefs.dailyWaterTargetMl.toString())}ml • یادآور: ${PersianDateAndUnitUtils.toPersianDigits("${prefs.dailyExpenseReminderHour.toString().padStart(2, '0')}:${prefs.dailyExpenseReminderMinute.toString().padStart(2, '0')}")}",
                 badgeText = if (targetsSectionExpanded) "بستن" else "باز کردن",
                 icon = Icons.Default.TrackChanges,
                 accentColor = EmeraldSuccess,
                 expanded = targetsSectionExpanded,
                 onToggle = { targetsSectionExpanded = !targetsSectionExpanded }
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("یادآور روزانه ثبت هزینه‌ها", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Switch(
+                        checked = prefs.dailyExpenseReminderEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdatePrefs(prefs.copy(dailyExpenseReminderEnabled = enabled))
+                            com.example.notifications.ReminderScheduler.scheduleDailyExpenseReminder(
+                                context = context,
+                                enabled = enabled,
+                                hourOfDay = prefs.dailyExpenseReminderHour,
+                                minute = prefs.dailyExpenseReminderMinute
+                            )
+                        },
+                        modifier = Modifier.testTag("settings_daily_expense_reminder_switch")
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = reminderHourInput,
+                        onValueChange = { reminderHourInput = PersianDateAndUnitUtils.toEnglishDigits(it).take(2) },
+                        label = { Text("ساعت یادآور (۰-۲۳)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = reminderMinuteInput,
+                        onValueChange = { reminderMinuteInput = PersianDateAndUnitUtils.toEnglishDigits(it).take(2) },
+                        label = { Text("دقیقه یادآور (۰-۵۹)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+
                 OutlinedTextField(
                     value = monthlyBudgetInput,
                     onValueChange = { monthlyBudgetInput = PersianDateAndUnitUtils.toEnglishDigits(it) },
@@ -1149,13 +1196,23 @@ fun SettingsScreen(
                         val sHours = sleepInput.toIntOrNull()?.coerceIn(3, 14) ?: (prefs.dailySleepTargetMinutes / 60)
                         val exMin = exerciseInput.toIntOrNull()?.coerceIn(5, 300) ?: prefs.dailyExerciseTargetMinutes
                         val budget = monthlyBudgetInput.toDoubleOrNull()?.coerceAtLeast(100_000.0) ?: prefs.monthlyBudgetTarget
+                        val remH = reminderHourInput.toIntOrNull()?.coerceIn(0, 23) ?: prefs.dailyExpenseReminderHour
+                        val remM = reminderMinuteInput.toIntOrNull()?.coerceIn(0, 59) ?: prefs.dailyExpenseReminderMinute
                         onUpdatePrefs(
                             prefs.copy(
                                 dailyWaterTargetMl = w,
                                 dailySleepTargetMinutes = sHours * 60,
                                 dailyExerciseTargetMinutes = exMin,
-                                monthlyBudgetTarget = budget
+                                monthlyBudgetTarget = budget,
+                                dailyExpenseReminderHour = remH,
+                                dailyExpenseReminderMinute = remM
                             )
+                        )
+                        com.example.notifications.ReminderScheduler.scheduleDailyExpenseReminder(
+                            context = context,
+                            enabled = prefs.dailyExpenseReminderEnabled,
+                            hourOfDay = remH,
+                            minute = remM
                         )
                     },
                     modifier = Modifier.fillMaxWidth()

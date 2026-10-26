@@ -67,24 +67,17 @@ fun GoalsAndHabitsCombinedScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Unified Header
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = "اهداف و عادت‌های روزانه",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "مدیریت منسجم اهداف بلندمدت، پروژه‌ها و عادت‌های روتین روزانه در دو بخش کاملاً مجزا",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = "اهداف و عادت‌ها",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
 
         // Segmented Section Selector (Unified 2-Part Switcher)
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
             modifier = Modifier
                 .fillMaxWidth()
@@ -97,8 +90,8 @@ fun GoalsAndHabitsCombinedScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val sections = listOf(
-                    0 to "اهداف بلندمدت و تسک‌ها",
-                    1 to "عادت‌های روتین روزانه"
+                    0 to "اهداف و تسک‌ها",
+                    1 to "عادت‌های روزانه"
                 )
 
                 sections.forEach { (index, title) ->
