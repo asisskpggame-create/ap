@@ -334,12 +334,15 @@ $cleanInput
             .replace("انجامشده", "انجام‌شده")
             .trim()
 
-        // 1. Check if it's a Question / Historical Query first
+        // 1. Check if it's a Question / Historical / Analytical Query first
         if (norm.contains("؟") || norm.contains("?") ||
             norm.startsWith("چه ") || norm.startsWith("چقدر ") || norm.startsWith("چند ") ||
             norm.contains("باقی مونده") || norm.contains("باقی مانده") ||
             norm.contains("دیروز چی") || norm.contains("خلاصه") ||
-            norm.contains("تغییرات") || norm.contains("کدام عادت")
+            norm.contains("تغییرات") || norm.contains("کدام عادت") ||
+            norm.contains("بیشترین هزینه") || norm.contains("بیشترین خرج") ||
+            norm.contains("وضعیت بدهی") || norm.contains("برنامه بازپرداخت") ||
+            norm.contains("روند عادت")
         ) {
             return answerHistoricalQueryFactual(
                 norm = norm,
@@ -352,6 +355,30 @@ $cleanInput
                 sleepRecords = sleepRecords,
                 exerciseRecords = exerciseRecords,
                 recentEvents = recentEvents
+            )
+        }
+
+        // 1B. Check for ambiguous sensitive/destructive debt or expense commands without amount/target
+        if ((norm.contains("تسویه بدهی") || norm.contains("حذف بدهی") || norm.contains("پرداخت قسط")) &&
+            !Regex("\\d+").containsMatchIn(norm)
+        ) {
+            val unsettled = expenses.filter { it.isDebt && !it.isSettled }
+            val debtHint = if (unsettled.isNotEmpty()) {
+                "بدهی‌های باز شما: ${unsettled.take(3).joinToString("، ") { "«${it.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(it.remainingAmount, it.currency)})" }}"
+            } else {
+                "در حال حاضر بدهی بازی ثبت نشده است."
+            }
+            val op = ProposedAiOperation(
+                operationType = "AskClarification",
+                requiresConfirmation = true,
+                clarificationQuestion = "لطفاً مشخص فرمایید کدام بدهی یا قسط و به چه مبلغی مد نظر شماست؟ ($debtHint)",
+                humanReadablePreview = "نیاز به شفاف‌سازی و تأیید عملیات حساس مالی"
+            )
+            return AiParseResult(
+                conversationalReply = op.clarificationQuestion,
+                operations = listOf(op),
+                isAmbiguous = true,
+                clarificationPrompt = op.clarificationQuestion
             )
         }
 
@@ -551,8 +578,16 @@ $cleanInput
                     currency = currency,
                     transactionType = txType,
                     dueDateOffsetDays = dateOffset,
-                    requiresConfirmation = false,
+                    requiresConfirmation = true,
                     humanReadablePreview = "ثبت $txLabel: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($title)"
+                )
+            } else {
+                val txLabel = if (isReceivableIntent) "طلبکاری" else "بدهکاری"
+                return ProposedAiOperation(
+                    operationType = "AskClarification",
+                    requiresConfirmation = true,
+                    clarificationQuestion = "مبلغ دقیق $txLabel و نام شخص یا عنوان آن چقدر است؟",
+                    humanReadablePreview = "نیاز به مبلغ و عنوان $txLabel"
                 )
             }
         }
@@ -587,7 +622,7 @@ $cleanInput
                     currency = currency,
                     transactionType = "INCOME",
                     dueDateOffsetDays = dateOffset,
-                    requiresConfirmation = false,
+                    requiresConfirmation = true,
                     humanReadablePreview = "ثبت درآمد: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($cleanedIncomeTitle)"
                 )
             }
@@ -675,7 +710,7 @@ $cleanInput
                 currency = currency,
                 transactionType = "EXPENSE",
                 dueDateOffsetDays = dateOffset,
-                requiresConfirmation = false,
+                requiresConfirmation = true,
                 humanReadablePreview = "ثبت هزینه: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($title)"
             )
         }
@@ -877,6 +912,29 @@ $cleanInput
                 }.sumOf { it.quantity }.toInt()
                 "📊 واقعیت ثبت‌شده: در ۷ روز گذشته ${PersianDateAndUnitUtils.toPersianDigits(count.toString())} وعده قهوه ثبت شده است."
             }
+            norm.contains("بیشترین هزینه") || norm.contains("بیشترین خرج") -> {
+                val monthExp = expenses.filter { it.localEpochDay in (todayEpochDay - 29)..todayEpochDay && it.isExpense }
+                if (monthExp.isEmpty()) {
+                    "📊 واقعیت ثبت‌شده (بازه ۳۰ روز اخیر): داده کافی نیست — هیچ هزینه‌ای در ۳۰ روز گذشته ثبت نشده است."
+                } else {
+                    val topCat = monthExp.groupBy { it.category }
+                        .mapValues { entry -> entry.value.sumOf { it.amount } }
+                        .maxByOrNull { it.value }
+                    val currency = monthExp.first().currency
+                    "📊 واقعیت ثبت‌شده (بازه ۳۰ روز اخیر): بیشترین هزینه شما در دسته «${topCat?.key ?: "نامشخص"}» به مبلغ ${PersianDateAndUnitUtils.formatCurrencyAmount(topCat?.value ?: 0.0, currency)} بوده است."
+                }
+            }
+            norm.contains("بدهی") || norm.contains("قسط") || norm.contains("بازپرداخت") -> {
+                val openDebts = expenses.filter { it.isDebt && !it.isSettled }
+                if (openDebts.isEmpty()) {
+                    "📊 واقعیت ثبت‌شده: در حال حاضر هیچ بدهی تسویه‌نشده‌ای در سیستم ثبت نشده است."
+                } else {
+                    val totalRem = openDebts.sumOf { it.remainingAmount }
+                    val curr = openDebts.first().currency
+                    val linkedTasksCount = tasks.count { it.linkedDebtId.isNotBlank() && it.status != "COMPLETED" }
+                    "📊 واقعیت ثبت‌شده: شما ${PersianDateAndUnitUtils.toPersianDigits(openDebts.size.toString())} بدهی باز با مانده کل ${PersianDateAndUnitUtils.formatCurrencyAmount(totalRem, curr)} دارید (${PersianDateAndUnitUtils.toPersianDigits(linkedTasksCount.toString())} قسط فعال در بخش اهداف و مسیر)."
+                }
+            }
             norm.contains("خرج") || norm.contains("هزینه") -> {
                 val totals = PersianDateAndUnitUtils.aggregateExpensesByCurrency(
                     expenses.filter { it.localEpochDay in (todayEpochDay - 29)..todayEpochDay }
@@ -909,12 +967,13 @@ $cleanInput
             norm.contains("عادت") -> {
                 val doneIds = habitRecords.filter { it.localEpochDay == todayEpochDay }.map { it.habitId }.toSet()
                 val missed = habits.filter { !it.archived && it.id !in doneIds }
+                val weekRecordsCount = habitRecords.count { it.localEpochDay in (todayEpochDay - 6)..todayEpochDay }
                 if (habits.isEmpty()) {
                     "📊 واقعیت ثبت‌شده: هنوز عادتی تعریف نکرده‌اید."
                 } else if (missed.isEmpty()) {
-                    "📊 واقعیت ثبت‌شده: عالی! تمام عادت‌های امروز را انجام داده‌اید."
+                    "📊 واقعیت ثبت‌شده (بازه امروز و ۷ روز اخیر): عالی! تمام عادت‌های امروز انجام شده‌اند (مجموع ثبت ۷ روز اخیر: ${PersianDateAndUnitUtils.toPersianDigits(weekRecordsCount.toString())} مورد)."
                 } else {
-                    "📊 واقعیت ثبت‌شده: عادت‌های انجام‌نشده امروز: ${missed.joinToString("، ") { "«${it.title}»" }}"
+                    "📊 واقعیت ثبت‌شده (بازه امروز و ۷ روز اخیر): عادت‌های انجام‌نشده امروز: ${missed.joinToString("، ") { "«${it.title}»" }} (مجموع ثبت ۷ روز اخیر: ${PersianDateAndUnitUtils.toPersianDigits(weekRecordsCount.toString())} مورد)."
                 }
             }
             norm.contains("تغییرات") || norm.contains("جمینای") -> {

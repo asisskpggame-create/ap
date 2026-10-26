@@ -28,6 +28,7 @@ import com.example.data.model.HabitRecord
 import com.example.data.model.SleepRecord
 import com.example.data.model.Task
 import com.example.data.model.UserPreferencesDoc
+import com.example.notifications.ReminderScheduler
 import com.example.util.PersianDateAndUnitUtils
 import com.example.util.WorldClassOsUtils
 import com.google.firebase.Firebase
@@ -429,7 +430,8 @@ class LifeOsRepository(
         recurrenceIntervalDays: Int = 0,
         notes: String = "",
         inputSource: String = "MANUAL",
-        idempotencyKey: String = ""
+        idempotencyKey: String = "",
+        linkedDebtId: String = ""
     ): Result<String> {
         val uid = resolveActiveUserId()
         if (idempotencyKey.isNotBlank()) {
@@ -456,8 +458,20 @@ class LifeOsRepository(
             recurrenceIntervalDays = recurrenceIntervalDays.coerceIn(0, 366),
             notes = notes.take(5000),
             inputSource = inputSource,
-            idempotencyKey = idempotencyKey.take(128)
+            idempotencyKey = idempotencyKey.take(128),
+            linkedDebtId = linkedDebtId.take(128)
         )
+
+        if (reminderAtMillis > System.currentTimeMillis()) {
+            ReminderScheduler.scheduleEntityReminder(
+                context = null,
+                entityType = "TASK",
+                entityId = taskId,
+                title = "یادآور تسک: ${task.title}",
+                body = task.description.ifBlank { "دسته: ${task.category}" },
+                triggerAtMillis = reminderAtMillis
+            )
+        }
 
         if (localDao != null) {
             localDao.upsertTask(CachedTaskEntity.fromDomain(task, synced = false))
@@ -547,6 +561,7 @@ class LifeOsRepository(
         val uid = resolveActiveUserId()
         require(task.id.isNotBlank()) { "Task ID must not be blank" }
         val nowMillis = System.currentTimeMillis()
+        ReminderScheduler.cancelEntityReminder(null, "TASK", task.id)
 
         if (localDao != null) {
             val completedTask = task.copy(userId = uid, status = "COMPLETED", completedAtMillis = nowMillis)
@@ -647,6 +662,18 @@ class LifeOsRepository(
     suspend fun updateTask(task: Task, inputSource: String = "MANUAL"): Result<Unit> {
         val uid = resolveActiveUserId()
         require(task.id.isNotBlank()) { "Task ID must not be blank" }
+        if (task.status == "COMPLETED" || task.status == "ARCHIVED") {
+            ReminderScheduler.cancelEntityReminder(null, "TASK", task.id)
+        } else if (task.reminderAtMillis > System.currentTimeMillis()) {
+            ReminderScheduler.rescheduleEntityReminder(
+                context = null,
+                entityType = "TASK",
+                entityId = task.id,
+                title = "یادآور تسک: ${task.title}",
+                body = task.description.ifBlank { "دسته: ${task.category}" },
+                newTriggerAtMillis = task.reminderAtMillis
+            )
+        }
 
         if (localDao != null) {
             localDao.upsertTask(CachedTaskEntity.fromDomain(task.copy(userId = uid), synced = false))
@@ -708,8 +735,18 @@ class LifeOsRepository(
 
     suspend fun deleteTask(task: Task, inputSource: String = "MANUAL"): Result<Unit> {
         val uid = resolveActiveUserId()
+        ReminderScheduler.cancelEntityReminder(null, "TASK", task.id)
         if (localDao != null) {
             localDao.deleteCachedTask(uid, task.id)
+            localDao.enqueueSyncOperation(
+                SyncQueueEntity(
+                    userId = uid,
+                    operation = "DELETE",
+                    entityType = "TASK",
+                    entityId = task.id,
+                    payloadJson = JSONObject().put("title", task.title).toString()
+                )
+            )
             logActivityEvent(
                 eventType = "TASK_DELETED",
                 entityType = "TASK",
@@ -819,6 +856,15 @@ class LifeOsRepository(
         val uid = resolveActiveUserId()
         if (localDao != null) {
             localDao.deleteCachedConsumption(uid, entry.id)
+            localDao.enqueueSyncOperation(
+                SyncQueueEntity(
+                    userId = uid,
+                    operation = "DELETE",
+                    entityType = "CONSUMPTION",
+                    entityId = entry.id,
+                    payloadJson = JSONObject().put("itemName", entry.itemName).toString()
+                )
+            )
             logActivityEvent(
                 eventType = "CONSUMPTION_DELETED",
                 entityType = "CONSUMPTION",
@@ -1009,6 +1055,15 @@ class LifeOsRepository(
         val uid = resolveActiveUserId()
         if (localDao != null) {
             localDao.deleteCachedCustomItem(uid, itemId)
+            localDao.enqueueSyncOperation(
+                SyncQueueEntity(
+                    userId = uid,
+                    operation = "DELETE",
+                    entityType = "CUSTOM_ITEM",
+                    entityId = itemId,
+                    payloadJson = JSONObject().put("name", itemName).toString()
+                )
+            )
             logActivityEvent(
                 eventType = "CUSTOM_ITEM_DELETED",
                 entityType = "CUSTOM_ITEM",
@@ -1043,7 +1098,11 @@ class LifeOsRepository(
         notes: String = "",
         inputSource: String = "MANUAL",
         idempotencyKey: String = "",
-        transactionType: String = "EXPENSE"
+        transactionType: String = "EXPENSE",
+        paidAmount: Double = 0.0,
+        dueEpochDay: Long = -1L,
+        installmentCount: Int = 1,
+        linkedDebtId: String = ""
     ): Result<String> {
         val uid = resolveActiveUserId()
         if (idempotencyKey.isNotBlank()) {
@@ -1054,6 +1113,7 @@ class LifeOsRepository(
             return Result.failure(IllegalArgumentException("وارد کردن تیتر / دلیل برای ثبت خرج یا درآمد الزامی است."))
         }
         val normType = when {
+            transactionType.equals("TRANSFER", ignoreCase = true) -> "TRANSFER"
             transactionType.equals("INCOME", ignoreCase = true) -> "INCOME"
             transactionType.equals("DEBT", ignoreCase = true) -> "DEBT"
             transactionType.equals("RECEIVABLE", ignoreCase = true) -> "RECEIVABLE"
@@ -1062,18 +1122,21 @@ class LifeOsRepository(
             else -> "EXPENSE"
         }
         val docPrefix = when (normType) {
+            "TRANSFER" -> "trf"
             "INCOME" -> "inc"
             "DEBT", "DEBT_SETTLED" -> "dbt"
             "RECEIVABLE", "RECEIVABLE_SETTLED" -> "rcv"
             else -> "exp"
         }
         val expenseId = cleanDocId(docPrefix)
+        val safeAmount = amount.coerceAtLeast(0.0)
+        val safePaid = paidAmount.coerceIn(0.0, safeAmount)
         val expense = ExpenseEntry(
             id = expenseId,
             userId = uid,
             title = cleanTitle,
             category = category,
-            amount = amount.coerceAtLeast(0.0),
+            amount = safeAmount,
             currency = currency.uppercase(),
             timestampMillis = System.currentTimeMillis(),
             localEpochDay = localEpochDay,
@@ -1081,20 +1144,39 @@ class LifeOsRepository(
             notes = notes.take(2000),
             inputSource = inputSource,
             idempotencyKey = idempotencyKey.take(128),
-            transactionType = normType
+            transactionType = normType,
+            paidAmount = safePaid,
+            dueEpochDay = dueEpochDay,
+            installmentCount = installmentCount.coerceAtLeast(1),
+            linkedDebtId = linkedDebtId.take(128)
         )
 
         val labelFa = when (normType) {
+            "TRANSFER" -> "انتقال بین حساب شخصی"
             "INCOME" -> "ثبت درآمد"
             "DEBT" -> "ثبت بدهکاری"
             "RECEIVABLE" -> "ثبت طلبکاری"
             else -> "ثبت خرج"
         }
         val evType = when (normType) {
+            "TRANSFER" -> "TRANSFER_ADDED"
             "INCOME" -> "INCOME_ADDED"
             "DEBT" -> "DEBT_ADDED"
             "RECEIVABLE" -> "RECEIVABLE_ADDED"
             else -> "EXPENSE_ADDED"
+        }
+
+        if ((normType == "DEBT" || normType == "RECEIVABLE") && dueEpochDay > PersianDateAndUnitUtils.currentLocalEpochDay()) {
+            val triggerMillis = System.currentTimeMillis() + (dueEpochDay - PersianDateAndUnitUtils.currentLocalEpochDay()) * 86_400_000L
+            ReminderScheduler.scheduleEntityReminder(
+                context = null,
+                entityType = "DEBT",
+                entityId = expenseId,
+                title = "یادآور سررسید: ${expense.title}",
+                body = "مبلغ: ${PersianDateAndUnitUtils.formatCurrencyAmount(expense.remainingAmount, expense.currency)}",
+                triggerAtMillis = triggerMillis,
+                hideSensitiveContent = true
+            )
         }
 
         if (localDao != null) {
@@ -1136,6 +1218,243 @@ class LifeOsRepository(
         }
     }
 
+    /**
+     * Phase 2 (debt-goal-link): Creates repayment tasks in Path linked to a single master debt record.
+     * Rule: Never creates a second debt record. Tasks only reference [debtEntry.id] via [Task.linkedDebtId].
+     */
+    suspend fun createDebtRepaymentPlan(
+        debtEntry: ExpenseEntry,
+        installmentCount: Int,
+        firstDueEpochDay: Long = if (debtEntry.dueEpochDay > 0) debtEntry.dueEpochDay else PersianDateAndUnitUtils.currentLocalEpochDay() + 30L,
+        intervalDays: Int = 30
+    ): Result<List<Task>> {
+        val uid = resolveActiveUserId()
+        require(debtEntry.id.isNotBlank()) { "Debt ID must not be blank" }
+        val safeCount = installmentCount.coerceIn(1, 60)
+        val remaining = debtEntry.remainingAmount.coerceAtLeast(0.0)
+        val perInstallmentAmount = if (safeCount > 0) remaining / safeCount else remaining
+
+        if (localDao != null) {
+            val updatedDebt = debtEntry.copy(
+                userId = uid,
+                installmentCount = safeCount,
+                dueEpochDay = firstDueEpochDay
+            )
+            localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(updatedDebt, synced = false))
+
+            val existingLinked = localDao.getTasksLinkedToDebt(uid, debtEntry.id)
+            if (existingLinked.isNotEmpty()) {
+                return Result.success(existingLinked.map { it.toDomain() })
+            }
+        }
+
+        val createdTasks = mutableListOf<Task>()
+        for (i in 1..safeCount) {
+            val dueDay = firstDueEpochDay + (i - 1) * intervalDays.toLong()
+            val formattedAmt = PersianDateAndUnitUtils.formatCurrencyAmount(perInstallmentAmount, debtEntry.currency)
+            val taskTitle = if (safeCount == 1) {
+                "بازپرداخت بدهی: ${debtEntry.title} ($formattedAmt)"
+            } else {
+                "قسط ${PersianDateAndUnitUtils.toPersianDigits(i.toString())} از ${PersianDateAndUnitUtils.toPersianDigits(safeCount.toString())} • ${debtEntry.title} ($formattedAmt)"
+            }
+            val idemKey = "debt_plan_${debtEntry.id}_inst_$i"
+            val taskIdRes = createTask(
+                title = taskTitle,
+                description = "ارجاع به بدهی اصلی «${debtEntry.title}» به مبلغ کل ${PersianDateAndUnitUtils.formatCurrencyAmount(debtEntry.amount, debtEntry.currency)}",
+                category = "مالی",
+                tags = listOf("قسط", "بدهی"),
+                priority = "HIGH",
+                dueDateEpochDay = dueDay,
+                notes = "مبلغ این قسط: $formattedAmt",
+                inputSource = "MANUAL",
+                idempotencyKey = idemKey,
+                linkedDebtId = debtEntry.id
+            )
+            val taskId = taskIdRes.getOrNull()
+            if (taskId != null && localDao != null) {
+                localDao.getTasksForUser(uid).find { it.id == taskId }?.toDomain()?.let {
+                    createdTasks.add(it)
+                }
+            }
+        }
+        return Result.success(createdTasks)
+    }
+
+    /**
+     * Phase 2 (debt-goal-link): Records a partial or installment payment against a master debt/receivable.
+     * Rules:
+     * - Idempotent per (debtId, linkedTaskId / idempotencyKey): paying an installment from Path never double-records.
+     * - Reduces remainingAmount by increasing paidAmount.
+     * - If paidAmount reaches amount, transitions status to SETTLED and marks linked tasks COMPLETED.
+     */
+    suspend fun recordDebtPartialPayment(
+        debtEntry: ExpenseEntry,
+        paymentAmount: Double,
+        linkedTaskId: String = "",
+        idempotencyKey: String = ""
+    ): Result<ExpenseEntry> {
+        val uid = resolveActiveUserId()
+        require(debtEntry.id.isNotBlank()) { "Debt ID must not be blank" }
+        if (paymentAmount <= 0.0) {
+            return Result.failure(IllegalArgumentException("مبلغ پرداخت باید بیشتر از صفر باشد."))
+        }
+
+        val effectiveIdemKey = when {
+            idempotencyKey.isNotBlank() -> idempotencyKey
+            linkedTaskId.isNotBlank() -> "debt_pay_${debtEntry.id}_task_$linkedTaskId"
+            else -> ""
+        }
+
+        val currentDebt = if (localDao != null) {
+            localDao.getExpenseById(uid, debtEntry.id)?.toDomain() ?: debtEntry
+        } else {
+            debtEntry
+        }
+
+        if (effectiveIdemKey.isNotBlank()) {
+            val idemMapKey = "$uid:debtpay:$effectiveIdemKey"
+            if (recentIdempotencyKeys.containsKey(idemMapKey)) {
+                return Result.success(currentDebt)
+            }
+            recentIdempotencyKeys[idemMapKey] = currentDebt.id
+        }
+
+        if (currentDebt.isSettled) {
+            return Result.success(currentDebt)
+        }
+
+        val newPaid = (currentDebt.paidAmount + paymentAmount).coerceAtMost(currentDebt.amount)
+        val isNowSettled = newPaid >= currentDebt.amount - 0.001
+        val newType = when {
+            currentDebt.isDebt && isNowSettled -> "DEBT_SETTLED"
+            currentDebt.isDebt -> "DEBT"
+            currentDebt.isReceivable && isNowSettled -> "RECEIVABLE_SETTLED"
+            else -> "RECEIVABLE"
+        }
+        val updatedNotes = if (isNowSettled && !currentDebt.notes.contains("[SETTLED]")) {
+            "${currentDebt.notes} [SETTLED]".trim()
+        } else {
+            currentDebt.notes
+        }
+
+        val updatedDebt = currentDebt.copy(
+            userId = uid,
+            paidAmount = newPaid,
+            transactionType = newType,
+            notes = updatedNotes
+        )
+
+        if (localDao != null) {
+            localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(updatedDebt, synced = false))
+            if (linkedTaskId.isNotBlank()) {
+                ReminderScheduler.cancelEntityReminder(null, "TASK", linkedTaskId)
+                val linkedTasks = localDao.getTasksLinkedToDebt(uid, currentDebt.id)
+                linkedTasks.find { it.id == linkedTaskId && it.status != "COMPLETED" }?.let { taskEntity ->
+                    localDao.upsertTask(
+                        taskEntity.copy(
+                            status = "COMPLETED",
+                            completedAtMillis = System.currentTimeMillis(),
+                            syncedWithCloud = false
+                        )
+                    )
+                }
+            }
+            if (isNowSettled) {
+                val linkedTasks = localDao.getTasksLinkedToDebt(uid, currentDebt.id)
+                ReminderScheduler.cancelDebtAndLinkedTaskReminders(
+                    context = null,
+                    debtId = currentDebt.id,
+                    linkedTaskIds = linkedTasks.map { it.id }
+                )
+                for (taskEntity in linkedTasks) {
+                    if (taskEntity.status != "COMPLETED") {
+                        localDao.upsertTask(
+                            taskEntity.copy(
+                                status = "COMPLETED",
+                                completedAtMillis = System.currentTimeMillis(),
+                                syncedWithCloud = false
+                            )
+                        )
+                    }
+                }
+            }
+            logActivityEvent(
+                eventType = if (isNowSettled) "DEBT_SETTLED" else "DEBT_PARTIAL_PAYMENT",
+                entityType = "EXPENSE",
+                entityId = currentDebt.id,
+                inputSource = "MANUAL",
+                beforeSummary = "paid=${currentDebt.paidAmount}/${currentDebt.amount}",
+                afterSummary = "paid=$newPaid/${currentDebt.amount}",
+                humanSummary = if (isNowSettled) {
+                    "تسویه کامل «${currentDebt.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(currentDebt.amount, currentDebt.currency)})"
+                } else {
+                    "ثبت پرداخت جزئی «${currentDebt.title}»: ${PersianDateAndUnitUtils.formatCurrencyAmount(paymentAmount, currentDebt.currency)} (مانده: ${PersianDateAndUnitUtils.formatCurrencyAmount(updatedDebt.remainingAmount, currentDebt.currency)})"
+                }
+            )
+            return Result.success(updatedDebt)
+        }
+
+        return Result.success(updatedDebt)
+    }
+
+    /**
+     * Phase 2 (debt-goal-link): Updates due date or total amount of a master debt record
+     * and propagates due date changes to linked pending tasks.
+     */
+    suspend fun updateDebtScheduleOrAmount(
+        debtEntry: ExpenseEntry,
+        newAmount: Double = debtEntry.amount,
+        newDueEpochDay: Long = debtEntry.dueEpochDay
+    ): Result<ExpenseEntry> {
+        val uid = resolveActiveUserId()
+        val safeAmount = newAmount.coerceAtLeast(debtEntry.paidAmount)
+        val isNowSettled = safeAmount > 0.0 && debtEntry.paidAmount >= safeAmount - 0.001
+        val newType = when {
+            debtEntry.isDebt && isNowSettled -> "DEBT_SETTLED"
+            debtEntry.isDebt -> "DEBT"
+            debtEntry.isReceivable && isNowSettled -> "RECEIVABLE_SETTLED"
+            else -> "RECEIVABLE"
+        }
+        val updated = debtEntry.copy(
+            userId = uid,
+            amount = safeAmount,
+            dueEpochDay = newDueEpochDay,
+            transactionType = newType
+        )
+        if ( isNowSettled ) {
+            ReminderScheduler.cancelEntityReminder(null, "DEBT", debtEntry.id)
+        } else if (newDueEpochDay > PersianDateAndUnitUtils.currentLocalEpochDay()) {
+            val triggerMillis = System.currentTimeMillis() + (newDueEpochDay - PersianDateAndUnitUtils.currentLocalEpochDay()) * 86_400_000L
+            ReminderScheduler.rescheduleEntityReminder(
+                context = null,
+                entityType = "DEBT",
+                entityId = debtEntry.id,
+                title = "یادآور سررسید: ${updated.title}",
+                body = "مبلغ: ${PersianDateAndUnitUtils.formatCurrencyAmount(updated.remainingAmount, updated.currency)}",
+                newTriggerAtMillis = triggerMillis,
+                hideSensitiveContent = true
+            )
+        }
+        if (localDao != null) {
+            localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(updated, synced = false))
+            if (newDueEpochDay > 0) {
+                val linkedTasks = localDao.getTasksLinkedToDebt(uid, debtEntry.id)
+                    .filter { it.status != "COMPLETED" }
+                    .sortedBy { it.dueDateEpochDay }
+                linkedTasks.forEachIndexed { idx, taskEntity ->
+                    val nextDay = newDueEpochDay + idx * 30L
+                    localDao.upsertTask(
+                        taskEntity.copy(
+                            dueDateEpochDay = nextDay,
+                            syncedWithCloud = false
+                        )
+                    )
+                }
+            }
+        }
+        return Result.success(updated)
+    }
+
     suspend fun settleDebtOrReceivable(entry: ExpenseEntry): Result<Unit> {
         val uid = resolveActiveUserId()
         require(entry.id.isNotBlank()) { "Entry ID must not be blank" }
@@ -1144,6 +1463,7 @@ class LifeOsRepository(
         val settledEntry = entry.copy(
             userId = uid,
             transactionType = settledType,
+            paidAmount = entry.amount,
             notes = updatedNotes
         )
         val labelFa = if (entry.isDebt) "تسویه بدهکاری" else "وصول طلبکاری"
@@ -1151,6 +1471,23 @@ class LifeOsRepository(
 
         if (localDao != null) {
             localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(settledEntry, synced = false))
+            val linkedTasks = localDao.getTasksLinkedToDebt(uid, entry.id)
+            ReminderScheduler.cancelDebtAndLinkedTaskReminders(
+                context = null,
+                debtId = entry.id,
+                linkedTaskIds = linkedTasks.map { it.id }
+            )
+            for (taskEntity in linkedTasks) {
+                if (taskEntity.status != "COMPLETED") {
+                    localDao.upsertTask(
+                        taskEntity.copy(
+                            status = "COMPLETED",
+                            completedAtMillis = System.currentTimeMillis(),
+                            syncedWithCloud = false
+                        )
+                    )
+                }
+            }
             logActivityEvent(
                 eventType = evType,
                 entityType = "EXPENSE",
@@ -1194,6 +1531,15 @@ class LifeOsRepository(
         }
         if (localDao != null) {
             localDao.deleteCachedExpense(uid, expense.id)
+            localDao.enqueueSyncOperation(
+                SyncQueueEntity(
+                    userId = uid,
+                    operation = "DELETE",
+                    entityType = "EXPENSE",
+                    entityId = expense.id,
+                    payloadJson = JSONObject().put("title", expense.title).put("amount", expense.amount).toString()
+                )
+            )
             logActivityEvent(
                 eventType = "EXPENSE_DELETED",
                 entityType = "EXPENSE",
@@ -1660,6 +2006,19 @@ class LifeOsRepository(
                             })
                         }
                     })
+                    put("unsyncedExpensesSnapshot", JSONArray().apply {
+                        unsyncedExp.forEach { e ->
+                            put(JSONObject().apply {
+                                put("id", e.id)
+                                put("title", e.title)
+                                put("category", e.category)
+                                put("amount", e.amount)
+                                put("currency", e.currency)
+                                put("transactionType", e.transactionType)
+                                put("localEpochDay", e.localEpochDay)
+                            })
+                        }
+                    })
                 }
                 val plainSnapshot = snapshotJson.toString(2)
                 val outFile = File(context.applicationContext.filesDir, "personal_life_os_6h_sync.json")
@@ -1670,15 +2029,36 @@ class LifeOsRepository(
                 )
             }
 
-            // 1b. Drain FIFO sync_queue entries
+            // 1b. Drain FIFO sync_queue entries (including propagating DELETE tombstones to Firestore)
+            val cloudUid = auth?.currentUser?.uid
             val fifoQueue = dao.getPendingSyncQueue(uid)
             for (qItem in fifoQueue) {
+                if (qItem.operation == "DELETE" && cloudUid != null && cloudDb != null) {
+                    val subCollection = when (qItem.entityType) {
+                        "TASK" -> "tasks"
+                        "CONSUMPTION" -> "consumptionEntries"
+                        "CUSTOM_ITEM" -> "customItems"
+                        "EXPENSE" -> "expenses"
+                        "HABIT" -> "habits"
+                        "HABIT_RECORD" -> "habitRecords"
+                        else -> null
+                    }
+                    if (subCollection != null) {
+                        try {
+                            cloudDb.collection("users").document(cloudUid)
+                                .collection(subCollection)
+                                .document(qItem.entityId)
+                                .delete()
+                                .await()
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
                 dao.markSyncQueueItemSynced(qItem.queueId)
             }
             dao.pruneSyncedQueueItems(uid)
 
             // 2. If signed in with a Google Account, push unsynced records to Cloud Firestore
-            val cloudUid = auth?.currentUser?.uid
             if (cloudUid != null && cloudDb != null) {
                 val userDoc = cloudDb.collection("users").document(cloudUid)
 

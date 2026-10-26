@@ -360,28 +360,28 @@ object PersianDateAndUnitUtils {
     }
 
     /**
-     * Aggregates active (unsettled) debt entries (بدهکاری) strictly grouped by currency.
+     * Aggregates active (unsettled) debt entries (بدهکاری) strictly grouped by currency using remainingAmount.
      */
     fun aggregateDebtsByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
         val result = linkedMapOf<String, Double>()
         for (entry in entries) {
             if (entry.isDebt && !entry.isSettled) {
                 val curr = entry.currency.uppercase(Locale.US)
-                result[curr] = (result[curr] ?: 0.0) + entry.amount
+                result[curr] = (result[curr] ?: 0.0) + entry.remainingAmount
             }
         }
         return result
     }
 
     /**
-     * Aggregates active (unsettled) receivable entries (طلبکاری) strictly grouped by currency.
+     * Aggregates active (unsettled) receivable entries (طلبکاری) strictly grouped by currency using remainingAmount.
      */
     fun aggregateReceivablesByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
         val result = linkedMapOf<String, Double>()
         for (entry in entries) {
             if (entry.isReceivable && !entry.isSettled) {
                 val curr = entry.currency.uppercase(Locale.US)
-                result[curr] = (result[curr] ?: 0.0) + entry.amount
+                result[curr] = (result[curr] ?: 0.0) + entry.remainingAmount
             }
         }
         return result
@@ -389,11 +389,12 @@ object PersianDateAndUnitUtils {
 
     /**
      * Aggregates net balance (Income - Expense) strictly grouped by currency.
+     * Personal account transfers (isTransfer), debts, and receivables are excluded.
      */
     fun aggregateNetBalanceByCurrency(entries: List<ExpenseEntry>): Map<String, Double> {
         val result = linkedMapOf<String, Double>()
         for (entry in entries) {
-            if (!entry.isIncome && !entry.isExpense) continue
+            if (entry.isTransfer || (!entry.isIncome && !entry.isExpense)) continue
             val curr = entry.currency.uppercase(Locale.US)
             val signed = if (entry.isIncome) entry.amount else -entry.amount
             result[curr] = (result[curr] ?: 0.0) + signed

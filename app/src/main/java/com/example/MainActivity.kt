@@ -154,10 +154,10 @@ enum class AppSection(
     val icon: ImageVector,
     val isPrimaryBottomNav: Boolean
 ) {
-    DAILY_LOG("DAILY_LOG", "امور مالی", Icons.Default.AttachMoney, true),
-    HOME("HOME", "روندها", Icons.Default.TrendingUp, true),
-    GOALS_AND_HABITS("GOALS_AND_HABITS", "هدف و عادت", Icons.Default.CheckCircle, true),
-    AI_ASSISTANT("AI_ASSISTANT", "دستیار", Icons.Default.AutoAwesome, true),
+    DAILY_LOG("DAILY_LOG", "مالی", Icons.Default.AttachMoney, true),
+    GOALS_AND_HABITS("GOALS_AND_HABITS", "اهداف و مسیر", Icons.Default.CheckCircle, true),
+    HOME("HOME", "داشبورد", Icons.Default.GridView, true),
+    AI_ASSISTANT("AI_ASSISTANT", "AI", Icons.Default.AutoAwesome, true),
     HISTORY("HISTORY", "تاریخچه", Icons.Default.History, false),
     REPORTS("REPORTS", "گزارش‌ها", Icons.Default.Analytics, false),
     SETTINGS("SETTINGS", "تنظیمات", Icons.Default.Settings, false)
@@ -677,17 +677,20 @@ fun AuthenticatedLifeOsShell(
                                 onOpenVoiceCapture = { showVoiceModal = true },
                                 onNavigateToSection = { route ->
                                     when (route) {
-                                        "GOALS_HABITS_0" -> {
+                                        "GOALS_HABITS_0", "TASKS" -> {
                                             goalsHabitsInitialSubTab = 0
                                             currentSectionRoute = AppSection.GOALS_AND_HABITS.route
                                         }
-                                        "GOALS_HABITS_1" -> {
+                                        "GOALS_HABITS_1", "HABITS" -> {
                                             goalsHabitsInitialSubTab = 1
                                             currentSectionRoute = AppSection.GOALS_AND_HABITS.route
                                         }
-                                        "GOALS_HABITS_2" -> {
+                                        "GOALS_HABITS_2", "HEALTH" -> {
                                             goalsHabitsInitialSubTab = 2
                                             currentSectionRoute = AppSection.GOALS_AND_HABITS.route
+                                        }
+                                        "DAILY_LOG_DEBT", "DAILY_LOG_0", "DAILY_LOG" -> {
+                                            currentSectionRoute = AppSection.DAILY_LOG.route
                                         }
                                         else -> currentSectionRoute = route
                                     }
@@ -772,6 +775,12 @@ fun AuthenticatedLifeOsShell(
                                     vm.addExpense(title, cat, amount, curr, notes, txType)
                                 },
                                 onSettleDebtOrReceivable = { vm.settleDebtOrReceivable(it) },
+                                onRecordPartialPayment = { entry, amt ->
+                                    vm.recordDebtPartialPayment(entry, amt)
+                                },
+                                onCreateInstallmentPlan = { entry, count ->
+                                    vm.createDebtRepaymentPlan(entry, count)
+                                },
                                 onDeleteExpense = { vm.deleteExpense(it) },
                                 onAddSleep = { dur, qual, notes ->
                                     vm.addSleepRecord(dur, qual, notes)

@@ -524,6 +524,7 @@ class LifeOsViewModel(
             if (res.isSuccess) {
                 val expId = res.getOrThrow()
                 val typeLabel = when {
+                    transactionType.equals("TRANSFER", ignoreCase = true) -> "انتقال بین حساب"
                     transactionType.equals("INCOME", ignoreCase = true) -> "درآمد"
                     transactionType.equals("DEBT", ignoreCase = true) -> "بدهکاری"
                     transactionType.equals("RECEIVABLE", ignoreCase = true) -> "طلبکاری"
@@ -533,6 +534,48 @@ class LifeOsViewModel(
                     val currentList = (expensesState.value as? UiState.Success)?.data.orEmpty()
                     currentList.find { it.id == expId }?.let { repository.deleteExpense(it) }
                 }
+            }
+        }
+    }
+
+    fun recordDebtPartialPayment(
+        entry: ExpenseEntry,
+        paymentAmount: Double,
+        linkedTaskId: String = "",
+        idempotencyKey: String = ""
+    ) {
+        viewModelScope.launch {
+            val normalizedPay = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(paymentAmount, entry.currency)
+            val res = repository.recordDebtPartialPayment(
+                debtEntry = entry,
+                paymentAmount = normalizedPay,
+                linkedTaskId = linkedTaskId,
+                idempotencyKey = idempotencyKey
+            )
+            if (res.isSuccess) {
+                val updated = res.getOrThrow()
+                val msg = if (updated.isSettled) {
+                    "«${entry.title}» به‌طور کامل تسویه شد و کارهای مرتبط در مسیر تکمیل گردید."
+                } else {
+                    "پرداخت جزئی ${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedPay, entry.currency)} ثبت شد • مانده: ${PersianDateAndUnitUtils.formatCurrencyAmount(updated.remainingAmount, entry.currency)}"
+                }
+                postSnackbar(msg)
+            }
+        }
+    }
+
+    fun createDebtRepaymentPlan(
+        entry: ExpenseEntry,
+        installmentCount: Int
+    ) {
+        viewModelScope.launch {
+            val res = repository.createDebtRepaymentPlan(
+                debtEntry = entry,
+                installmentCount = installmentCount
+            )
+            if (res.isSuccess) {
+                val count = res.getOrDefault(emptyList()).size
+                postSnackbar("برنامه بازپرداخت (${PersianDateAndUnitUtils.toPersianDigits(count.toString())} قسط) در بخش «اهداف و مسیر» ایجاد شد.")
             }
         }
     }
@@ -843,11 +886,11 @@ class LifeOsViewModel(
 
                     "AddExpense" -> {
                         val curr = op.currency.ifBlank { preferencesState.value.defaultCurrency }
-                        val normalizedAmt = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(op.amount, curr)
+                        val confirmedAmt = op.amount.coerceAtLeast(0.0)
                         repository.addExpense(
                             title = op.title.ifBlank { "هزینه" },
                             category = op.category.ifBlank { "OTHER" },
-                            amount = normalizedAmt,
+                            amount = confirmedAmt,
                             currency = curr,
                             localEpochDay = targetDay,
                             notes = op.notes,
@@ -995,8 +1038,44 @@ class LifeOsViewModel(
                 }
             })
             put("consumptionCount", consumption.size)
+            put("consumption", JSONArray().apply {
+                consumption.forEach { c ->
+                    put(JSONObject().apply {
+                        put("id", c.id)
+                        put("itemName", c.itemName)
+                        put("category", c.category)
+                        put("quantity", c.quantity)
+                        put("unit", c.unit)
+                        put("localEpochDay", c.localEpochDay)
+                    })
+                }
+            })
             put("expensesCount", expenses.size)
+            put("expenses", JSONArray().apply {
+                expenses.forEach { e ->
+                    put(JSONObject().apply {
+                        put("id", e.id)
+                        put("title", e.title)
+                        put("category", e.category)
+                        put("amount", e.amount)
+                        put("currency", e.currency)
+                        put("transactionType", e.transactionType)
+                        put("localEpochDay", e.localEpochDay)
+                        put("notes", e.cleanNotes)
+                    })
+                }
+            })
             put("habitsCount", habits.size)
+            put("habits", JSONArray().apply {
+                habits.forEach { h ->
+                    put(JSONObject().apply {
+                        put("id", h.id)
+                        put("title", h.title)
+                        put("category", h.category)
+                        put("scheduleType", h.scheduleType)
+                    })
+                }
+            })
             put("sleepRecordsCount", sleep.size)
             put("exerciseRecordsCount", exercise.size)
         }

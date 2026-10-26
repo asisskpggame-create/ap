@@ -73,6 +73,13 @@ data class SafeToSpendSummary(
     val dailyAllowanceBeforeToday: Double get() = baseDailySafeAllowance
     val remainingTodayAllowance: Double get() = remainingSafeToSpendToday
     val isOverDailyLimit: Boolean get() = isOverBudgetToday
+    val spentLast30Days: Double get() = spentThisMonth
+    val projectedEndOfMonthSpend: Double
+        get() = if (currentDayOfMonth > 0 && spentThisMonth > 0.0) {
+            (spentThisMonth / currentDayOfMonth.coerceAtLeast(1)) * totalDaysInMonth
+        } else {
+            spentThisMonth
+        }
     val burnRateRatio: Float
         get() = if (baseDailySafeAllowance > 0.0) {
             (spentToday / baseDailySafeAllowance).toFloat().coerceIn(0f, 1f)

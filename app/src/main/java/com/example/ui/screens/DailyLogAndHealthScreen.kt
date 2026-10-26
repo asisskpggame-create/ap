@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HomeWork
 import androidx.compose.material.icons.filled.Inbox
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -243,6 +245,8 @@ fun DailyLogAndHealthScreen(
     onDeleteCustomItem: (CustomItem) -> Unit = {},
     onAddExpense: (title: String, category: String, amount: Double, currency: String, notes: String, transactionType: String) -> Unit,
     onSettleDebtOrReceivable: (ExpenseEntry) -> Unit = {},
+    onRecordPartialPayment: (ExpenseEntry, Double) -> Unit = { _, _ -> },
+    onCreateInstallmentPlan: (ExpenseEntry, Int) -> Unit = { _, _ -> },
     onDeleteExpense: (ExpenseEntry) -> Unit,
     onAddSleep: (durationMinutes: Int, qualityRating: Int, notes: String) -> Unit,
     onAddExercise: (activityType: String, durationMinutes: Int, intensity: String, distanceMeters: Double, repetitions: Int, notes: String) -> Unit,
@@ -328,6 +332,8 @@ fun DailyLogAndHealthScreen(
                 onUpdateCustomItem = onUpdateCustomItem,
                 onDeleteCustomItem = onDeleteCustomItem,
                 onSettleDebtOrReceivable = onSettleDebtOrReceivable,
+                onRecordPartialPayment = onRecordPartialPayment,
+                onCreateInstallmentPlan = onCreateInstallmentPlan,
                 onDeleteExpense = onDeleteExpense,
                 onUpdatePrefs = onUpdatePrefs,
                 initialFilter = "ALL"
@@ -344,6 +350,8 @@ fun DailyLogAndHealthScreen(
                 onUpdateCustomItem = onUpdateCustomItem,
                 onDeleteCustomItem = onDeleteCustomItem,
                 onSettleDebtOrReceivable = onSettleDebtOrReceivable,
+                onRecordPartialPayment = onRecordPartialPayment,
+                onCreateInstallmentPlan = onCreateInstallmentPlan,
                 onDeleteExpense = onDeleteExpense,
                 onUpdatePrefs = onUpdatePrefs,
                 initialFilter = "IOU"
@@ -374,6 +382,8 @@ private fun ExpenseTrackerSubScreen(
     onUpdateCustomItem: (CustomItem) -> Unit = {},
     onDeleteCustomItem: (CustomItem) -> Unit = {},
     onSettleDebtOrReceivable: (ExpenseEntry) -> Unit = {},
+    onRecordPartialPayment: (ExpenseEntry, Double) -> Unit = { _, _ -> },
+    onCreateInstallmentPlan: (ExpenseEntry, Int) -> Unit = { _, _ -> },
     onDeleteExpense: (ExpenseEntry) -> Unit,
     onUpdatePrefs: (UserPreferencesDoc) -> Unit = {},
     initialFilter: String = "ALL"
@@ -2241,6 +2251,30 @@ private fun ExpenseTrackerSubScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("درآمد (ورودی)", fontWeight = FontWeight.Bold)
                             }
+
+                            val isTransfer = transactionType == "TRANSFER"
+                            Button(
+                                onClick = {
+                                    transactionType = "TRANSFER"
+                                    category = "انتقال حساب"
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isTransfer) SkyInfo else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isTransfer) SkyInfo else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                    contentColor = if (isTransfer) Color.Black else MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_transfer_type_button")
+                            ) {
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("انتقال حساب", fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         // Quick Recurring Monthly Bills / Common Templates
@@ -2835,12 +2869,14 @@ private fun ExpenseTrackerSubScreen(
         items(filteredTransactions, key = { it.id }) { exp ->
             val clipboardManager = LocalClipboardManager.current
             val badgeColor = when {
+                exp.isTransfer -> SkyInfo
                 exp.isReceivable -> SkyInfo
                 exp.isDebt -> AmberWarning
                 exp.isIncome -> EmeraldSuccess
                 else -> RoseError
             }
             val badgeLabel = when {
+                exp.isTransfer -> "انتقال بین حساب"
                 exp.isReceivable -> if (exp.isSettled) "طلب (تسویه‌شده)" else "طلبکاری"
                 exp.isDebt -> if (exp.isSettled) "بدهی (تسویه‌شده)" else "بدهکاری"
                 exp.isIncome -> "درآمد"
@@ -2900,12 +2936,23 @@ private fun ExpenseTrackerSubScreen(
                         }
 
                         Text(
-                            text = (if (exp.isIncome || exp.isReceivable) "+ " else "- ") +
-                                    PersianDateAndUnitUtils.formatCurrencyAmount(exp.amount, exp.currency),
+                            text = (when {
+                                exp.isTransfer -> "⇄ "
+                                exp.isIncome || exp.isReceivable -> "+ "
+                                else -> "- "
+                            }) + PersianDateAndUnitUtils.formatCurrencyAmount(exp.amount, exp.currency),
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
                             color = badgeColor
                         )
+                        if ((exp.isDebt || exp.isReceivable) && exp.paidAmount > 0.0 && !exp.isSettled) {
+                            Text(
+                                text = "پرداخت‌شده: ${PersianDateAndUnitUtils.formatCurrencyAmount(exp.paidAmount, exp.currency)} • مانده: ${PersianDateAndUnitUtils.formatCurrencyAmount(exp.remainingAmount, exp.currency)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AmberWarning,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
 
                         if (cleanDesc.isNotBlank()) {
                             GlassSurface(
@@ -2948,6 +2995,37 @@ private fun ExpenseTrackerSubScreen(
                                 }
                             ) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "کپی متن یادآوری", tint = SkyInfo, modifier = Modifier.size(18.dp))
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = AmberWarning.copy(alpha = 0.18f),
+                                border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.55f)),
+                                modifier = Modifier
+                                    .clickable {
+                                        val stepAmount = (exp.remainingAmount / exp.installmentCount.coerceAtLeast(2)).coerceAtLeast(1.0)
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        onRecordPartialPayment(exp, stepAmount)
+                                    }
+                                    .testTag("daily_log_partial_pay_${exp.id}")
+                            ) {
+                                Text(
+                                    text = "قسط",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AmberWarning,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp)
+                                )
+                            }
+                            if (exp.isDebt) {
+                                IconButton(
+                                    onClick = {
+                                        WorldClassOsUtils.HapticSignature.crispTick(context)
+                                        onCreateInstallmentPlan(exp, 3)
+                                    },
+                                    modifier = Modifier.testTag("daily_log_plan_iou_${exp.id}")
+                                ) {
+                                    Icon(Icons.Default.Flag, contentDescription = "ایجاد برنامه بازپرداخت در مسیر", tint = ElectricTeal, modifier = Modifier.size(18.dp))
+                                }
                             }
                             Surface(
                                 shape = RoundedCornerShape(10.dp),

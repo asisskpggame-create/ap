@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#101827"/><stop offset="100%" stop-color="#17263a"/>
+  </linearGradient>
+  <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#202f44"/><stop offset="100%" stop-color="#182538"/>
+  </linearGradient>
+</defs>
+<rect width="100%" height="100%" rx="28" fill="url(#bg)"/>
+<text x="1150" y="70" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#f3f7ff" text-anchor="end">داشبورد پیشنهادی</text>
+<text x="1150" y="112" font-family="Arial, sans-serif" font-size="19" fill="#aabbd1" text-anchor="end">خلاصه وضعیت امروز؛ بدون عددهای ساختگی</text>
+
+<g font-family="Arial, sans-serif">
+  <rect x="55" y="155" width="1090" height="105" rx="20" fill="url(#panel)" stroke="#4a6078"/>
+  <text x="1090" y="195" font-size="20" fill="#aebfd3" text-anchor="end">نمای امروز</text>
+  <text x="1090" y="232" font-size="29" font-weight="700" fill="#f5f8ff" text-anchor="end">اولویت‌ها و موارد نیازمند توجه</text>
+  <rect x="55" y="285" width="520" height="145" rx="20" fill="#183c36" stroke="#54c8a2"/>
+  <text x="535" y="325" font-size="21" fill="#b9e9d8" text-anchor="end">مالی</text>
+  <text x="535" y="365" font-size="28" font-weight="700" fill="#f2fffa" text-anchor="end">موجودی • قابل‌خرج • سررسید</text>
+  <text x="535" y="400" font-size="17" fill="#a5d8c7" text-anchor="end">عددهای واقعی از داده مالی</text>
+  <rect x="625" y="285" width="520" height="145" rx="20" fill="#2b2548" stroke="#a99aff"/>
+  <text x="1105" y="325" font-size="21" fill="#d4caff" text-anchor="end">اهداف و مسیر</text>
+  <text x="1105" y="365" font-size="28" font-weight="700" fill="#fcfaff" text-anchor="end">کارهای مهم • پیشرفت هدف</text>
+  <text x="1105" y="400" font-size="17" fill="#c7bbf4" text-anchor="end">کار بعدی باید روشن باشد</text>
+  <rect x="55" y="455" width="520" height="145" rx="20" fill="#19334b" stroke="#65baf4"/>
+  <text x="535" y="495" font-size="21" fill="#b9e4ff" text-anchor="end">سلامت</text>
+  <text x="535" y="535" font-size="28" font-weight="700" fill="#f5fbff" text-anchor="end">آب • خواب • فعالیت</text>
+  <text x="535" y="570" font-size="17" fill="#acd9f7" text-anchor="end">خلاصه؛ جزئیات در صفحه تخصصی</text>
+  <rect x="625" y="455" width="520" height="145" rx="20" fill="#42243e" stroke="#ef9bd0"/>
+  <text x="1105" y="495" font-size="21" fill="#ffd1e9" text-anchor="end">اقدام بعدی</text>
+  <text x="1105" y="535" font-size="28" font-weight="700" fill="#fff8fc" text-anchor="end">هشدار واقعی و اولویت‌دار</text>
+  <text x="1105" y="570" font-size="17" fill="#f1c7df" text-anchor="end">نه اعلان‌های تکراری و شلوغ</text>
+  <text x="600" y="665" font-size="17" fill="#aabbd1" text-anchor="middle">ماکت مفهومی — اعداد و وضعیت‌ها نمایشی نیستند؛ این تصویر عدد واقعی نشان نمی‌دهد.</text>
+</g>
+</svg>

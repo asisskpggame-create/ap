@@ -87,113 +87,17 @@ data class ParsedBankSms(
 
 object IranianBankSmsParser {
 
-    private val knownBanks = listOf(
-        "بانک ملت" to "بانک ملت",
-        "ملت" to "بانک ملت",
-        "بانک ملی" to "بانک ملی",
-        "ملی ایران" to "بانک ملی",
-        "بلوبانک" to "بلوبانک سامان",
-        "بلو" to "بلوبانک سامان",
-        "بانک سامان" to "بانک سامان",
-        "پاسارگاد" to "بانک پاسارگاد",
-        "تجارت" to "بانک تجارت",
-        "صادرات" to "بانک صادرات",
-        "پارسیان" to "بانک پارسیان",
-        "رسالت" to "بانک رسالت",
-        "سپه" to "بانک سپه",
-        "کشاورزی" to "بانک کشاورزی",
-        "مسکن" to "بانک مسکن",
-        "شهر" to "بانک شهر",
-        "آینده" to "بانک آینده"
-    )
-
     fun parseBankSms(rawSms: String): ParsedBankSms? {
-        val normalized = PersianDateAndUnitUtils.toEnglishDigits(rawSms).trim()
-        if (normalized.isEmpty()) return null
-
-        val detectedBank = knownBanks.firstOrNull { (kw, _) -> normalized.contains(kw) }?.second ?: "بانک عضو شتاب"
-
-        val isIncome = normalized.contains("واریز") ||
-            normalized.contains("افزایش") ||
-            normalized.contains("سود") ||
-            normalized.contains("برگشت") ||
-            normalized.contains("+") && !normalized.contains("برداشت")
-
-        val txType = if (isIncome) "INCOME" else "EXPENSE"
-
-        // Detect if currency in SMS is Rial or Toman (95% of Iranian bank SMS use Rial unless explicitly Toman)
-        val explicitlyToman = normalized.contains("تومان") || normalized.contains("تومن")
-        val wasInRial = !explicitlyToman
-
-        // Extract primary transaction amount (before مانده/موجودی)
-        val lines = normalized.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        var txAmountRaw: Double? = null
-        var balanceRaw: Double? = null
-
-        val amountNumberRegex = Regex("""([0-9]{1,3}(?:[,،][0-9]{3})+|[0-9]{4,12})""")
-
-        for (line in lines) {
-            val isBalanceLine = line.contains("مانده") || line.contains("موجودی")
-            val match = amountNumberRegex.find(line)
-            if (match != null) {
-                val numeric = match.value.replace(",", "").replace("،", "").toDoubleOrNull()
-                if (numeric != null && numeric >= 1000.0) {
-                    if (isBalanceLine) {
-                        if (balanceRaw == null) balanceRaw = numeric
-                    } else {
-                        if (txAmountRaw == null) txAmountRaw = numeric
-                    }
-                }
-            }
-        }
-
-        // Fallback if single-line SMS had both numbers
-        if (txAmountRaw == null) {
-            val allNums = amountNumberRegex.findAll(normalized)
-                .mapNotNull { it.value.replace(",", "").replace("،", "").toDoubleOrNull() }
-                .filter { it >= 1000.0 }
-                .toList()
-            if (allNums.isNotEmpty()) {
-                txAmountRaw = allNums.first()
-                if (allNums.size >= 2) {
-                    balanceRaw = allNums.last()
-                }
-            }
-        }
-
-        val finalRaw = txAmountRaw ?: return null
-        val amountToman = if (wasInRial) (finalRaw / 10.0) else finalRaw
-        val balanceToman = balanceRaw?.let { if (wasInRial) it / 10.0 else it }
-
-        // Infer category and merchant title from SMS keywords
-        val (category, title) = when {
-            normalized.contains("اسنپ") || normalized.contains("تپسی") || normalized.contains("مترو") || normalized.contains("پمپ بنزین") ->
-                "TRANSPORT" to "کرایه / حمل‌ونقل ($detectedBank)"
-            normalized.contains("رستوران") || normalized.contains("کافه") || normalized.contains("نانوایی") || normalized.contains("سوپرمارکت") || normalized.contains("غذا") ->
-                "FOOD" to "خرید خوراک ($detectedBank)"
-            normalized.contains("قبض") || normalized.contains("همراه اول") || normalized.contains("ایرانسل") || normalized.contains("اینترنت") || normalized.contains("برق") ->
-                "BILLS" to "پرداخت قبض / شارژ ($detectedBank)"
-            normalized.contains("داروخانه") || normalized.contains("بیمارستان") || normalized.contains("پزشک") || normalized.contains("آزمایشگاه") ->
-                "HEALTH" to "هزینه سلامت و دارو ($detectedBank)"
-            normalized.contains("دیجی") || normalized.contains("کوروش") || normalized.contains("هایپر") || normalized.contains("فروشگاه") || normalized.contains("خرید") ->
-                "SHOPPING" to "خرید فروشگاهی ($detectedBank)"
-            isIncome ->
-                "INCOME" to "واریز به حساب ($detectedBank)"
-            normalized.contains("انتقال") || normalized.contains("کارت به کارت") || normalized.contains("پایا") || normalized.contains("ساتنا") ->
-                "OTHER" to "انتقال وجه / کارت به کارت ($detectedBank)"
-            else ->
-                "OTHER" to "تراکنش بانکی ($detectedBank)"
-        }
-
+        val suggestion = com.example.util.BankSmsScannerUtility.parseBankSms(rawSms) ?: return null
         return ParsedBankSms(
-            bankName = detectedBank,
-            transactionType = txType,
-            rawAmountDetected = finalRaw,
-            wasInRial = wasInRial,
-            amountInToman = amountToman,
-            balanceInToman = balanceToman,
-            suggestedTitle = title,
-            suggestedCategory = category
+            bankName = suggestion.bankName,
+            transactionType = suggestion.transactionType,
+            rawAmountDetected = suggestion.rawAmountDetected,
+            wasInRial = suggestion.wasInRial,
+            amountInToman = suggestion.amountInToman,
+            balanceInToman = suggestion.balanceInToman,
+            suggestedTitle = suggestion.suggestedTitle,
+            suggestedCategory = suggestion.suggestedCategory
         )
     }
 }
@@ -202,6 +106,7 @@ object IranianBankSmsParser {
 @Composable
 fun SmartBankSmsParserModalSheet(
     defaultCurrency: String,
+    availableCategories: List<String> = listOf("غذا و کافه", "خرید", "قبوض و اجاره", "حمل‌ونقل", "سلامت و درمان", "تفریح و سرگرمی", "سرمایه‌گذاری", "آموزش", "سایر"),
     onDismiss: () -> Unit,
     onConfirmSaveExpense: (title: String, category: String, amountToman: Double, notes: String, txType: String) -> Unit
 ) {
@@ -209,6 +114,12 @@ fun SmartBankSmsParserModalSheet(
     var smsInput by remember { mutableStateOf("") }
     val parsed = remember(smsInput) { IranianBankSmsParser.parseBankSms(smsInput) }
     var customTitleOverride by remember(parsed) { mutableStateOf(parsed?.suggestedTitle ?: "") }
+    var selectedCategoryOverride by remember(parsed) {
+        mutableStateOf(parsed?.suggestedCategory ?: availableCategories.firstOrNull() ?: "سایر")
+    }
+    var selectedTxTypeOverride by remember(parsed) {
+        mutableStateOf(parsed?.transactionType ?: "EXPENSE")
+    }
 
     val sampleSmsList = listOf(
         "بانک ملت\nخرید با کارت\nمبلغ: 2,450,000 ریال\nفروشگاه افق کوروش\nمانده: 48,500,000 ریال",
@@ -317,7 +228,7 @@ fun SmartBankSmsParserModalSheet(
                 )
 
                 if (parsed != null) {
-                    val accent = if (parsed.transactionType == "INCOME") EmeraldSuccess else AmberWarning
+                    val accent = if (selectedTxTypeOverride == "INCOME") EmeraldSuccess else AmberWarning
                     LiquidGlassCard(
                         shape = RoundedCornerShape(18.dp),
                         accentBorderColor = accent,
@@ -334,13 +245,16 @@ fun SmartBankSmsParserModalSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                LiquidGlassPill(accentGlow = accent) {
-                                    Text(
-                                        text = if (parsed.transactionType == "INCOME") "واریز / درآمد (+)" else "برداشت / هزینه (-)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = accent,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FilterChip(
+                                        selected = selectedTxTypeOverride == "EXPENSE",
+                                        onClick = { selectedTxTypeOverride = "EXPENSE" },
+                                        label = { Text("خرج (-)", style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                    FilterChip(
+                                        selected = selectedTxTypeOverride == "INCOME",
+                                        onClick = { selectedTxTypeOverride = "INCOME" },
+                                        label = { Text("درآمد (+)", style = MaterialTheme.typography.labelSmall) }
                                     )
                                 }
                                 Text(
@@ -377,20 +291,33 @@ fun SmartBankSmsParserModalSheet(
                             OutlinedTextField(
                                 value = customTitleOverride,
                                 onValueChange = { customTitleOverride = it },
-                                label = { Text("عنوان تراکنش") },
+                                label = { Text("عنوان پیشنهادی تراکنش") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                availableCategories.forEach { catLbl ->
+                                    FilterChip(
+                                        selected = selectedCategoryOverride == catLbl,
+                                        onClick = { selectedCategoryOverride = catLbl },
+                                        label = { Text(catLbl, style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                }
+                            }
 
                             Button(
                                 onClick = {
                                     WorldClassOsUtils.HapticSignature.successThud(context)
                                     onConfirmSaveExpense(
                                         customTitleOverride.ifBlank { parsed.suggestedTitle },
-                                        parsed.suggestedCategory,
+                                        selectedCategoryOverride,
                                         parsed.amountInToman,
                                         "ثبت خودکار از پیامک ${parsed.bankName}",
-                                        parsed.transactionType
+                                        selectedTxTypeOverride
                                     )
                                     onDismiss()
                                 },

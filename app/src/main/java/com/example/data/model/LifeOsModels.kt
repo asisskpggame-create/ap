@@ -36,6 +36,7 @@ data class Task(
     val completedAtMillis: Long = -1L,
     val idempotencyKey: String = "",
     val actualDurationMinutes: Int = 0,
+    val linkedDebtId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -144,31 +145,48 @@ data class ExpenseEntry(
     val notes: String = "",
     val inputSource: String = "MANUAL", // MANUAL, VOICE, AI_ASSISTANT
     val idempotencyKey: String = "",
-    val transactionType: String = "EXPENSE", // EXPENSE, INCOME, DEBT, RECEIVABLE, DEBT_SETTLED, RECEIVABLE_SETTLED
+    val transactionType: String = "EXPENSE", // EXPENSE, INCOME, TRANSFER, DEBT, RECEIVABLE, DEBT_SETTLED, RECEIVABLE_SETTLED
+    val paidAmount: Double = 0.0,
+    val dueEpochDay: Long = -1L,
+    val installmentCount: Int = 1,
+    val linkedDebtId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
+    val isTransfer: Boolean
+        get() = transactionType.equals("TRANSFER", ignoreCase = true) || notes.startsWith("[TRANSFER]")
+
     val isIncome: Boolean
-        get() = transactionType.equals("INCOME", ignoreCase = true) || notes.startsWith("[INCOME]")
+        get() = !isTransfer && (transactionType.equals("INCOME", ignoreCase = true) || notes.startsWith("[INCOME]"))
 
     val isDebt: Boolean
-        get() = transactionType.equals("DEBT", ignoreCase = true) ||
-            transactionType.equals("DEBT_SETTLED", ignoreCase = true) ||
-            notes.startsWith("[DEBT]")
+        get() = !isTransfer && (
+            transactionType.equals("DEBT", ignoreCase = true) ||
+                transactionType.equals("DEBT_SETTLED", ignoreCase = true) ||
+                notes.startsWith("[DEBT]")
+            )
 
     val isReceivable: Boolean
-        get() = transactionType.equals("RECEIVABLE", ignoreCase = true) ||
-            transactionType.equals("RECEIVABLE_SETTLED", ignoreCase = true) ||
-            notes.startsWith("[RECEIVABLE]")
+        get() = !isTransfer && (
+            transactionType.equals("RECEIVABLE", ignoreCase = true) ||
+                transactionType.equals("RECEIVABLE_SETTLED", ignoreCase = true) ||
+                notes.startsWith("[RECEIVABLE]")
+            )
 
     val isSettled: Boolean
-        get() = transactionType.endsWith("_SETTLED", ignoreCase = true) || notes.contains("[SETTLED]")
+        get() = transactionType.endsWith("_SETTLED", ignoreCase = true) ||
+            notes.contains("[SETTLED]") ||
+            ((isDebt || isReceivable) && amount > 0.0 && paidAmount >= amount - 0.001)
 
     val isExpense: Boolean
-        get() = !isIncome && !isDebt && !isReceivable
+        get() = !isIncome && !isDebt && !isReceivable && !isTransfer
+
+    val remainingAmount: Double
+        get() = if (isSettled) 0.0 else (amount - paidAmount).coerceAtLeast(0.0)
 
     val cleanNotes: String
         get() = notes
+            .removePrefix("[TRANSFER] ").removePrefix("[TRANSFER]")
             .removePrefix("[INCOME] ").removePrefix("[INCOME]")
             .removePrefix("[DEBT] ").removePrefix("[DEBT]")
             .removePrefix("[RECEIVABLE] ").removePrefix("[RECEIVABLE]")
@@ -181,6 +199,7 @@ data class ExpenseEntry(
         val validSources = setOf("MANUAL", "VOICE", "AI_ASSISTANT")
         val safeInputSource = if (inputSource in validSources) inputSource else "MANUAL"
         val prefix = when {
+            isTransfer && !notes.startsWith("[TRANSFER]") -> "[TRANSFER]"
             isDebt && !notes.startsWith("[DEBT]") -> "[DEBT]"
             isReceivable && !notes.startsWith("[RECEIVABLE]") -> "[RECEIVABLE]"
             isIncome && !notes.startsWith("[INCOME]") -> "[INCOME]"
@@ -208,6 +227,7 @@ data class ExpenseEntry(
             "notes" to serializedNotes,
             "inputSource" to safeInputSource,
             "idempotencyKey" to idempotencyKey,
+            "transactionType" to transactionType,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )

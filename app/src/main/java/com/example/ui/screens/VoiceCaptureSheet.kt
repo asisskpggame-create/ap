@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import android.Manifest
-import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
@@ -9,6 +11,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -16,10 +19,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -36,24 +37,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.OfflineBolt
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.SettingsVoice
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -65,6 +68,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,15 +93,15 @@ import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.GlassCard
-import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.GlassTheme
-import com.example.ui.theme.LiquidGlassPill
 import com.example.ui.theme.MutedViolet
+import com.example.util.PersianDateAndUnitUtils
+import com.example.util.PersianOfflineSpeechHelper
 
 /**
- * High-Precision Speech-To-Text Modal Sheet with Liquid Glass Design.
- * Integrates real Android microphone recording via SpeechRecognizer and RecognizerIntent,
- * with fast one-tap creation for Tasks and Daily Journal Entries.
+ * High-Precision Persian (`fa-IR`) Speech-To-Text Modal Sheet with Offline Capability.
+ * Supports on-device & offline speech recognition (`EXTRA_PREFER_OFFLINE`), continuous dictation,
+ * spoken Persian number normalization, and deterministic 100% offline NLU execution.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -114,37 +118,94 @@ fun VoiceCaptureModalSheet(
     val haptic = LocalHapticFeedback.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var transcriptText by remember { mutableStateOf("") }
-    var isRecording by remember { mutableStateOf(false) }
-    var instantAutoSave by remember { mutableStateOf(true) }
-    var rmsLevel by remember { mutableFloatStateOf(0.2f) }
-    var statusMessage by remember { mutableStateOf("در حال آماده‌سازی میکروفون... (یا متن را بنویسید)") }
-    var permissionDeniedWarning by remember { mutableStateOf(false) }
-    var selectedTargetMode by remember { mutableStateOf("AUTO") } // AUTO, TASK, JOURNAL
+    val isDeviceCurrentlyOnline = remember { PersianOfflineSpeechHelper.isDeviceOnline(context) }
+    val isOnDeviceEngineSupported = remember { PersianOfflineSpeechHelper.isOnDeviceSpeechSupported(context) }
 
-    // SpeechRecognizer instance
-    val speechRecognizer = remember {
-        try {
-            if (SpeechRecognizer.isRecognitionAvailable(context)) {
-                SpeechRecognizer.createSpeechRecognizer(context)
+    var transcriptText by remember { mutableStateOf("") }
+    var livePartialText by remember { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    // Offline-First Persian STT enabled by default so voice-to-text works without internet
+    var preferOfflinePersian by remember { mutableStateOf(true) }
+    var appendDictationMode by remember { mutableStateOf(false) }
+    var convertSpokenNumbers by remember { mutableStateOf(true) }
+    var instantAutoSave by remember { mutableStateOf(false) }
+    var showOfflinePackGuide by remember { mutableStateOf(false) }
+    var rmsLevel by remember { mutableFloatStateOf(0.2f) }
+    var statusMessage by remember {
+        mutableStateOf(
+            if (!isDeviceCurrentlyOnline) {
+                "حالت آفلاین فارسی فعال است (بدون نیاز به اینترنت) • آماده دریافت صدا"
             } else {
-                null
+                "تبدیل گفتار به متن فارسی (آفلاین / هیبرید) • آماده ضبط"
             }
-        } catch (_: Throwable) {
-            null
+        )
+    }
+    var permissionDeniedWarning by remember { mutableStateOf(false) }
+    var selectedTargetMode by remember { mutableStateOf("AUTO") }
+
+    // Create SpeechRecognizer instance (standard recognizer honors EXTRA_PREFER_OFFLINE on all Android versions)
+    val speechRecognizer = remember {
+        PersianOfflineSpeechHelper.createSpeechRecognizer(
+            context = context,
+            useDedicatedOnDeviceRecognizer = false
+        )
+    }
+
+    fun applyRecognizedSentence(rawSentence: String, isFinalResult: Boolean) {
+        val normalized = PersianOfflineSpeechHelper.normalizePersianTranscript(
+            rawText = rawSentence,
+            convertSpokenNumbers = convertSpokenNumbers
+        )
+        if (normalized.isBlank()) return
+
+        if (isFinalResult) {
+            livePartialText = ""
+            val updatedTranscript = if (appendDictationMode && transcriptText.isNotBlank()) {
+                "${transcriptText.trim()} $normalized"
+            } else {
+                normalized
+            }
+            transcriptText = updatedTranscript
+
+            if (selectedTargetMode == "AUTO" && instantAutoSave && !appendDictationMode) {
+                statusMessage = "ثبت آنی آفلاین: «$updatedTranscript»"
+                onInstantExecuteTranscript(updatedTranscript)
+            } else if (selectedTargetMode == "AUTO" && !appendDictationMode) {
+                statusMessage = "متن فارسی با موفقیت تبدیل شد. می‌توانید ویرایش یا ثبت کنید."
+                onAnalyzeTranscript(updatedTranscript)
+            } else {
+                statusMessage = "به متن دیکته اضافه شد. برای ادامه دوباره میکروفون را بزنید."
+            }
+        } else {
+            livePartialText = normalized
+            if (!appendDictationMode) {
+                transcriptText = normalized
+            }
         }
     }
 
-    DisposableEffect(speechRecognizer, instantAutoSave, selectedTargetMode) {
+    DisposableEffect(
+        speechRecognizer,
+        preferOfflinePersian,
+        appendDictationMode,
+        convertSpokenNumbers,
+        instantAutoSave,
+        selectedTargetMode
+    ) {
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 isRecording = true
-                statusMessage = "گوش می‌دهم... بگویید (مثلاً: ۵۰۰ سیگار، ۱۲۰ اسنپ، ۳۰۰ طلب از علی)"
+                livePartialText = ""
+                statusMessage = if (preferOfflinePersian) {
+                    "گوش می‌دهم (موتور فارسی آفلاین fa-IR)... واضح صحبت کنید"
+                } else {
+                    "گوش می‌دهم (تشخیص گفتار فارسی fa-IR)..."
+                }
             }
 
             override fun onBeginningOfSpeech() {
                 isRecording = true
-                statusMessage = "در حال دریافت صدای شما..."
+                statusMessage = "در حال دریافت و تبدیل صدای شما به متن فارسی..."
             }
 
             override fun onRmsChanged(rmsdB: Float) {
@@ -155,16 +216,22 @@ fun VoiceCaptureModalSheet(
 
             override fun onEndOfSpeech() {
                 isRecording = false
-                statusMessage = "در حال پردازش..."
+                statusMessage = "در حال نهایی‌سازی متن فارسی..."
             }
 
             override fun onError(error: Int) {
                 isRecording = false
-                statusMessage = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH -> "صدایی تشخیص داده نشد. دوباره لمس کنید یا بنویسید."
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "دسترسی میکروفون داده نشده است."
-                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "خطای شبکه گفتار؛ می‌توانید همین‌جا تایپ کنید."
-                    else -> "می‌توانید روی میکروفون بزنید یا دستور را تایپ کنید."
+                livePartialText = ""
+                val (msgFa, needsOfflinePack) = PersianOfflineSpeechHelper.describeSpeechErrorFa(
+                    errorCode = error,
+                    isOfflinePreferred = preferOfflinePersian
+                )
+                statusMessage = msgFa
+                if (needsOfflinePack) {
+                    showOfflinePackGuide = true
+                    if (!preferOfflinePersian) {
+                        preferOfflinePersian = true
+                    }
                 }
             }
 
@@ -173,23 +240,16 @@ fun VoiceCaptureModalSheet(
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val best = matches?.firstOrNull().orEmpty()
                 if (best.isNotBlank()) {
-                    transcriptText = best
-                    if (selectedTargetMode == "AUTO" && instantAutoSave) {
-                        statusMessage = "ثبت آنی: «$best»"
-                        onInstantExecuteTranscript(best)
-                    } else if (selectedTargetMode == "AUTO") {
-                        statusMessage = "تشخیص داده شد. پیش‌نمایش آماده است."
-                        onAnalyzeTranscript(best)
-                    } else {
-                        statusMessage = "تشخیص داده شد."
-                    }
+                    applyRecognizedSentence(best, isFinalResult = true)
                 }
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                val partial = partialResults
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
                 if (!partial.isNullOrBlank()) {
-                    transcriptText = partial
+                    applyRecognizedSentence(partial, isFinalResult = false)
                 }
             }
 
@@ -204,7 +264,7 @@ fun VoiceCaptureModalSheet(
         }
     }
 
-    // System Speech Intent Dialog Fallback (supported on all Android versions)
+    // System Speech Intent Dialog Fallback (works even when background RecognitionService is restricted)
     val systemSpeechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -212,44 +272,45 @@ fun VoiceCaptureModalSheet(
         val matches = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
         val best = matches?.firstOrNull().orEmpty()
         if (best.isNotBlank()) {
-            transcriptText = best
-            if (selectedTargetMode == "AUTO" && instantAutoSave) {
-                onInstantExecuteTranscript(best)
-            } else if (selectedTargetMode == "AUTO") {
-                onAnalyzeTranscript(best)
+            applyRecognizedSentence(best, isFinalResult = true)
+        }
+    }
+
+    fun launchSystemSpeechDialog() {
+        val intent = PersianOfflineSpeechHelper.buildPersianSpeechIntent(
+            preferOffline = preferOfflinePersian,
+            continuousDictation = appendDictationMode,
+            promptText = if (preferOfflinePersian) {
+                "تبدیل گفتار به متن فارسی (آفلاین) - صحبت کنید..."
+            } else {
+                "بگویید: مثلاً ۵۰۰ سیگار یا فردا ساعت ۱۰ جلسه..."
             }
+        )
+        try {
+            systemSpeechLauncher.launch(intent)
+        } catch (_: Exception) {
+            statusMessage = "سرویس گفتار در دسترس نیست؛ بسته صوتی فارسی را بررسی کنید."
+            showOfflinePackGuide = true
         }
     }
 
     fun startVoiceListening() {
         if (speechRecognizer == null) {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "بگویید: مثلاً ۵۰۰ سیگار یا فردا ساعت ۱۰ جلسه...")
-            }
-            try {
-                systemSpeechLauncher.launch(intent)
-            } catch (e: Exception) {
-                statusMessage = "سرویس گفتار در دسترس نیست؛ متن را تایپ کنید."
-            }
+            launchSystemSpeechDialog()
             return
         }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fa-IR")
-            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("fa-IR", "fa", "en-US"))
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-        }
+        val effectiveOffline = preferOfflinePersian || !PersianOfflineSpeechHelper.isDeviceOnline(context)
+        val intent = PersianOfflineSpeechHelper.buildPersianSpeechIntent(
+            preferOffline = effectiveOffline,
+            continuousDictation = appendDictationMode
+        )
         try {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             speechRecognizer.startListening(intent)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             isRecording = false
-            statusMessage = "برای شروع ضبط روی دکمه میکروفون بزنید."
+            launchSystemSpeechDialog()
         }
     }
 
@@ -261,12 +322,12 @@ fun VoiceCaptureModalSheet(
             startVoiceListening()
         } else {
             permissionDeniedWarning = true
-            statusMessage = "مجوز میکروفون فعال نیست؛ می‌توانید دستور را تایپ کنید."
+            statusMessage = "مجوز میکروفون فعال نیست؛ دسترسی را تایید کنید یا متن را بنویسید."
         }
     }
 
     // Auto-start listening immediately when sheet opens if permission is already granted
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         val hasPerm = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.RECORD_AUDIO
@@ -274,7 +335,7 @@ fun VoiceCaptureModalSheet(
         if (hasPerm && speechRecognizer != null) {
             startVoiceListening()
         } else if (!hasPerm) {
-            statusMessage = "برای ضبط صوتی روی میکروفون بزنید یا دستور را بنویسید."
+            statusMessage = "برای شروع تبدیل گفتار فارسی به متن، روی دکمه میکروفون بزنید."
         }
     }
 
@@ -305,9 +366,9 @@ fun VoiceCaptureModalSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header with Live Mic Indicator & Instant Auto-Save Toggle
+            // Header with Title & Offline Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -320,16 +381,85 @@ fun VoiceCaptureModalSheet(
                     Icon(
                         imageVector = Icons.Default.RecordVoiceOver,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = ElectricTeal,
                         modifier = Modifier.size(22.dp)
                     )
-                    Text(
-                        text = "ثبت صوتی و هوشمند",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Black
-                    )
+                    Column {
+                        Text(
+                            text = "تبدیل گفتار به متن فارسی (آفلاین)",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = if (preferOfflinePersian) {
+                                if (isOnDeviceEngineSupported) "موتور آفلاین روی دستگاه (fa-IR On-Device)" else "اولویت پردازش آفلاین فارسی (fa-IR)"
+                            } else {
+                                "حالت ترکیبی (آفلاین + آنلاین فارسی)"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldSuccess
+                        )
+                    }
                 }
+
+                // Offline / Online Mode Primary Chip
+                FilterChip(
+                    selected = preferOfflinePersian,
+                    onClick = {
+                        preferOfflinePersian = !preferOfflinePersian
+                        statusMessage = if (preferOfflinePersian) {
+                            "حالت آفلاین فارسی فعال شد (تشخیص صدا و پردازش بدون اینترنت)."
+                        } else {
+                            "حالت ترکیبی (آفلاین + آنلاین) فعال شد."
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (preferOfflinePersian) Icons.Default.OfflineBolt else Icons.Default.SettingsVoice,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = if (preferOfflinePersian) "آفلاین فارسی: روشن" else "حالت ترکیبی",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    modifier = Modifier.testTag("voice_offline_mode_toggle")
+                )
+            }
+
+            // Secondary Dictation Controls Row: Continuous Append Mode + Spoken Number Conversion + Instant Execute
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterChip(
+                    selected = appendDictationMode,
+                    onClick = { appendDictationMode = !appendDictationMode },
+                    label = {
+                        Text(
+                            text = if (appendDictationMode) "دیکته پیوسته (افزودن به متن)" else "جایگزینی متن در هر ضبط",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    modifier = Modifier.testTag("voice_append_mode_toggle")
+                )
+
+                FilterChip(
+                    selected = convertSpokenNumbers,
+                    onClick = { convertSpokenNumbers = !convertSpokenNumbers },
+                    label = {
+                        Text(
+                            text = "تبدیل اعداد گفتاری (پانصد ← ۵۰۰)",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                )
 
                 FilterChip(
                     selected = instantAutoSave,
@@ -337,18 +467,128 @@ fun VoiceCaptureModalSheet(
                     label = {
                         Text(
                             text = if (instantAutoSave) "ثبت خودکار آنی: روشن" else "پیش‌نمایش قبل از ثبت",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 )
             }
 
-            Text(
-                text = statusMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (permissionDeniedWarning) AmberWarning else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Status / Live Feedback Banner
+            Surface(
+                color = Color(0xFF15221C),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (permissionDeniedWarning) AmberWarning.copy(alpha = 0.6f)
+                    else ElectricTeal.copy(alpha = 0.35f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (!isDeviceCurrentlyOnline) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = null,
+                                tint = EmeraldSuccess,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (permissionDeniedWarning) AmberWarning else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    TextButton(
+                        onClick = { showOfflinePackGuide = !showOfflinePackGuide },
+                        modifier = Modifier.testTag("toggle_offline_guide_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DownloadForOffline,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("بسته آفلاین", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            // Collapsible Offline Persian Pack Guide & System Recognizer Fallback Card
+            AnimatedVisibility(visible = showOfflinePackGuide) {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    accentBorderColor = AmberWarning
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "راهنمای فعال‌سازی تشخیص گفتار آفلاین فارسی (بدون اینترنت)",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AmberWarning,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "۱. برای کارکرد ۱۰۰٪ آفلاین روی گوشی، بسته زبان «فارسی (ایران) / Persian» را در بخش Offline Speech Recognition سیستم اندروید دانلود کنید.\n۲. پس از ثبت متن، موتور هوشمند برنامه نیز تمام دستورات مالی، تسک‌ها و یادداشت‌ها را کاملاً آفلاین پردازش و ذخیره می‌کند.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    PersianOfflineSpeechHelper.openOfflineSpeechSettings(context)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("open_offline_speech_settings_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DownloadForOffline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("تنظیمات بسته آفلاین فارسی", style = MaterialTheme.typography.labelSmall)
+                            }
+
+                            OutlinedButton(
+                                onClick = { launchSystemSpeechDialog() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("system_speech_dialog_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SettingsVoice,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("دیالوگ صوتی سیستم", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
 
             // Animated Microphone & Multi-Band Waveform Control
             VoiceWaveformHeader(
@@ -374,19 +614,63 @@ fun VoiceCaptureModalSheet(
                 }
             )
 
-            // Editable Recognized Text Input
+            // Live partial preview badge when in continuous append dictation mode
+            if (appendDictationMode && livePartialText.isNotBlank()) {
+                Text(
+                    text = "در حال شنیدن: «$livePartialText»",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ElectricTeal,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Editable Recognized Persian Text Input + Copy & Clear Toolbar
             OutlinedTextField(
                 value = transcriptText,
                 onValueChange = { transcriptText = it },
-                label = { Text("بگویید یا تایپ کنید (خرج، طلب، بدهی، تسک، آب...)") },
+                label = { Text("متن فارسی تشخیص‌داده‌شده (قابل ویرایش یا تایپ)") },
                 placeholder = {
                     Text("مثلاً: ۵۰۰ سیگار | ۳۰۰ از علی طلبکارم | فردا ساعت ۱۰ جلسه")
+                },
+                trailingIcon = {
+                    if (transcriptText.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("PersianVoiceText", transcriptText))
+                                    statusMessage = "متن فارسی در حافظه کپی شد."
+                                },
+                                modifier = Modifier.testTag("copy_voice_transcript_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "کپی متن فارسی",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    transcriptText = ""
+                                    livePartialText = ""
+                                    statusMessage = "متن پاک شد. آماده ضبط جدید."
+                                },
+                                modifier = Modifier.testTag("clear_voice_transcript_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "پاک کردن متن",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("voice_transcript_input"),
                 minLines = 2,
-                maxLines = 3
+                maxLines = 4
             )
 
             // Primary Fast Action Buttons
@@ -397,7 +681,12 @@ fun VoiceCaptureModalSheet(
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onInstantExecuteTranscript(transcriptText)
+                        val normalized = PersianOfflineSpeechHelper.normalizePersianTranscript(
+                            transcriptText,
+                            convertSpokenNumbers = convertSpokenNumbers
+                        )
+                        transcriptText = normalized
+                        onInstantExecuteTranscript(normalized)
                     },
                     enabled = transcriptText.isNotBlank() && !isProcessing,
                     colors = ButtonDefaults.buttonColors(
@@ -410,11 +699,18 @@ fun VoiceCaptureModalSheet(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("ثبت آنی (۱ لمسی)", fontWeight = FontWeight.Black)
+                    Text("ثبت آنی آفلاین (۱ لمسی)", fontWeight = FontWeight.Black)
                 }
 
                 OutlinedButton(
-                    onClick = { onAnalyzeTranscript(transcriptText) },
+                    onClick = {
+                        val normalized = PersianOfflineSpeechHelper.normalizePersianTranscript(
+                            transcriptText,
+                            convertSpokenNumbers = convertSpokenNumbers
+                        )
+                        transcriptText = normalized
+                        onAnalyzeTranscript(normalized)
+                    },
                     enabled = transcriptText.isNotBlank() && !isProcessing,
                     modifier = Modifier
                         .weight(1f)
@@ -441,13 +737,17 @@ fun VoiceCaptureModalSheet(
                     OutlinedButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val cleanText = PersianOfflineSpeechHelper.normalizePersianTranscript(
+                                transcriptText,
+                                convertSpokenNumbers = convertSpokenNumbers
+                            )
                             val taskOp = ProposedAiOperation(
                                 operationType = "CreateTask",
-                                title = transcriptText.trim(),
+                                title = cleanText,
                                 category = "عمومی",
-                                humanReadablePreview = "ایجاد تسک: «${transcriptText.trim()}»"
+                                humanReadablePreview = "ایجاد تسک: «$cleanText»"
                             )
-                            onConfirmOperations(listOf(taskOp), transcriptText)
+                            onConfirmOperations(listOf(taskOp), cleanText)
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -459,14 +759,18 @@ fun VoiceCaptureModalSheet(
                     OutlinedButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val cleanText = PersianOfflineSpeechHelper.normalizePersianTranscript(
+                                transcriptText,
+                                convertSpokenNumbers = convertSpokenNumbers
+                            )
                             val journalOp = ProposedAiOperation(
                                 operationType = "CreateTask",
-                                title = transcriptText.trim().take(80),
+                                title = cleanText.take(80),
                                 category = "یادداشت روزانه",
                                 priority = "LOW",
-                                humanReadablePreview = "ثبت یادداشت: «${transcriptText.trim()}»"
+                                humanReadablePreview = "ثبت یادداشت: «$cleanText»"
                             )
-                            onConfirmOperations(listOf(journalOp), transcriptText)
+                            onConfirmOperations(listOf(journalOp), cleanText)
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -483,7 +787,7 @@ fun VoiceCaptureModalSheet(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "نمونه‌های سریع مالی و بدهی/طلب (لمس برای ثبت آنی):",
+                    text = "نمونه‌های سریع مالی و بدهی/طلب (پردازش ۱۰۰٪ آفلاین):",
                     style = MaterialTheme.typography.labelSmall,
                     color = EmeraldSuccess,
                     fontWeight = FontWeight.Bold
@@ -621,7 +925,7 @@ private fun VoiceWaveformHeader(
         ) {
             Icon(
                 imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
-                contentDescription = if (isRecording) "توقف ضبط صدا" else "شروع ضبط گفتار فارسی",
+                contentDescription = if (isRecording) "توقف ضبط صدا" else "شروع ضبط گفتار فارسی آفلاین",
                 modifier = Modifier.size(36.dp)
             )
         }
@@ -715,9 +1019,14 @@ fun StructuredOperationPreviewCard(
                                 value = op.title,
                                 onValueChange = { newTitle ->
                                     editableOps = editableOps.toMutableList().also { list ->
+                                        val updatedPreview = if (op.operationType == "AddExpense") {
+                                            "ثبت تراکنش: ${PersianDateAndUnitUtils.formatCurrencyAmount(op.amount, op.currency.ifBlank { "TOMAN" })} ($newTitle)"
+                                        } else {
+                                            "${op.operationType}: $newTitle"
+                                        }
                                         list[idx] = op.copy(
                                             title = newTitle,
-                                            humanReadablePreview = "${op.operationType}: $newTitle"
+                                            humanReadablePreview = updatedPreview
                                         )
                                     }
                                 },
@@ -725,6 +1034,68 @@ fun StructuredOperationPreviewCard(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            if (op.operationType == "AddExpense") {
+                                val curr = op.currency.ifBlank { "TOMAN" }
+                                OutlinedTextField(
+                                    value = op.amount.toLong().toString(),
+                                    onValueChange = { newAmtStr ->
+                                        val parsedAmt = PersianDateAndUnitUtils.toEnglishDigits(newAmtStr)
+                                            .replace(",", "")
+                                            .toDoubleOrNull() ?: 0.0
+                                        editableOps = editableOps.toMutableList().also { list ->
+                                            list[idx] = op.copy(
+                                                amount = parsedAmt,
+                                                humanReadablePreview = "ثبت تراکنش: ${PersianDateAndUnitUtils.formatCurrencyAmount(parsedAmt, curr)} (${op.title})"
+                                            )
+                                        }
+                                    },
+                                    label = { Text("مبلغ دقیق ($curr)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                // Colloquial Toman Disambiguation Toggle (e.g., 500,000 Toman <-> 500 Toman)
+                                if (curr.equals("TOMAN", ignoreCase = true) && op.amount >= 1000.0 && op.amount <= 999_000.0 && op.amount % 1000.0 == 0.0) {
+                                    val unscaledAmt = op.amount / 1000.0
+                                    AssistChip(
+                                        onClick = {
+                                            editableOps = editableOps.toMutableList().also { list ->
+                                                list[idx] = op.copy(
+                                                    amount = unscaledAmt,
+                                                    humanReadablePreview = "ثبت تراکنش (دقیق): ${PersianDateAndUnitUtils.formatCurrencyAmount(unscaledAmt, curr)} (${op.title})"
+                                                )
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "تبدیل محاوره‌ای (×۱۰۰۰) اعمال شد • تغییر به ${PersianDateAndUnitUtils.formatCurrencyAmount(unscaledAmt, curr)} واقعی",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = AmberWarning
+                                            )
+                                        }
+                                    )
+                                } else if (curr.equals("TOMAN", ignoreCase = true) && op.amount in 1.0..999.0) {
+                                    val scaledAmt = op.amount * 1000.0
+                                    AssistChip(
+                                        onClick = {
+                                            editableOps = editableOps.toMutableList().also { list ->
+                                                list[idx] = op.copy(
+                                                    amount = scaledAmt,
+                                                    humanReadablePreview = "ثبت تراکنش (هزار تومان): ${PersianDateAndUnitUtils.formatCurrencyAmount(scaledAmt, curr)} (${op.title})"
+                                                )
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "تبدیل به محاوره‌ای (${PersianDateAndUnitUtils.formatCurrencyAmount(scaledAmt, curr)})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = ElectricTeal
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                         } else {
                             OutlinedTextField(
                                 value = op.title,

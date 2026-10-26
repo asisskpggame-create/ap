@@ -106,6 +106,7 @@ service cloud.firestore {
              (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
              data.inputSource is string && data.inputSource in ['MANUAL', 'VOICE', 'AI_ASSISTANT'] &&
              (!('idempotencyKey' in data) || (data.idempotencyKey is string && data.idempotencyKey.size() <= 128)) &&
+             (!('transactionType' in data) || (data.transactionType is string && data.transactionType in ['EXPENSE', 'INCOME', 'DEBT', 'RECEIVABLE', 'DEBT_SETTLED', 'RECEIVABLE_SETTLED'])) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -205,6 +206,11 @@ service cloud.firestore {
              (!('retainVoiceTranscripts' in data) || data.retainVoiceTranscripts is bool) &&
              (!('retainConversations' in data) || data.retainConversations is bool) &&
              (!('notificationsEnabled' in data) || data.notificationsEnabled is bool) &&
+             (!('dailyExpenseReminderEnabled' in data) || data.dailyExpenseReminderEnabled is bool) &&
+             (!('dailyExpenseReminderHour' in data) || (data.dailyExpenseReminderHour is int && data.dailyExpenseReminderHour >= 0 && data.dailyExpenseReminderHour <= 23)) &&
+             (!('dailyExpenseReminderMinute' in data) || (data.dailyExpenseReminderMinute is int && data.dailyExpenseReminderMinute >= 0 && data.dailyExpenseReminderMinute <= 59)) &&
+             (!('customExpenseCategories' in data) || isValidStringList(data.customExpenseCategories, 50)) &&
+             (!('financialAccounts' in data) || isValidStringList(data.financialAccounts, 30)) &&
              data.onboardingCompleted is bool &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
@@ -271,7 +277,7 @@ service cloud.firestore {
         allow create: if isOwner(userId) &&
                          isValidId(expenseId) &&
                          incoming().keys().hasAll(['userId', 'title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'inputSource', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'transactionType', 'createdAt', 'updatedAt']) &&
                          isValidExpenseEntry(incoming());
         allow update: if isSignedIn() &&
                          isValidExpenseEntry(incoming()) &&
@@ -279,7 +285,7 @@ service cloud.firestore {
                          isValidId(expenseId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'amount', 'currency', 'timestampMillis', 'localEpochDay', 'linkedConsumptionId', 'notes', 'inputSource', 'idempotencyKey', 'transactionType', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(expenseId) && resource.data.userId == request.auth.uid;
       }
 
@@ -391,7 +397,7 @@ service cloud.firestore {
         allow create: if isOwner(userId) &&
                          isValidId(prefId) &&
                          incoming().keys().hasAll(['userId', 'language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'onboardingCompleted', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'dailyExpenseReminderEnabled', 'dailyExpenseReminderHour', 'dailyExpenseReminderMinute', 'customExpenseCategories', 'financialAccounts', 'createdAt', 'updatedAt']) &&
                          isValidUserPreferencesDoc(incoming());
         allow update: if isSignedIn() &&
                          isValidUserPreferencesDoc(incoming()) &&
@@ -399,7 +405,7 @@ service cloud.firestore {
                          isValidId(prefId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['language', 'darkTheme', 'weekStartDay', 'calendarDisplay', 'defaultCurrency', 'dailyWaterTargetMl', 'dailySleepTargetMinutes', 'dailyExerciseTargetMinutes', 'retainVoiceTranscripts', 'retainConversations', 'notificationsEnabled', 'onboardingCompleted', 'dailyExpenseReminderEnabled', 'dailyExpenseReminderHour', 'dailyExpenseReminderMinute', 'customExpenseCategories', 'financialAccounts', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(prefId) && resource.data.userId == request.auth.uid;
       }
     }

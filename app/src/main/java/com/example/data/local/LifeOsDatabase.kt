@@ -47,6 +47,7 @@ data class CachedTaskEntity(
     val completedAtMillis: Long = -1L,
     val idempotencyKey: String = "",
     val actualDurationMinutes: Int = 0,
+    val linkedDebtId: String = "",
     val syncedWithCloud: Boolean = false,
     val updatedAtMillis: Long = System.currentTimeMillis()
 ) {
@@ -71,7 +72,8 @@ data class CachedTaskEntity(
         sortOrder = sortOrder,
         completedAtMillis = completedAtMillis,
         idempotencyKey = idempotencyKey,
-        actualDurationMinutes = actualDurationMinutes
+        actualDurationMinutes = actualDurationMinutes,
+        linkedDebtId = linkedDebtId
     )
 
     companion object {
@@ -97,6 +99,7 @@ data class CachedTaskEntity(
             completedAtMillis = t.completedAtMillis,
             idempotencyKey = t.idempotencyKey,
             actualDurationMinutes = t.actualDurationMinutes,
+            linkedDebtId = t.linkedDebtId,
             syncedWithCloud = synced,
             updatedAtMillis = System.currentTimeMillis()
         )
@@ -215,6 +218,10 @@ data class CachedExpenseEntity(
     val inputSource: String = "MANUAL",
     val idempotencyKey: String = "",
     val transactionType: String = "EXPENSE",
+    val paidAmount: Double = 0.0,
+    val dueEpochDay: Long = -1L,
+    val installmentCount: Int = 1,
+    val linkedDebtId: String = "",
     val syncedWithCloud: Boolean = false
 ) {
     fun toDomain(): ExpenseEntry = ExpenseEntry(
@@ -230,7 +237,11 @@ data class CachedExpenseEntity(
         notes = notes,
         inputSource = inputSource,
         idempotencyKey = idempotencyKey,
-        transactionType = transactionType
+        transactionType = transactionType,
+        paidAmount = paidAmount,
+        dueEpochDay = dueEpochDay,
+        installmentCount = installmentCount,
+        linkedDebtId = linkedDebtId
     )
 
     companion object {
@@ -248,6 +259,7 @@ data class CachedExpenseEntity(
             inputSource = e.inputSource,
             idempotencyKey = e.idempotencyKey,
             transactionType = when {
+                e.isTransfer -> "TRANSFER"
                 e.isDebt && e.isSettled -> "DEBT_SETTLED"
                 e.isDebt -> "DEBT"
                 e.isReceivable && e.isSettled -> "RECEIVABLE_SETTLED"
@@ -255,6 +267,10 @@ data class CachedExpenseEntity(
                 e.isIncome -> "INCOME"
                 else -> "EXPENSE"
             },
+            paidAmount = if (e.isSettled && (e.isDebt || e.isReceivable)) e.amount else e.paidAmount,
+            dueEpochDay = e.dueEpochDay,
+            installmentCount = e.installmentCount.coerceAtLeast(1),
+            linkedDebtId = e.linkedDebtId,
             syncedWithCloud = synced
         )
     }
@@ -605,6 +621,15 @@ interface LifeOsDao {
     @Query("SELECT * FROM cached_expenses WHERE userId = :userId ORDER BY timestampMillis DESC")
     fun observeCachedExpenses(userId: String): Flow<List<CachedExpenseEntity>>
 
+    @Query("SELECT * FROM cached_expenses WHERE userId = :userId")
+    suspend fun getExpensesForUser(userId: String): List<CachedExpenseEntity>
+
+    @Query("SELECT * FROM cached_expenses WHERE userId = :userId AND id = :id LIMIT 1")
+    suspend fun getExpenseById(userId: String, id: String): CachedExpenseEntity?
+
+    @Query("SELECT * FROM cached_tasks WHERE userId = :userId AND linkedDebtId = :debtId")
+    suspend fun getTasksLinkedToDebt(userId: String, debtId: String): List<CachedTaskEntity>
+
     @Query("SELECT * FROM cached_expenses WHERE userId = :userId AND syncedWithCloud = 0")
     suspend fun getUnsyncedExpenses(userId: String): List<CachedExpenseEntity>
 
@@ -766,7 +791,7 @@ interface LifeOsDao {
         CachedConversationEntity::class,
         SyncQueueEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class LifeOsDatabase : RoomDatabase() {
@@ -809,6 +834,37 @@ abstract class LifeOsDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Version 4 -> 5 schema preservation
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE cached_tasks ADD COLUMN linkedDebtId TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE cached_expenses ADD COLUMN paidAmount REAL NOT NULL DEFAULT 0.0")
+                } catch (_: Exception) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE cached_expenses ADD COLUMN dueEpochDay INTEGER NOT NULL DEFAULT -1")
+                } catch (_: Exception) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE cached_expenses ADD COLUMN installmentCount INTEGER NOT NULL DEFAULT 1")
+                } catch (_: Exception) {
+                }
+                try {
+                    db.execSQL("ALTER TABLE cached_expenses ADD COLUMN linkedDebtId TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {
+                }
+            }
+        }
+
         @Volatile
         private var INSTANCE: LifeOsDatabase? = null
 
@@ -819,7 +875,7 @@ abstract class LifeOsDatabase : RoomDatabase() {
                     LifeOsDatabase::class.java,
                     "personal_life_os_cache.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration(true)
                     .build()
                     .also { INSTANCE = it }

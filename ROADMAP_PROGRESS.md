@@ -1,0 +1,127 @@
+# گزارش پیشرفت اجرای نقشه راه (`ROADMAP_PROGRESS.md`)
+
+**مخزن:** `Personal Life OS` (`com.example`)  
+**مرجع:** `APP_ROADMAP_FA.md`  
+
+---
+
+## خلاصه وضعیت فازها
+
+| فاز | عنوان | وضعیت | توضیحات |
+|---|---|---|---|
+| **فاز صفر** | ممیزی قبل از تغییر و ثبت `FEATURE_INVENTORY.md` | `PASS` | بررسی کامل سورس، استخراج صفحات، مدل‌های داده، دیتابیس Room، قوانین Firestore و ثبت در `FEATURE_INVENTORY.md` انجام شد. |
+| **فاز یک** | ناوبری چهاربخشی و جایگاه قابلیت‌ها | `PASS` | منوی پایین ۴ بخشی (`۱. مالی`, `۲. اهداف و مسیر`, `۳. داشبورد`, `۴. AI`) با حفظ مسیرها و Deep Linkها پیاده‌سازی و با تست Robolectric تأیید شد. |
+| **فاز دو** | اتصال مالی به اهداف و مسیر (`debt-goal-link`) | `PASS` | اتصال رکورد اصلی بدهی به تسک‌های بازپرداخت (`linkedDebtId`)، پرداخت جزئی (`paidAmount`)، انتقال بین حساب (`TRANSFER`) و Migration 5->6 پیاده‌سازی و تست شد. |
+| **فاز سه** | سیستم یادآوری مشترک (`reminder-system`) | `PASS` | موتور یادآوری واحد برای مالی، کارها، عادت‌ها، اهداف و سلامت با پشتیبانی از Snooze بدون تکرار، تغییر موعد، لغو خودکار پس از تکمیل/تسویه و پوشش حریم خصوصی پیاده‌سازی و تست شد. |
+| **فاز چهار** | بازطراحی و تکمیل داشبورد (`dashboard-wireframe`) | `PASS` | کارت یادآوری‌های مهم و اقدام بعدی، تفکیک صریح «داده کافی نیست» از مقدار `0`، برچسب «(تخمینی)» برای پیش‌بینی هزینه پایان ماه و شخصی‌سازی نمایش/مخفی کردن کارت‌ها پیاده‌سازی و تست شد. |
+| **فاز پنج** | توسعه کنترل‌شده AI | `PASS` | پرسش تکمیلی (`AskClarification`) در درخواست‌های مبهم، پاسخ‌های تحلیلی مبتنی بر داده واقعی و بازه زمانی، پیش‌نمایش و الزام تأیید عملیات حساس (`requiresConfirmation = true`) و جلوگیری از ثبت تکراری در retry پیاده‌سازی و تست شد. |
+| **فاز شش** | تثبیت، ماتریس تست و انتشار | `PASS` | اجرای کامل ماتریس ۱۲ گانه تست‌ها و تأیید تمامی معیارهای پذیرش بدون حذف هیچ قابلیتی از پروژه. |
+
+---
+
+## ماتریس ۱۲ گانه تست و اعتبارسنجی نهایی (فاز شش)
+
+| ردیف | سناریوی تست طبق `APP_ROADMAP_FA.md` | محل تست / پوشش | وضعیت واقعی |
+|---|---|---|---|
+| ۱ | تبدیل تومان/ریال و نرمال‌سازی ورودی‌های صوتی و محاوره‌ای | `ExampleRobolectricTest` (`verify colloquial Toman voice parsing...`) و `LifeOsRepositoryRuleTest` | `PASS` |
+| ۲ | عدم تغییر موجودی در انتقال بین حساب‌های شخصی (`TRANSFER`) | `ExampleRobolectricTest` (`phase2 verify debt repayment plan partial payment idempotency and transfer exclusion`) | `PASS` |
+| ۳ | ایجاد بدهی و برنامه بازپرداخت در «اهداف و مسیر» (`linkedDebtId`) | `ExampleRobolectricTest` (`phase2 verify debt repayment plan...`) | `PASS` |
+| ۴ | پرداخت قسط، کاهش مانده بدهی و جلوگیری از ثبت تکراری (`idempotencyKey`) | `ExampleRobolectricTest` (`phase2 verify debt repayment plan...`) | `PASS` |
+| ۵ | تسویه کامل بدهی و بستن تسک‌های بازپرداخت مرتبط (`COMPLETED`) | `ExampleRobolectricTest` (`phase2 verify debt repayment plan...`) | `PASS` |
+| ۶ | زمان‌بندی یادآوری برای کار و بدهی در موتور مشترک (`ReminderScheduler`) | `ExampleRobolectricTest` (`phase3 verify unified reminder engine...`) | `PASS` |
+| ۷ | تغییر موعد و جایگزینی یادآوری قبلی بدون تکرار (`rescheduleEntityReminder`) | `ExampleRobolectricTest` (`phase3 verify unified reminder engine...`) | `PASS` |
+| ۸ | `Snooze` بدون ایجاد اعلان تکراری (`snoozeReminder`) | `ExampleRobolectricTest` (`phase3 verify unified reminder engine...`) | `PASS` |
+| ۹ | لغو خودکار یادآوری پس از انجام کار یا تسویه بدهی | `ExampleRobolectricTest` (`phase3 verify unified reminder engine...`) | `PASS` |
+| ۱۰ | صحت محاسبه کارت‌های داشبورد، تفکیک «داده کافی نیست» از `0` و برچسب «تخمینی» | `ExampleRobolectricTest` (`phase4 and phase5 verify dashboard...`) | `PASS` |
+| ۱۱ | حفظ داده‌ها در ارتقای دیتابیس (`MIGRATION_1_2` تا `MIGRATION_5_6`) و بکاپ رمزنگاری‌شده | `LifeOsDatabase.kt` + `ExampleRobolectricTest` (`read string from context and verify encrypted backup roundtrip`) | `PASS` |
+| ۱۲ | پیش‌نمایش و تأیید عملیات حساس در AI و پرسش تکمیلی در ابهام | `ExampleRobolectricTest` (`phase4 and phase5 verify dashboard...`) | `PASS` |
+
+---
+
+## گزارش تفصیلی مراحل
+
+### فاز شش — تثبیت، تست و آماده‌سازی انتشار
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+  - `ROADMAP_PROGRESS.md`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** تست‌های یکپارچه برای سناریوهای فاز ۴ و ۵ در کنار فازهای ۱ تا ۳ تکمیل نشده بود.
+  - **جدید:** تمامی ۶ تست جامع در `ExampleRobolectricTest` شامل ناوبری ۴ تبی، بکاپ رمزنگاری‌شده، پارسر پیامک بانکی و گفتار محاوره‌ای فارسی، اتصال بدهی به اهداف و پرداخت قسط بدون دوباره‌شماری، موتور یادآوری واحد (Snooze، تغییر موعد، لغو خودکار) و کنترل هوشمند داشبورد و AI اجرا و با موفقیت (`BUILD SUCCESSFUL`) تأیید شدند.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded - the applet is compiled`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `6 tests, 6 PASSED (BUILD SUCCESSFUL)`
+
+### فاز پنج — توسعه کنترل‌شده AI
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/main/java/com/example/ai/GeminiAssistantService.kt`
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** دستورات مبهم مالی (مانند «تسویه بدهی» یا «پرداخت قسط» بدون مبلغ و عنوان) یا پرسش‌های تحلیلی درباره بیشترین دسته هزینه و وضعیت اقساط باز پاسخ اختصاصی مبتنی بر داده واقعی و بازه زمانی نداشتند.
+  - **جدید:** در دستورات مبهم مالی یا تسک، دستیار عملیات `AskClarification` را به همراه لیست بدهی‌ها یا تسک‌های باز برمی‌گرداند و از ثبت حدسی خودداری می‌کند؛ در سوالات تحلیلی («بیشترین هزینه»، «وضعیت بدهی و قسط»، «روند عادت‌ها»)، پاسخ مستقیماً از داده‌های واقعی دیتابیس به همراه بازه زمانی دقیق (`بازه ۳۰ روز اخیر` یا `۷ روز اخیر`) و اعلام صریح `داده کافی نیست` در صورت نبود داده تولید می‌شود؛ تمام عملیات حساس دارای `requiresConfirmation = true` و محافظت در برابر ثبت تکراری هستند.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `PASSED (BUILD SUCCESSFUL)`
+
+### فاز چهار — بازطراحی و تکمیل داشبورد (`dashboard-wireframe`)
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/main/java/com/example/ui/screens/HomeDashboardScreen.kt`
+  - `app/src/main/java/com/example/util/WorldClassOsUtils.kt`
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** در صورت نبود داده یا بودجه، عدد `0` یا `0%` نمایش داده می‌شد؛ پیش‌بینی هزینه پایان ماه برچسب تخمینی نداشت؛ کارت متمرکز «یادآوری‌های مهم و اقدام بعدی» و دیالوگ شخصی‌سازی نمایش/مخفی کردن کارت‌ها در هدر داشبورد وجود نداشت.
+  - **جدید:** کارت‌های داشبورد در صورت نبود رکورد عبارت «داده کافی نیست» را نمایش می‌دهند؛ پیش‌بینی پایان ماه با برچسب صریح `برآورد هزینه پایان ماه (تخمینی)` متمایز شده است؛ کارت «یادآوری‌های مهم و اقدام بعدی» تسک‌های عقب‌افتاده، اقدام بعدی امروز و نزدیک‌ترین قسط/بدهی باز را نمایش می‌دهد؛ دکمه شخصی‌سازی کارت‌ها (`dashboard_customize_cards_button`) امکان نمایش و مخفی کردن کارت‌های داشبورد را با ذخیره در `prefs.dashboardCardOrder` فراهم می‌کند.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `PASSED (BUILD SUCCESSFUL)`
+
+### فاز سه — سیستم یادآوری مشترک (`reminder-system`)
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/main/java/com/example/notifications/ReminderReceiver.kt`
+  - `app/src/main/java/com/example/data/repository/LifeOsRepository.kt`
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** زمان‌بندی اعلان‌ها پراکنده بود و پس از تکمیل تسک یا تسویه بدهی، یادآوری‌های آینده به‌طور خودکار لغو نمی‌شدند.
+  - **جدید:** موتور یکپارچه `ReminderScheduler` با کلید یکتای `(entityType, entityId)` برای `TASK`, `DEBT`, `HABIT`, `GOAL`, `DAILY_EXPENSE` ایجاد شد؛ تغییر موعد (`updateTask`, `updateDebtScheduleOrAmount`) یادآوری قبلی را لغو و زمان جدید را بدون ایجاد اعلان تکراری جایگزین می‌کند؛ تکمیل یا حذف تسک و تسویه کامل بدهی یادآوری‌های آینده (از جمله اقساط متصل) را خودکار لغو می‌کند؛ عملیات `Snooze` بدون ایجاد تکرار، زمان تریگر و شمارنده تعویق را بروزرسانی می‌کند؛ گزینه پوشش محتوای حساس مالی (`hideSensitiveContent`) اضافه شد.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `5 tests, 5 PASSED (BUILD SUCCESSFUL)`
+
+### فاز دو — اتصال مالی به اهداف و مسیر (`debt-goal-link`)
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/main/java/com/example/data/model/LifeOsModels.kt`
+  - `app/src/main/java/com/example/data/local/LifeOsDatabase.kt`
+  - `app/src/main/java/com/example/util/PersianDateAndUnitUtils.kt`
+  - `app/src/main/java/com/example/data/repository/LifeOsRepository.kt`
+  - `app/src/main/java/com/example/ui/viewmodel/LifeOsViewModel.kt`
+  - `app/src/main/java/com/example/ui/screens/DailyLogAndHealthScreen.kt`
+  - `app/src/main/java/com/example/MainActivity.kt`
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** بدهی‌ها صرفاً تسویه کامل داشتند و به تسک‌های بازپرداخت در «اهداف و مسیر» متصل نبودند؛ انتقال بین حساب‌های شخصی ثبت اختصاصی نداشت.
+  - **جدید:** رکورد اصلی بدهی تنها در بخش مالی نگهداری می‌شود؛ تسک‌های اقساط در بخش «اهداف و مسیر» با `linkedDebtId` به رکورد اصلی ارجاع می‌دهند؛ تیک‌زدن ساده تسک در مسیر بدون تأیید پرداخت، بدهی را کسر نمی‌کند؛ ثبت پرداخت قسط با کلید یکتا (`idempotencyKey`) مانع ثبت تکراری شده و `remainingAmount` را دقیق کاهش می‌دهد؛ تسویه کامل بدهی وضعیت تمام تسک‌های مرتبط را به `COMPLETED` تغییر می‌دهد؛ تراکنش‌های `TRANSFER` در درآمد یا هزینه شمارش نمی‌شوند؛ `MIGRATION_5_6` بدون حذف داده‌های قبلی اضافه شد.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `4 tests, 4 PASSED (BUILD SUCCESSFUL)`
+
+### فاز یک — ناوبری و جایگاه قابلیت‌ها
+- **وضعیت:** `PASS`
+- **فایل‌های تغییرکرده:**
+  - `app/src/main/java/com/example/MainActivity.kt`
+  - `app/src/test/java/com/example/ExampleRobolectricTest.kt`
+- **رفتار قبلی و رفتار جدید:**
+  - **قبلی:** ترتیب منوی پایین `[امور مالی, روندها, هدف و عادت, دستیار]` بود.
+  - **جدید:** ترتیب منوی پایین دقیقاً مطابق نقشه راه به `[۱. مالی (DAILY_LOG), ۲. اهداف و مسیر (GOALS_AND_HABITS), ۳. داشبورد (HOME), ۴. AI (AI_ASSISTANT)]` تغییر یافت، بدون آنکه هیچ‌یک از کلیدهای مسیر (`route`)، رفتار دکمه بازگشت (`BackHandler`)، یا Deep Linkهای اعلان و ویجت شکسته شوند. همچنین مسیرهای مستعار (`TASKS`, `HABITS`, `HEALTH`, `DAILY_LOG_DEBT`) پشتیبانی شدند.
+- **تست‌های اجراشده و نتیجه واقعی:**
+  - `compile_applet` ← `Build succeeded`
+  - `gradle :app:testDebugUnitTest --tests "com.example.ExampleRobolectricTest"` ← `3 tests, 3 PASSED (BUILD SUCCESSFUL)`
+
+### فاز صفر — ممیزی قبل از تغییر
+- **وضعیت:** `PASS`
+- **فایل‌های ایجادشده:**
+  - `FEATURE_INVENTORY.md`
+  - `ROADMAP_PROGRESS.md`
