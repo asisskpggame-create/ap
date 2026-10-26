@@ -427,10 +427,10 @@ $cleanInput
         // 4. Split compound commands joined by " و "
         val clauses = splitCompoundClauses(norm)
         val operations = mutableListOf<ProposedAiOperation>()
-        var sharedDateOffset = if (norm.contains("فردا")) 1 else if (norm.contains("دیروز") || norm.contains("دیشب")) -1 else 0
+        val sharedDateOffset = PersianDateAndUnitUtils.extractRelativeDateOffsetDays(norm, todayEpochDay)
 
         for (clause in clauses) {
-            val op = parseSingleClause(clause.trim(), sharedDateOffset, defaultCurrency)
+            val op = parseSingleClause(clause.trim(), sharedDateOffset, defaultCurrency, todayEpochDay)
             if (op != null) {
                 operations.add(op)
             }
@@ -457,7 +457,12 @@ $cleanInput
         val summaryText = if (operations.size > 1) {
             "تعداد ${PersianDateAndUnitUtils.toPersianDigits(operations.size.toString())} عملیات مجزا شناسایی شد. لطفاً پیش‌نمایش را بررسی و تأیید کنید:"
         } else if (operations.size == 1) {
-            "عملیات شناسایی شد: ${operations.first().humanReadablePreview}. لطفاً پیش از ذخیره تأیید فرمایید."
+            val first = operations.first()
+            if (first.operationType == "AskClarification") {
+                first.clarificationQuestion
+            } else {
+                "عملیات شناسایی شد: ${first.humanReadablePreview}. لطفاً پیش از ذخیره تأیید فرمایید."
+            }
         } else {
             "دستور شما دریافت شد اما برای ثبت دقیق نیاز به جزئیات بیشتری دارد."
         }
@@ -470,29 +475,112 @@ $cleanInput
         )
     }
 
+    /**
+     * Lightweight instant financial parser for the Finance Quick-Entry Form:
+     * When the user types or dictates a phrase like "۶۰۰ هزار تومان بابت فروش جمینای گرفتم"
+     * or "۳۰۰ هزار تومن بابت اشتراک پرداخت کردم", returns the detected financial operation
+     * (transactionType, amount, currency, cleaned title, category, notes).
+     */
+    fun detectInstantFinancialSuggestion(
+        rawText: String,
+        defaultCurrency: String = "TOMAN",
+        todayEpochDay: Long = PersianDateAndUnitUtils.currentLocalEpochDay()
+    ): ProposedAiOperation? {
+        val norm = PersianDateAndUnitUtils.toEnglishDigits(rawText)
+            .replace('ي', 'ی')
+            .replace('ك', 'ک')
+            .trim()
+        if (norm.length < 3) return null
+        val op = parseSingleClause(
+            clause = norm,
+            inheritedDateOffset = PersianDateAndUnitUtils.extractRelativeDateOffsetDays(norm, todayEpochDay),
+            defaultCurrency = defaultCurrency,
+            todayEpochDay = todayEpochDay
+        )
+        return op?.takeIf { it.operationType == "AddExpense" && it.amount > 0.0 }
+    }
+
     private fun splitCompoundClauses(norm: String): List<String> {
+        // Protect compound numbers like "2 میلیون و 500" or "صد و پنجاه" from splitting on " و "
+        if (Regex("""(?:میلیون|ملیون|صد|بیست|سی|چهل|پنجاه|شصت|هفتاد|هشتاد|نود|یک|دو)\s+و\s+(?:\d+|نیم|پانصد|پونصد|دویست|سیصد|چهارصد|ششصد|هفتصد|هشتصد|نهصد|پنجاه|پنج)""").containsMatchIn(norm)) {
+            return listOf(norm)
+        }
         val parts = norm.split(Regex("\\s+و\\s+"))
         if (parts.size <= 1) return listOf(norm)
-        // Only split if each part looks like an independent action
+        // Only split if each part looks like an independent action with its own verb/action keyword
         val actionKeywords = listOf(
-            "خوردم", "نوشیدم", "خریدم", "خوابیدم", "ورزش", "پیاده‌روی", "پرداخت",
+            "خوردم", "نوشیدم", "خریدم", "خوابیدم", "ورزش", "پیاده‌روی", "پرداخت", "دریافت",
             "کنم", "مصرف", "هزینه", "بدوم", "مطالعه", "تسک", "بذار", "ثبت",
-            "بدهکارم", "طلبکارم", "قرض", "تومن", "تومان"
+            "بدهکارم", "طلبکارم", "طلب دارم", "قرض", "گرفتم", "دادم", "واریز", "انتقال", "فروختم"
         )
         val validSplit = parts.all { part -> actionKeywords.any { kw -> part.contains(kw) } }
         return if (validSplit) parts else listOf(norm)
     }
 
+    private fun cleanFinancialTitle(
+        rawClause: String,
+        fallbackLabel: String
+    ): String {
+        val cleaned = rawClause
+            .replace(Regex("""\d+(?:\.\d+)?"""), "")
+            .replace(Regex("""\b(یک و نیم|دو و نیم|نیم|نهصد|هشتصد|هفتصد|ششصد|شیشصد|پانصد|پونصد|چهارصد|چارصد|سیصد|دویست|یکصد|صد|نود|هشتاد|هفتاد|شصت|پنجاه|چهل|سی|بیست|پانزده|پونزده|دوازده|یازده|ده|نه|هشت|هفت|شش|شیش|پنج|چهار|سه|دو|یک|یه)\b"""), "")
+            .replace(Regex("""\b(میلیارد|میلیون|ملیون|هزار|تومان|تومن|ریال|دلار|یورو|درهم|پوند)\b"""), "")
+            .replace("دریافت کردم", "")
+            .replace("دریافت شد", "")
+            .replace("پرداخت کردم", "")
+            .replace("پرداخت شد", "")
+            .replace("انتقال دادم", "")
+            .replace("منتقل کردم", "")
+            .replace("کارت به کارت کردم", "")
+            .replace("واریز شد", "")
+            .replace("واریز کرد", "")
+            .replace("به حسابم نشست", "")
+            .replace("پولش رو گرفتم", "")
+            .replace("رو پس گرفتم", "")
+            .replace("پس گرفتم", "")
+            .replace("رو پس دادم", "")
+            .replace("پس دادم", "")
+            .replace("قرض دادم", "")
+            .replace("قرض گرفتم", "")
+            .replace("طلب دارم", "")
+            .replace("طلبکارم", "")
+            .replace("طلبکاری", "")
+            .replace("بدهکارم", "")
+            .replace("بدهکاری", "")
+            .replace("خریدم", "")
+            .replace("فروختم", "")
+            .replace("خرج کردم", "")
+            .replace("هزینه کردم", "")
+            .replace("کرایه دادم", "")
+            .replace("پول دادم", "")
+            .replace("گرفتم", "")
+            .replace("دادم", "")
+            .replace("امروز", "")
+            .replace("دیروز", "")
+            .replace("پریروز", "")
+            .replace("فردا", "")
+            .replace("دیشب", "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .removePrefix("بابت ")
+            .removePrefix("برای ")
+            .removePrefix("از ")
+            .removePrefix("به ")
+            .removeSuffix(" بابت")
+            .removeSuffix(" رو")
+            .removeSuffix(" را")
+            .trim()
+        return if (cleaned.length in 2..50) cleaned else fallbackLabel
+    }
+
     private fun parseSingleClause(
         clause: String,
         inheritedDateOffset: Int,
-        defaultCurrency: String
+        defaultCurrency: String,
+        todayEpochDay: Long = PersianDateAndUnitUtils.currentLocalEpochDay()
     ): ProposedAiOperation? {
-        val dateOffset = when {
-            clause.contains("فردا") -> 1
-            clause.contains("دیروز") || clause.contains("دیشب") -> -1
-            else -> inheritedDateOffset
-        }
+        val clauseOffset = PersianDateAndUnitUtils.extractRelativeDateOffsetDays(clause, todayEpochDay)
+        val dateOffset = if (clauseOffset != 0) clauseOffset else inheritedDateOffset
 
         val numberRegex = Regex("(\\d+(?:\\.\\d+)?)")
         val firstNum = numberRegex.find(clause)?.groupValues?.get(1)?.toDoubleOrNull()
@@ -505,8 +593,10 @@ $cleanInput
             else -> null
         }
 
-        // A. Water / Hydration: "الان ۴۰۰ میلی‌لیتر آب خوردم"
-        if (clause.contains("آب") && (clause.contains("خوردم") || clause.contains("نوشیدم") || clause.contains("میلی‌لیتر") || clause.contains("لیوان") || clause.contains("لیتر"))) {
+        // A. Water / Hydration: "الان ۴۰۰ میلی‌لیتر آب خوردم" (Exclude "قبض آب" which is financial!)
+        if (clause.contains("آب") && !clause.contains("قبض") &&
+            (clause.contains("خوردم") || clause.contains("نوشیدم") || clause.contains("میلی‌لیتر") || clause.contains("لیوان") || clause.contains("لیتر"))
+        ) {
             val qty = firstNum ?: wordNum ?: return ProposedAiOperation(
                 operationType = "AskClarification",
                 clarificationQuestion = "چه مقدار آب نوشیدید؟ (مثلاً ۲۵۰ میلی‌لیتر یا ۱ لیوان)",
@@ -530,17 +620,60 @@ $cleanInput
         }
 
         val detectedCurrency = detectCurrency(clause)
+        val currency = detectedCurrency ?: defaultCurrency
+        val extractedCurrencyAmount = PersianDateAndUnitUtils.extractSpokenOrTypedCurrencyAmount(clause, currency)
 
-        // B1. Debt & Receivable (بدهکاری و طلبکاری): e.g. "۵۰۰ به علی بدهکارم", "۳۰۰ از رضا طلبکارم", "۲۰۰ به ممد قرض دادم"
+        // B0. Account-to-Account Transfer (انتقال بین حساب‌ها):
+        // e.g. "۵ میلیون از حساب اصلی به پس‌انداز انتقال دادم", "۲ میلیون کارت به کارت به حساب خودم"
+        val isTransferIntent = clause.contains("انتقال دادم") ||
+            clause.contains("منتقل کردم") ||
+            clause.contains("انتقال به") ||
+            clause.contains("انتقال از") ||
+            clause.contains("بین حساب") ||
+            (clause.contains("به پس‌انداز") && (clause.contains("انتقال") || clause.contains("ریختم") || clause.contains("زدم"))) ||
+            (clause.contains("کارت به کارت") && (clause.contains("حساب خودم") || clause.contains("پس‌انداز") || clause.contains("کارت خودم")))
+
+        if (isTransferIntent) {
+            val amount = extractedCurrencyAmount ?: firstNum?.let {
+                PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
+            }
+            return if (amount != null && amount > 0.0) {
+                val transferTitle = cleanFinancialTitle(clause, "انتقال بین حساب‌ها").let {
+                    if (it.startsWith("انتقال")) it else "انتقال: $it"
+                }
+                ProposedAiOperation(
+                    operationType = "AddExpense",
+                    title = transferTitle,
+                    category = "OTHER",
+                    amount = amount,
+                    currency = currency,
+                    transactionType = "TRANSFER",
+                    notes = "[TRANSFER] $transferTitle",
+                    dueDateOffsetDays = dateOffset,
+                    requiresConfirmation = true,
+                    humanReadablePreview = "ثبت انتقال بین حساب‌ها: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($transferTitle)"
+                )
+            } else {
+                ProposedAiOperation(
+                    operationType = "AskClarification",
+                    requiresConfirmation = true,
+                    clarificationQuestion = "مبلغ دقیق انتقال بین حساب‌ها چقدر است؟",
+                    humanReadablePreview = "نیاز به مبلغ انتقال حساب"
+                )
+            }
+        }
+
+        // B1. Debt & Receivable (بدهکاری و طلبکاری):
+        // e.g. "۲۰۰ هزار تومان از مشتری طلب دارم", "یک میلیون تومان به علی قرض دادم", "۵۰۰ به علی بدهکارم"
         val isReceivableIntent = clause.contains("طلبکارم") || clause.contains("طلبکاری") ||
-            clause.contains("طلب دارم") || clause.contains("طلب از") || clause.contains("قرض دادم")
+            clause.contains("طلب دارم") || clause.contains("طلب از") || clause.contains("قرض دادم") ||
+            clause.contains("دستی دادم")
         val isDebtIntent = clause.contains("بدهکارم") || clause.contains("بدهکاری") ||
-            clause.contains("بدهی") || clause.contains("قرض گرفتم")
+            (clause.contains("بدهی") && !clause.contains("پس دادم") && !clause.contains("پرداخت کردم")) ||
+            clause.contains("قرض گرفتم") || clause.contains("وام گرفتم")
 
         if (isReceivableIntent || isDebtIntent) {
-            val currency = detectedCurrency ?: defaultCurrency
-            val rawExtracted = PersianDateAndUnitUtils.extractSpokenOrTypedCurrencyAmount(clause, currency)
-            val amount = rawExtracted ?: firstNum?.let {
+            val amount = extractedCurrencyAmount ?: firstNum?.let {
                 PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
             } ?: wordNum?.let {
                 PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
@@ -548,28 +681,7 @@ $cleanInput
             if (amount != null && amount > 0.0) {
                 val txType = if (isReceivableIntent) "RECEIVABLE" else "DEBT"
                 val txLabel = if (isReceivableIntent) "طلبکاری" else "بدهکاری"
-                val cleanedPersonOrReason = clause
-                    .replace(Regex("""\d+(?:\.\d+)?"""), "")
-                    .replace("هزار", "")
-                    .replace("میلیون", "")
-                    .replace("تومان", "")
-                    .replace("تومن", "")
-                    .replace("ریال", "")
-                    .replace("طلبکارم", "")
-                    .replace("طلبکاری", "")
-                    .replace("طلب دارم", "")
-                    .replace("طلب", "")
-                    .replace("بدهکارم", "")
-                    .replace("بدهکاری", "")
-                    .replace("بدهی", "")
-                    .replace("قرض دادم", "")
-                    .replace("قرض گرفتم", "")
-                    .replace(Regex("""\s+"""), " ")
-                    .trim()
-                    .removePrefix("از ")
-                    .removePrefix("به ")
-                    .trim()
-                val title = if (cleanedPersonOrReason.isNotBlank()) cleanedPersonOrReason else txLabel
+                val title = cleanFinancialTitle(clause, txLabel)
                 return ProposedAiOperation(
                     operationType = "AddExpense",
                     title = title,
@@ -592,62 +704,135 @@ $cleanInput
             }
         }
 
-        // B2. Income (درآمد / حقوق / واریزی): e.g. "۱۵ میلیون حقوق گرفتم", "۲ میلیون واریز شد"
-        val isIncomeIntent = clause.contains("حقوق") || clause.contains("درآمد") ||
-            clause.contains("واریز شد") || clause.contains("واریزی") || clause.contains("پاداش")
-        if (isIncomeIntent && (firstNum != null || wordNum != null)) {
-            val currency = detectedCurrency ?: defaultCurrency
-            val rawExtracted = PersianDateAndUnitUtils.extractSpokenOrTypedCurrencyAmount(clause, currency)
-            val amount = rawExtracted ?: firstNum?.let {
+        // B2. Comprehensive Income vs. Expense Intent Detection
+        // Guard against "اسنپ گرفتم" / "تاکسی گرفتم" / "کرایه گرفتم" (which mean taking a taxi = EXPENSE, unless "کرایه خانه گرفتم")
+        val isTaxiRidePhrase = (clause.contains("اسنپ") || clause.contains("تپسی") || clause.contains("تاکسی") || clause.contains("آژانس")) &&
+            clause.contains("گرفتم")
+
+        val hasStrongIncomeVerb = !isTaxiRidePhrase && (
+            clause.contains("دریافت کردم") ||
+                clause.contains("دریافت شد") ||
+                clause.contains("واریز شد") ||
+                clause.contains("واریز کرد") ||
+                clause.contains("به حسابم نشست") ||
+                clause.contains("به کارتم نشست") ||
+                clause.contains("فروختم") ||
+                clause.contains("پس گرفتم") ||
+                clause.contains("برگشت خورد") ||
+                clause.contains("کش‌بک") ||
+                clause.contains("بابت فروش") ||
+                clause.contains("از فروش") ||
+                clause.contains("فروش جمینای") ||
+                clause.contains("فروش gemini", ignoreCase = true) ||
+                clause.contains("فروش خدمات") ||
+                clause.contains("فروش محصول") ||
+                clause.contains("حقوق") ||
+                clause.contains("درآمد") ||
+                clause.contains("پاداش") ||
+                clause.contains("کارانه") ||
+                clause.contains("عیدی") ||
+                clause.contains("سود بانکی") ||
+                clause.contains("سود سهام") ||
+                clause.contains("پورسانت") ||
+                clause.contains("حق‌الزحمه") ||
+                clause.contains("دستمزد") ||
+                clause.contains("بیعانه گرفتم") ||
+                (clause.contains("گرفتم") && !clause.contains("قرض") && !clause.contains("وام") && !clause.contains("خریدم"))
+            )
+
+        val hasStrongExpenseVerb = isTaxiRidePhrase ||
+            clause.contains("پرداخت کردم") ||
+            clause.contains("پرداخت شد") ||
+            clause.contains("خریدم") ||
+            clause.contains("خرج کردم") ||
+            clause.contains("هزینه کردم") ||
+            clause.contains("کرایه دادم") ||
+            clause.contains("پول دادم") ||
+            clause.contains("پس دادم") ||
+            clause.contains("حساب کردم") ||
+            clause.contains("کارت کشیدم") ||
+            (clause.contains("دادم") && !clause.contains("انتقال دادم") && !clause.contains("قرض دادم") && !clause.contains("انجام دادم"))
+
+        // Contradictory verb check inside a single clause -> AskClarification instead of guessing!
+        if (hasStrongIncomeVerb && hasStrongExpenseVerb && !clause.contains("فروختم و پولش رو گرفتم")) {
+            return ProposedAiOperation(
+                operationType = "AskClarification",
+                requiresConfirmation = true,
+                clarificationQuestion = "در جمله «$clause» هم نشانه دریافت و هم پرداخت دیده می‌شود؛ آیا این تراکنش دریافت (درآمد +) است یا پرداخت (هزینه −)؟",
+                humanReadablePreview = "نیاز به شفاف‌سازی نوع تراکنش (دریافت یا پرداخت)"
+            )
+        }
+
+        // B2-Income: Execute Income classification
+        if (hasStrongIncomeVerb && (extractedCurrencyAmount != null || firstNum != null || wordNum != null)) {
+            val amount = extractedCurrencyAmount ?: firstNum?.let {
+                PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
+            } ?: wordNum?.let {
                 PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
             }
             if (amount != null && amount > 0.0) {
-                val cleanedIncomeTitle = clause
-                    .replace(Regex("""\d+(?:\.\d+)?"""), "")
-                    .replace("هزار", "")
-                    .replace("میلیون", "")
-                    .replace("تومان", "")
-                    .replace("تومن", "")
-                    .replace("ریال", "")
-                    .replace("گرفتم", "")
-                    .replace("واریز شد", "")
-                    .replace(Regex("""\s+"""), " ")
-                    .trim()
-                    .ifBlank { "درآمد" }
+                val cleanedIncomeTitle = cleanFinancialTitle(
+                    rawClause = clause,
+                    fallbackLabel = when {
+                        clause.contains("جمینای") || clause.contains("gemini", ignoreCase = true) -> "فروش Gemini"
+                        clause.contains("حقوق") -> "حقوق"
+                        clause.contains("فروش") -> "فروش خدمات"
+                        clause.contains("سود") -> "سود بانکی"
+                        else -> "درآمد"
+                    }
+                )
+                val incomeCategory = when {
+                    clause.contains("حقوق") || clause.contains("دستمزد") || clause.contains("کارانه") -> "OTHER"
+                    clause.contains("سود") || clause.contains("سرمایه") -> "OTHER"
+                    else -> "OTHER"
+                }
                 return ProposedAiOperation(
                     operationType = "AddExpense",
                     title = cleanedIncomeTitle,
-                    category = if (clause.contains("حقوق")) "SALARY" else "FREELANCE",
+                    category = incomeCategory,
                     amount = amount,
                     currency = currency,
                     transactionType = "INCOME",
                     dueDateOffsetDays = dateOffset,
                     requiresConfirmation = true,
-                    humanReadablePreview = "ثبت درآمد: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($cleanedIncomeTitle)"
+                    humanReadablePreview = "ثبت دریافت (درآمد +): ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($cleanedIncomeTitle)"
+                )
+            } else {
+                return ProposedAiOperation(
+                    operationType = "AskClarification",
+                    requiresConfirmation = true,
+                    clarificationQuestion = "مبلغ دقیق دریافتی (درآمد) چقدر بوده است؟",
+                    humanReadablePreview = "نیاز به مبلغ دریافتی"
                 )
             }
         }
 
-        // B3. Expense / Purchase — supports both full sentences ("۵۰۰ تومان سیگار خریدم")
-        // AND ultra-fast 2-word shorthand ("۵۰۰ سیگار", "سیگار ۵۰۰", "۱۲۰ اسنپ", "۸۵ قهوه", "۲۵۰ ناهار")
+        // B3. Expense / Payment (پرداخت / هزینه −)
         val nonExpenseTaskOrHealthWords = listOf(
             "ساعت", "دقیقه", "جلسه", "تسک", "خوابیدم", "خواب", "ورزش", "پیاده‌روی",
             "دویدن", "باشگاه", "قرص", "ویتامین", "مکمل", "آب", "میلی‌لیتر", "لیوان", "لیتر",
             "یادداشت", "خاطره", "ژورنال", "کتاب", "مطالعه"
         )
-        val hasNonExpenseKeyword = nonExpenseTaskOrHealthWords.any { clause.contains(it) }
+        val hasNonExpenseKeyword = nonExpenseTaskOrHealthWords.any { clause.contains(it) && !clause.contains("قبض") && !clause.contains("خریدم") && !clause.contains("شهریه") }
         val textWithoutNumbers = clause.replace(Regex("""\d+(?:\.\d+)?"""), "").trim()
-        val isShortNumericExpense = firstNum != null &&
+
+        val commonExpenseNouns = listOf(
+            "غذا", "ناهار", "شام", "صبحانه", "قهوه", "اسپرسو", "لاته", "کافه", "سیگار",
+            "ویپ", "اسنپ", "تپسی", "تاکسی", "مترو", "بنزین", "قبض", "اجاره", "شارژ",
+            "اینترنت", "اشتراک", "سوپرمارکت", "نان", "میوه", "دارو", "دکتر", "لباس",
+            "کفش", "کرایه", "قسط", "شهریه", "بیمه", "تعمیر"
+        )
+        val hasKnownExpenseNoun = commonExpenseNouns.any { clause.contains(it) }
+
+        val isShortNumericExpense = (firstNum != null || extractedCurrencyAmount != null) &&
             !hasNonExpenseKeyword &&
             textWithoutNumbers.isNotBlank() &&
-            textWithoutNumbers.split(Regex("\\s+")).size <= 4 &&
+            textWithoutNumbers.split(Regex("\\s+")).size <= 5 &&
             !clause.contains("کنم") &&
             !clause.contains("بدم")
 
-        if (detectedCurrency != null || clause.contains("خریدم") || clause.contains("هزینه") || clause.contains("خرج") || isShortNumericExpense) {
-            val currency = detectedCurrency ?: defaultCurrency
-            val rawExtracted = PersianDateAndUnitUtils.extractSpokenOrTypedCurrencyAmount(clause, currency)
-            val amount = rawExtracted ?: firstNum?.let {
+        if (detectedCurrency != null || hasStrongExpenseVerb || clause.contains("هزینه") || clause.contains("خرج") || isShortNumericExpense) {
+            val amount = extractedCurrencyAmount ?: firstNum?.let {
                 PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
             } ?: wordNum?.let {
                 PersianDateAndUnitUtils.normalizeColloquialTomanAmount(it, currency, clause)
@@ -655,51 +840,49 @@ $cleanInput
             if (amount == null || amount <= 0.0) {
                 return ProposedAiOperation(
                     operationType = "AskClarification",
+                    requiresConfirmation = true,
                     clarificationQuestion = "مبلغ دقیق هزینه و واحد پول آن چقدر است؟",
                     humanReadablePreview = "نیاز به مبلغ و واحد پول هزینه"
                 )
             }
+
+            // Ambiguity check: If there is NO verb (neither income nor expense) and NO known expense noun
+            // e.g. "۵۰۰ هزار تومان با علی" or "۲۰۰ هزار تومان شرکت" -> ask clarification instead of guessing!
+            if (!hasStrongExpenseVerb && !hasStrongIncomeVerb && !hasKnownExpenseNoun &&
+                !clause.contains("خرج") && !clause.contains("هزینه") && !clause.contains("خرید")
+            ) {
+                val cleanSubj = cleanFinancialTitle(clause, "تراکنش")
+                return ProposedAiOperation(
+                    operationType = "AskClarification",
+                    title = cleanSubj,
+                    amount = amount,
+                    currency = currency,
+                    requiresConfirmation = true,
+                    clarificationQuestion = "مشخص نیست مبلغ ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} مربوط به «$cleanSubj» دریافت بوده یا پرداخت یا طلب/بدهی. لطفاً نوع تراکنش را مشخص فرمایید.",
+                    humanReadablePreview = "نیاز به تعیین نوع تراکنش (دریافت / پرداخت / طلب / بدهی) برای «$cleanSubj»"
+                )
+            }
+
             val isCigarette = clause.contains("سیگار") || clause.contains("ویپ") || clause.contains("تنباکو")
             val isCoffee = clause.contains("قهوه") || clause.contains("اسپرسو") || clause.contains("لاته") || clause.contains("کافه")
             val isFood = clause.contains("غذا") || clause.contains("ناهار") || clause.contains("شام") || clause.contains("صبحانه") || clause.contains("ساندویچ") || clause.contains("پیتزا") || clause.contains("نان") || clause.contains("میوه") || clause.contains("سوپرمارکت")
             val title = when {
                 isCigarette -> "خرید سیگار"
                 isCoffee -> "خرید قهوه"
-                isFood -> {
-                    val customFood = textWithoutNumbers
-                        .replace("هزار", "").replace("میلیون", "").replace("تومان", "").replace("تومن", "")
-                        .replace("خریدم", "").replace("خرج", "").replace("هزینه", "").trim()
-                    if (customFood.length in 2..25) customFood else "خرید خوراک"
-                }
+                isFood -> cleanFinancialTitle(clause, "خرید خوراک")
                 clause.contains("اسنپ") || clause.contains("تپسی") || clause.contains("تاکسی") -> "کرایه اسنپ / تاکسی"
                 clause.contains("بنزین") -> "سوخت و بنزین"
-                clause.contains("قبض") -> "پرداخت قبض"
-                else -> {
-                    val customItemTitle = clause
-                        .replace(Regex("""\d+(?:\.\d+)?"""), "")
-                        .replace("هزار", "")
-                        .replace("میلیون", "")
-                        .replace("تومان", "")
-                        .replace("تومن", "")
-                        .replace("ریال", "")
-                        .replace("یورو", "")
-                        .replace("دلار", "")
-                        .replace("خریدم", "")
-                        .replace("هزینه کردم", "")
-                        .replace("خرج کردم", "")
-                        .replace("امروز", "")
-                        .replace("دیروز", "")
-                        .replace(Regex("""\s+"""), " ")
-                        .trim()
-                    if (customItemTitle.length in 2..35) customItemTitle else "هزینه روزانه"
-                }
+                clause.contains("قبض") -> cleanFinancialTitle(clause, "پرداخت قبض").let { if (it.contains("قبض")) it else "پرداخت قبض $it" }
+                clause.contains("اشتراک") -> cleanFinancialTitle(clause, "خرید اشتراک")
+                else -> cleanFinancialTitle(clause, "هزینه روزانه")
             }
             val category = when {
                 isCigarette || isCoffee -> "COFFEE"
                 isFood -> "FOOD"
-                clause.contains("قبض") -> "BILLS"
-                clause.contains("تاکسی") || clause.contains("اسنپ") || clause.contains("تپسی") || clause.contains("بنزین") -> "TRANSPORT"
-                clause.contains("دارو") || clause.contains("دکتر") -> "HEALTH"
+                clause.contains("قبض") || clause.contains("اجاره") || clause.contains("شارژ") || clause.contains("اینترنت") || clause.contains("اشتراک") -> "BILLS"
+                clause.contains("تاکسی") || clause.contains("اسنپ") || clause.contains("تپسی") || clause.contains("بنزین") || clause.contains("مترو") -> "TRANSPORT"
+                clause.contains("دارو") || clause.contains("دکتر") || clause.contains("پزشک") -> "HEALTH"
+                clause.contains("لباس") || clause.contains("کفش") || clause.contains("خرید") -> "SHOPPING"
                 else -> "OTHER"
             }
             return ProposedAiOperation(
@@ -711,7 +894,7 @@ $cleanInput
                 transactionType = "EXPENSE",
                 dueDateOffsetDays = dateOffset,
                 requiresConfirmation = true,
-                humanReadablePreview = "ثبت هزینه: ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($title)"
+                humanReadablePreview = "ثبت پرداخت (هزینه −): ${PersianDateAndUnitUtils.formatCurrencyAmount(amount, currency)} ($title)"
             )
         }
 

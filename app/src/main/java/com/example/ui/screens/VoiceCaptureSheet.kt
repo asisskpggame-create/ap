@@ -1037,6 +1037,32 @@ fun StructuredOperationPreviewCard(
 
                             if (op.operationType == "AddExpense") {
                                 val curr = op.currency.ifBlank { "TOMAN" }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "EXPENSE" to "پرداخت (−)",
+                                        "INCOME" to "دریافت (+)",
+                                        "TRANSFER" to "انتقال",
+                                        "RECEIVABLE" to "طلب",
+                                        "DEBT" to "بدهی"
+                                    ).forEach { (typeCode, typeLbl) ->
+                                        FilterChip(
+                                            selected = op.transactionType.equals(typeCode, ignoreCase = true),
+                                            onClick = {
+                                                editableOps = editableOps.toMutableList().also { list ->
+                                                    list[idx] = op.copy(
+                                                        transactionType = typeCode,
+                                                        humanReadablePreview = "ثبت $typeLbl: ${PersianDateAndUnitUtils.formatCurrencyAmount(op.amount, curr)} (${op.title})"
+                                                    )
+                                                }
+                                            },
+                                            label = { Text(typeLbl, style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+
                                 OutlinedTextField(
                                     value = op.amount.toLong().toString(),
                                     onValueChange = { newAmtStr ->
@@ -1054,61 +1080,60 @@ fun StructuredOperationPreviewCard(
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
-
-                                // Colloquial Toman Disambiguation Toggle (e.g., 500,000 Toman <-> 500 Toman)
-                                if (curr.equals("TOMAN", ignoreCase = true) && op.amount >= 1000.0 && op.amount <= 999_000.0 && op.amount % 1000.0 == 0.0) {
-                                    val unscaledAmt = op.amount / 1000.0
-                                    AssistChip(
-                                        onClick = {
-                                            editableOps = editableOps.toMutableList().also { list ->
-                                                list[idx] = op.copy(
-                                                    amount = unscaledAmt,
-                                                    humanReadablePreview = "ثبت تراکنش (دقیق): ${PersianDateAndUnitUtils.formatCurrencyAmount(unscaledAmt, curr)} (${op.title})"
-                                                )
-                                            }
-                                        },
-                                        label = {
-                                            Text(
-                                                text = "تبدیل محاوره‌ای (×۱۰۰۰) اعمال شد • تغییر به ${PersianDateAndUnitUtils.formatCurrencyAmount(unscaledAmt, curr)} واقعی",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = AmberWarning
-                                            )
-                                        }
-                                    )
-                                } else if (curr.equals("TOMAN", ignoreCase = true) && op.amount in 1.0..999.0) {
-                                    val scaledAmt = op.amount * 1000.0
-                                    AssistChip(
-                                        onClick = {
-                                            editableOps = editableOps.toMutableList().also { list ->
-                                                list[idx] = op.copy(
-                                                    amount = scaledAmt,
-                                                    humanReadablePreview = "ثبت تراکنش (هزار تومان): ${PersianDateAndUnitUtils.formatCurrencyAmount(scaledAmt, curr)} (${op.title})"
-                                                )
-                                            }
-                                        },
-                                        label = {
-                                            Text(
-                                                text = "تبدیل به محاوره‌ای (${PersianDateAndUnitUtils.formatCurrencyAmount(scaledAmt, curr)})",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = ElectricTeal
-                                            )
-                                        }
-                                    )
-                                }
                             }
                         } else {
+                            if (op.amount > 0.0) {
+                                Text(
+                                    text = "نوع تراکنش را برای مبلغ ${PersianDateAndUnitUtils.formatCurrencyAmount(op.amount, op.currency.ifBlank { "TOMAN" })} انتخاب کنید:",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = AmberWarning,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "INCOME" to "دریافت (+)",
+                                        "EXPENSE" to "پرداخت (−)",
+                                        "RECEIVABLE" to "طلب دارم",
+                                        "DEBT" to "بدهکارم"
+                                    ).forEach { (resolvedType, resolvedLabel) ->
+                                        AssistChip(
+                                            onClick = {
+                                                editableOps = editableOps.toMutableList().also { list ->
+                                                    val safeCurr = op.currency.ifBlank { "TOMAN" }
+                                                    val safeTitle = op.title.ifBlank { "تراکنش" }
+                                                    list[idx] = op.copy(
+                                                        operationType = "AddExpense",
+                                                        transactionType = resolvedType,
+                                                        title = safeTitle,
+                                                        currency = safeCurr,
+                                                        humanReadablePreview = "ثبت $resolvedLabel: ${PersianDateAndUnitUtils.formatCurrencyAmount(op.amount, safeCurr)} ($safeTitle)"
+                                                    )
+                                                }
+                                            },
+                                            label = { Text(resolvedLabel, style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+                            }
                             OutlinedTextField(
                                 value = op.title,
                                 onValueChange = { clarifiedTitle ->
                                     editableOps = editableOps.toMutableList().also { list ->
                                         list[idx] = op.copy(
-                                            operationType = "CreateTask",
+                                            operationType = if (op.amount > 0.0) "AddExpense" else "CreateTask",
                                             title = clarifiedTitle,
-                                            humanReadablePreview = "ایجاد تسک: «$clarifiedTitle»"
+                                            humanReadablePreview = if (op.amount > 0.0) {
+                                                "ثبت تراکنش: ${PersianDateAndUnitUtils.formatCurrencyAmount(op.amount, op.currency.ifBlank { "TOMAN" })} ($clarifiedTitle)"
+                                            } else {
+                                                "ایجاد تسک: «$clarifiedTitle»"
+                                            }
                                         )
                                     }
                                 },
-                                label = { Text("عنوان دقیق تسک را وارد کنید تا ثبت شود") },
+                                label = { Text("عنوان دقیق را وارد کنید تا ثبت شود") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )

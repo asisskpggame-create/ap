@@ -1521,14 +1521,65 @@ class LifeOsRepository(
         }
     }
 
+    suspend fun updateExpense(updated: ExpenseEntry): Result<ExpenseEntry> {
+        val uid = resolveActiveUserId()
+        require(updated.id.isNotBlank()) { "Expense ID must not be blank" }
+        val cleanTitle = updated.title.trim().take(250).ifBlank { "تراکنش" }
+        val safeAmount = updated.amount.coerceAtLeast(0.0)
+        val safePaid = updated.paidAmount.coerceIn(0.0, safeAmount)
+        val normalized = updated.copy(
+            userId = uid,
+            title = cleanTitle,
+            amount = safeAmount,
+            paidAmount = safePaid,
+            currency = updated.currency.uppercase()
+        )
+
+        if (localDao != null) {
+            val previous = localDao.getExpenseById(uid, normalized.id)?.toDomain()
+            localDao.upsertExpenseOne(CachedExpenseEntity.fromDomain(normalized, synced = false))
+            logActivityEvent(
+                eventType = "EXPENSE_UPDATED",
+                entityType = "EXPENSE",
+                entityId = normalized.id,
+                inputSource = "MANUAL",
+                beforeSummary = previous?.let { "${it.transactionType}: ${it.amount} ${it.currency} (${it.title})" } ?: "",
+                afterSummary = "${normalized.transactionType}: ${normalized.amount} ${normalized.currency} (${normalized.title})",
+                humanSummary = "ویرایش تراکنش: «${normalized.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(normalized.amount, normalized.currency)})"
+            )
+            return Result.success(normalized)
+        }
+
+        val docRef = db.collection("users").document(uid).collection("expenses").document(normalized.id)
+        return try {
+            docRef.set(normalized.toCreateMap()).await()
+            logActivityEvent(
+                eventType = "EXPENSE_UPDATED",
+                entityType = "EXPENSE",
+                entityId = normalized.id,
+                inputSource = "MANUAL",
+                afterSummary = "${normalized.transactionType}: ${normalized.amount} ${normalized.currency} (${normalized.title})",
+                humanSummary = "ویرایش تراکنش: «${normalized.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(normalized.amount, normalized.currency)})"
+            )
+            Result.success(normalized)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteExpense(expense: ExpenseEntry): Result<Unit> {
         val uid = resolveActiveUserId()
         val labelFa = when {
             expense.isDebt -> "حذف بدهکاری"
             expense.isReceivable -> "حذف طلبکاری"
             expense.isIncome -> "حذف درآمد"
+            expense.isTransfer -> "حذف انتقال حساب"
             else -> "حذف خرج"
         }
+        ReminderScheduler.cancelEntityReminder(null, "DEBT", expense.id)
         if (localDao != null) {
             localDao.deleteCachedExpense(uid, expense.id)
             localDao.enqueueSyncOperation(

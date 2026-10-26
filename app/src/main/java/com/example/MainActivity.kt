@@ -313,6 +313,9 @@ fun AuthenticatedLifeOsShell(
     val pendingAiPreview by vm.pendingAiPreview.collectAsStateWithLifecycle()
     val snackbarMessage by vm.snackbarMessage.collectAsStateWithLifecycle()
     val canUndo by vm.canUndo.collectAsStateWithLifecycle()
+    val lastUndoSummary by vm.lastUndoSummary.collectAsStateWithLifecycle()
+    val frequentTitles by vm.frequentTitlesState.collectAsStateWithLifecycle()
+    val deletedFrequentTitles by vm.deletedFrequentTitlesState.collectAsStateWithLifecycle()
     val pendingSyncCount by vm.pendingSyncCountState.collectAsStateWithLifecycle()
     val lastSyncMillis by vm.lastSyncMillisState.collectAsStateWithLifecycle()
     val isSyncing by vm.isSyncingState.collectAsStateWithLifecycle()
@@ -774,6 +777,9 @@ fun AuthenticatedLifeOsShell(
                                 onAddExpense = { title, cat, amount, curr, notes, txType ->
                                     vm.addExpense(title, cat, amount, curr, notes, txType)
                                 },
+                                onUpdateExpense = { updatedEntry ->
+                                    vm.updateExpense(updatedEntry)
+                                },
                                 onSettleDebtOrReceivable = { vm.settleDebtOrReceivable(it) },
                                 onRecordPartialPayment = { entry, amt ->
                                     vm.recordDebtPartialPayment(entry, amt)
@@ -782,6 +788,17 @@ fun AuthenticatedLifeOsShell(
                                     vm.createDebtRepaymentPlan(entry, count)
                                 },
                                 onDeleteExpense = { vm.deleteExpense(it) },
+                                canUndo = canUndo,
+                                lastUndoSummary = lastUndoSummary,
+                                onUndo = { vm.triggerUndo() },
+                                frequentTitles = frequentTitles,
+                                deletedFrequentTitles = deletedFrequentTitles,
+                                onTogglePinFrequentTitle = { title, txType ->
+                                    vm.togglePinFrequentTitle(title, txType)
+                                },
+                                onDeleteFrequentTitle = { title, txType ->
+                                    vm.deleteFrequentTitle(title, txType)
+                                },
                                 onAddSleep = { dur, qual, notes ->
                                     vm.addSleepRecord(dur, qual, notes)
                                 },

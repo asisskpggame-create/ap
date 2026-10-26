@@ -120,6 +120,15 @@ class LifeOsViewModel(
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
+    private val _lastUndoSummary = MutableStateFlow<String?>(null)
+    val lastUndoSummary: StateFlow<String?> = _lastUndoSummary.asStateFlow()
+
+    private val _frequentTitles = MutableStateFlow(PersianDateAndUnitUtils.defaultFrequentTitles)
+    val frequentTitlesState: StateFlow<List<PersianDateAndUnitUtils.FrequentTransactionTitle>> = _frequentTitles.asStateFlow()
+
+    private val _deletedFrequentTitles = MutableStateFlow<Set<String>>(emptySet())
+    val deletedFrequentTitlesState: StateFlow<Set<String>> = _deletedFrequentTitles.asStateFlow()
+
     private val _isAiProcessing = MutableStateFlow(false)
     val isAiProcessing: StateFlow<Boolean> = _isAiProcessing.asStateFlow()
 
@@ -218,6 +227,7 @@ class LifeOsViewModel(
         val action = lastUndoCallback ?: return
         lastUndoCallback = null
         _canUndo.value = false
+        _lastUndoSummary.value = null
         viewModelScope.launch {
             action()
             _snackbarMessage.value = "عملیات بازگردانی (Undo) انجام شد."
@@ -227,7 +237,80 @@ class LifeOsViewModel(
     private fun postSnackbar(msg: String, undoAction: (suspend () -> Unit)? = null) {
         lastUndoCallback = undoAction
         _canUndo.value = undoAction != null
+        if (undoAction != null) {
+            _lastUndoSummary.value = msg
+        }
         _snackbarMessage.value = msg
+    }
+
+    fun togglePinFrequentTitle(title: String, transactionType: String) {
+        val normType = if (transactionType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
+        val clean = title.trim()
+        if (clean.isBlank()) return
+        val current = _frequentTitles.value.toMutableList()
+        val idx = current.indexOfFirst {
+            it.title.equals(clean, ignoreCase = true) && it.transactionType.equals(normType, ignoreCase = true)
+        }
+        if (idx >= 0) {
+            val item = current[idx]
+            current[idx] = item.copy(isPinned = !item.isPinned)
+        } else {
+            current.add(
+                PersianDateAndUnitUtils.FrequentTransactionTitle(
+                    title = clean,
+                    emoji = PersianDateAndUnitUtils.resolveEmojiForTitle(clean, "", normType),
+                    transactionType = normType,
+                    category = "سایر",
+                    usageCount = 2,
+                    isPinned = true
+                )
+            )
+        }
+        _frequentTitles.value = current
+    }
+
+    fun deleteFrequentTitle(title: String, transactionType: String) {
+        val normType = if (transactionType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
+        val clean = title.trim()
+        if (clean.isBlank()) return
+        val key = "${normType}:${clean.lowercase()}"
+        _deletedFrequentTitles.value = _deletedFrequentTitles.value + key + clean.lowercase()
+        _frequentTitles.value = _frequentTitles.value.filterNot {
+            it.title.equals(clean, ignoreCase = true) && it.transactionType.equals(normType, ignoreCase = true)
+        }
+        postSnackbar("عنوان پرتکرار «$clean» از لیست پیشنهادها حذف شد.")
+    }
+
+    private fun recordFrequentTitleUsage(title: String, category: String, transactionType: String) {
+        val normType = when {
+            transactionType.equals("INCOME", ignoreCase = true) -> "INCOME"
+            transactionType.equals("EXPENSE", ignoreCase = true) -> "EXPENSE"
+            else -> return
+        }
+        val clean = title.trim()
+        if (clean.isBlank()) return
+        val key = "${normType}:${clean.lowercase()}"
+        if (key in _deletedFrequentTitles.value || clean.lowercase() in _deletedFrequentTitles.value) return
+        val current = _frequentTitles.value.toMutableList()
+        val idx = current.indexOfFirst {
+            it.title.equals(clean, ignoreCase = true) && it.transactionType.equals(normType, ignoreCase = true)
+        }
+        if (idx >= 0) {
+            val existing = current[idx]
+            current[idx] = existing.copy(usageCount = existing.usageCount + 1)
+        } else {
+            current.add(
+                PersianDateAndUnitUtils.FrequentTransactionTitle(
+                    title = clean,
+                    emoji = PersianDateAndUnitUtils.resolveEmojiForTitle(clean, category, normType),
+                    transactionType = normType,
+                    category = category.ifBlank { "سایر" },
+                    usageCount = 1,
+                    isPinned = false
+                )
+            )
+        }
+        _frequentTitles.value = current
     }
 
     // --- Task Operations ---
@@ -523,16 +606,33 @@ class LifeOsViewModel(
             )
             if (res.isSuccess) {
                 val expId = res.getOrThrow()
+                recordFrequentTitleUsage(cleanTitle, category, transactionType)
                 val typeLabel = when {
                     transactionType.equals("TRANSFER", ignoreCase = true) -> "انتقال بین حساب"
-                    transactionType.equals("INCOME", ignoreCase = true) -> "درآمد"
+                    transactionType.equals("INCOME", ignoreCase = true) -> "دریافت (درآمد)"
                     transactionType.equals("DEBT", ignoreCase = true) -> "بدهکاری"
                     transactionType.equals("RECEIVABLE", ignoreCase = true) -> "طلبکاری"
-                    else -> "خرج"
+                    else -> "پرداخت (خرج)"
                 }
                 postSnackbar("$typeLabel «$cleanTitle» (${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedAmount, currency)}) ثبت شد.") {
                     val currentList = (expensesState.value as? UiState.Success)?.data.orEmpty()
                     currentList.find { it.id == expId }?.let { repository.deleteExpense(it) }
+                }
+            }
+        }
+    }
+
+    fun updateExpense(updated: ExpenseEntry) {
+        viewModelScope.launch {
+            val currentList = (expensesState.value as? UiState.Success)?.data.orEmpty()
+            val previousSnapshot = currentList.find { it.id == updated.id }
+            val res = repository.updateExpense(updated)
+            if (res.isSuccess) {
+                recordFrequentTitleUsage(updated.title, updated.category, updated.transactionType)
+                postSnackbar("تراکنش «${updated.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(updated.amount, updated.currency)}) ویرایش شد.") {
+                    if (previousSnapshot != null) {
+                        repository.updateExpense(previousSnapshot)
+                    }
                 }
             }
         }
@@ -559,7 +659,9 @@ class LifeOsViewModel(
                 } else {
                     "پرداخت جزئی ${PersianDateAndUnitUtils.formatCurrencyAmount(normalizedPay, entry.currency)} ثبت شد • مانده: ${PersianDateAndUnitUtils.formatCurrencyAmount(updated.remainingAmount, entry.currency)}"
                 }
-                postSnackbar(msg)
+                postSnackbar(msg) {
+                    repository.updateExpense(entry)
+                }
             }
         }
     }
@@ -585,7 +687,9 @@ class LifeOsViewModel(
             val res = repository.settleDebtOrReceivable(entry)
             if (res.isSuccess) {
                 val actionLabel = if (entry.isDebt) "بدهکاری" else "طلبکاری"
-                postSnackbar("$actionLabel «${entry.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(entry.amount, entry.currency)}) تسویه شد.")
+                postSnackbar("$actionLabel «${entry.title}» (${PersianDateAndUnitUtils.formatCurrencyAmount(entry.amount, entry.currency)}) تسویه شد.") {
+                    repository.updateExpense(entry)
+                }
             }
         }
     }
@@ -598,6 +702,7 @@ class LifeOsViewModel(
                     expense.isDebt -> "بدهکاری"
                     expense.isReceivable -> "طلبکاری"
                     expense.isIncome -> "درآمد"
+                    expense.isTransfer -> "انتقال حساب"
                     else -> "خرج"
                 }
                 postSnackbar("$typeLabel «${expense.title}» حذف شد.") {
@@ -609,7 +714,11 @@ class LifeOsViewModel(
                         localEpochDay = expense.localEpochDay,
                         notes = expense.cleanNotes,
                         inputSource = expense.inputSource,
-                        transactionType = expense.transactionType
+                        transactionType = expense.transactionType,
+                        paidAmount = expense.paidAmount,
+                        dueEpochDay = expense.dueEpochDay,
+                        installmentCount = expense.installmentCount,
+                        linkedDebtId = expense.linkedDebtId
                     )
                 }
             }

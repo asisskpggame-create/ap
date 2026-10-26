@@ -26,8 +26,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.ai.GeminiAssistantService
+import com.example.util.PersianDateAndUnitUtils.FrequentTransactionTitle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -244,10 +247,18 @@ fun DailyLogAndHealthScreen(
     onUpdateCustomItem: (CustomItem) -> Unit = {},
     onDeleteCustomItem: (CustomItem) -> Unit = {},
     onAddExpense: (title: String, category: String, amount: Double, currency: String, notes: String, transactionType: String) -> Unit,
+    onUpdateExpense: (ExpenseEntry) -> Unit = {},
     onSettleDebtOrReceivable: (ExpenseEntry) -> Unit = {},
     onRecordPartialPayment: (ExpenseEntry, Double) -> Unit = { _, _ -> },
     onCreateInstallmentPlan: (ExpenseEntry, Int) -> Unit = { _, _ -> },
     onDeleteExpense: (ExpenseEntry) -> Unit,
+    canUndo: Boolean = false,
+    lastUndoSummary: String? = null,
+    onUndo: () -> Unit = {},
+    frequentTitles: List<FrequentTransactionTitle> = PersianDateAndUnitUtils.defaultFrequentTitles,
+    deletedFrequentTitles: Set<String> = emptySet(),
+    onTogglePinFrequentTitle: (String, String) -> Unit = { _, _ -> },
+    onDeleteFrequentTitle: (String, String) -> Unit = { _, _ -> },
     onAddSleep: (durationMinutes: Int, qualityRating: Int, notes: String) -> Unit,
     onAddExercise: (activityType: String, durationMinutes: Int, intensity: String, distanceMeters: Double, repetitions: Int, notes: String) -> Unit,
     onUpdatePrefs: (UserPreferencesDoc) -> Unit = {}
@@ -327,6 +338,7 @@ fun DailyLogAndHealthScreen(
                 customItems = customItems,
                 consumption = consumption,
                 onAddExpense = onAddExpense,
+                onUpdateExpense = onUpdateExpense,
                 onQuickAddConsumption = onQuickAddConsumption,
                 onCreateCustomItem = onCreateCustomItem,
                 onUpdateCustomItem = onUpdateCustomItem,
@@ -335,6 +347,13 @@ fun DailyLogAndHealthScreen(
                 onRecordPartialPayment = onRecordPartialPayment,
                 onCreateInstallmentPlan = onCreateInstallmentPlan,
                 onDeleteExpense = onDeleteExpense,
+                canUndo = canUndo,
+                lastUndoSummary = lastUndoSummary,
+                onUndo = onUndo,
+                frequentTitles = frequentTitles,
+                deletedFrequentTitles = deletedFrequentTitles,
+                onTogglePinFrequentTitle = onTogglePinFrequentTitle,
+                onDeleteFrequentTitle = onDeleteFrequentTitle,
                 onUpdatePrefs = onUpdatePrefs,
                 initialFilter = "ALL"
             )
@@ -345,6 +364,7 @@ fun DailyLogAndHealthScreen(
                 customItems = customItems,
                 consumption = consumption,
                 onAddExpense = onAddExpense,
+                onUpdateExpense = onUpdateExpense,
                 onQuickAddConsumption = onQuickAddConsumption,
                 onCreateCustomItem = onCreateCustomItem,
                 onUpdateCustomItem = onUpdateCustomItem,
@@ -353,6 +373,13 @@ fun DailyLogAndHealthScreen(
                 onRecordPartialPayment = onRecordPartialPayment,
                 onCreateInstallmentPlan = onCreateInstallmentPlan,
                 onDeleteExpense = onDeleteExpense,
+                canUndo = canUndo,
+                lastUndoSummary = lastUndoSummary,
+                onUndo = onUndo,
+                frequentTitles = frequentTitles,
+                deletedFrequentTitles = deletedFrequentTitles,
+                onTogglePinFrequentTitle = onTogglePinFrequentTitle,
+                onDeleteFrequentTitle = onDeleteFrequentTitle,
                 onUpdatePrefs = onUpdatePrefs,
                 initialFilter = "IOU"
             )
@@ -377,6 +404,7 @@ private fun ExpenseTrackerSubScreen(
     customItems: List<CustomItem> = emptyList(),
     consumption: List<ConsumptionEntry> = emptyList(),
     onAddExpense: (title: String, category: String, amount: Double, currency: String, notes: String, transactionType: String) -> Unit,
+    onUpdateExpense: (ExpenseEntry) -> Unit = {},
     onQuickAddConsumption: (itemName: String, category: String, quantity: Double, unit: String, notes: String, optionalPrice: Double, currency: String) -> Unit = { _, _, _, _, _, _, _ -> },
     onCreateCustomItem: (name: String, category: String, unit: String, defaultQty: Double, dailyTarget: Double, defaultPrice: Double) -> Unit = { _, _, _, _, _, _ -> },
     onUpdateCustomItem: (CustomItem) -> Unit = {},
@@ -385,6 +413,13 @@ private fun ExpenseTrackerSubScreen(
     onRecordPartialPayment: (ExpenseEntry, Double) -> Unit = { _, _ -> },
     onCreateInstallmentPlan: (ExpenseEntry, Int) -> Unit = { _, _ -> },
     onDeleteExpense: (ExpenseEntry) -> Unit,
+    canUndo: Boolean = false,
+    lastUndoSummary: String? = null,
+    onUndo: () -> Unit = {},
+    frequentTitles: List<FrequentTransactionTitle> = PersianDateAndUnitUtils.defaultFrequentTitles,
+    deletedFrequentTitles: Set<String> = emptySet(),
+    onTogglePinFrequentTitle: (String, String) -> Unit = { _, _ -> },
+    onDeleteFrequentTitle: (String, String) -> Unit = { _, _ -> },
     onUpdatePrefs: (UserPreferencesDoc) -> Unit = {},
     initialFilter: String = "ALL"
 ) {
@@ -474,7 +509,10 @@ private fun ExpenseTrackerSubScreen(
     var showAddAccountDialog by remember { mutableStateOf(false) }
     var newAccountInputName by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
-    var currency by remember { mutableStateOf(prefs.defaultCurrency) }
+    var currency by remember { mutableStateOf(prefs.defaultCurrency.ifBlank { "TOMAN" }) }
+    var selectedCurrencyUnitCode by remember(prefs.defaultCurrency) {
+        mutableStateOf(prefs.defaultCurrency.ifBlank { "TOMAN" }.uppercase())
+    }
     var notes by remember { mutableStateOf("") }
     var showBudgetDialog by remember { mutableStateOf(false) }
     var showBankSmsSheetInExpenses by remember { mutableStateOf(false) }
@@ -838,14 +876,13 @@ private fun ExpenseTrackerSubScreen(
                         val newTitle = editTitle.trim()
                         val newAmt = editAmountText.toDoubleOrNull() ?: tx.amount
                         if (newTitle.isNotBlank() && newAmt > 0) {
-                            onDeleteExpense(tx)
-                            onAddExpense(
-                                newTitle,
-                                editCategory,
-                                newAmt,
-                                tx.currency,
-                                editNotes,
-                                tx.transactionType
+                            onUpdateExpense(
+                                tx.copy(
+                                    title = newTitle,
+                                    category = editCategory,
+                                    amount = newAmt,
+                                    notes = editNotes
+                                )
                             )
                             WorldClassOsUtils.HapticSignature.doublePulse(context)
                             editingTransaction = null
@@ -1192,21 +1229,12 @@ private fun ExpenseTrackerSubScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AssistChip(
-                            onClick = {
-                                val num = dialogPriceText.toDoubleOrNull() ?: 0.0
-                                if (num > 0 && num < 10000) {
-                                    dialogPriceText = (num * 1000).toLong().toString()
-                                }
-                            },
-                            label = { Text("×۱,۰۰۰") }
-                        )
-                        AssistChip(
                             onClick = { dialogPriceText = "90000" },
-                            label = { Text("۹۰ تومن") }
+                            label = { Text("۹۰ هزار تومان") }
                         )
                         AssistChip(
                             onClick = { dialogPriceText = "150000" },
-                            label = { Text("۱۵۰ تومن") }
+                            label = { Text("۱۵۰ هزار تومان") }
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1234,23 +1262,13 @@ private fun ExpenseTrackerSubScreen(
                             )
                         }
                     }
-                    val rawPresetNum = dialogPriceText.toDoubleOrNull() ?: 0.0
-                    if (rawPresetNum in 1.0..999.0 && prefs.defaultCurrency.equals("TOMAN", ignoreCase = true)) {
-                        Text(
-                            text = "معادل: ${PersianDateAndUnitUtils.formatCurrencyAmount(rawPresetNum * 1000.0, "TOMAN")}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ElectricTeal,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val cleanName = dialogName.trim()
-                        val rawPrice = dialogPriceText.toDoubleOrNull() ?: 0.0
-                        val price = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(rawPrice, prefs.defaultCurrency)
+                        val price = dialogPriceText.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
                         val qty = dialogQtyText.toDoubleOrNull()?.coerceAtLeast(0.1) ?: 1.0
                         if (cleanName.isNotBlank()) {
                             if (currentEditing != null) {
@@ -2191,16 +2209,49 @@ private fun ExpenseTrackerSubScreen(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = if (isIouMode) "ثبت طلب یا بدهی جدید" else "ثبت تراکنش جدید (ورودی / خروجی)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Header + Undo Last Financial Action
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isIouMode) "ثبت طلب یا بدهی جدید" else "ثبت سریع تراکنش مالی",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        if (canUndo) {
+                            OutlinedButton(
+                                onClick = {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    onUndo()
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.7f)),
+                                modifier = Modifier.testTag("undo_last_financial_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "برگرداندن آخرین ثبت",
+                                    tint = AmberWarning,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "برگرداندن آخرین ثبت",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AmberWarning,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
 
+                    // 1. Transaction Type Selector: دریافت (+) vs پرداخت (−) vs انتقال
                     if (!isIouMode) {
-                        // Row 1: EXPENSE and INCOME (for Tab 0)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2211,7 +2262,7 @@ private fun ExpenseTrackerSubScreen(
                                     transactionType = "EXPENSE"
                                     category = customExpenseCategories.firstOrNull() ?: "غذا و کافه"
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(
                                     1.dp,
                                     if (isExpSelected) RoseError else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
@@ -2226,15 +2277,15 @@ private fun ExpenseTrackerSubScreen(
                             ) {
                                 Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("خرج (خروجی)", fontWeight = FontWeight.Bold)
+                                Text("پرداخت (−)", fontWeight = FontWeight.ExtraBold)
                             }
 
                             Button(
                                 onClick = {
                                     transactionType = "INCOME"
-                                    category = "سایر"
+                                    category = "فروش و خدمات"
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(
                                     1.dp,
                                     if (isIncome) EmeraldSuccess else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
@@ -2249,7 +2300,7 @@ private fun ExpenseTrackerSubScreen(
                             ) {
                                 Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("درآمد (ورودی)", fontWeight = FontWeight.Bold)
+                                Text("دریافت (+)", fontWeight = FontWeight.ExtraBold)
                             }
 
                             val isTransfer = transactionType == "TRANSFER"
@@ -2258,7 +2309,7 @@ private fun ExpenseTrackerSubScreen(
                                     transactionType = "TRANSFER"
                                     category = "انتقال حساب"
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(
                                     1.dp,
                                     if (isTransfer) SkyInfo else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
@@ -2268,35 +2319,105 @@ private fun ExpenseTrackerSubScreen(
                                     contentColor = if (isTransfer) Color.Black else MaterialTheme.colorScheme.onSurface
                                 ),
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .weight(0.85f)
                                     .testTag("select_transfer_type_button")
                             ) {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("انتقال حساب", fontWeight = FontWeight.Bold)
+                                Text("انتقال", fontWeight = FontWeight.Bold)
                             }
                         }
 
-                        // Quick Recurring Monthly Bills / Common Templates
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val quickTemplates = if (isIncome) {
-                                listOf("حقوق ماهانه" to "سایر", "پاداش / کارانه" to "سایر", "سود بانکی" to "سرمایه‌گذاری", "پروژه آزاد" to "سایر")
-                            } else {
-                                listOf("اجاره و شارژ" to "قبوض و اجاره", "بسته اینترنت" to "قبوض و اجاره", "سوپرمارکت" to "خرید", "اسنپ / تاکسی" to "حمل‌ونقل")
-                            }
-                            quickTemplates.forEach { (tplTitle, tplCat) ->
-                                AssistChip(
-                                    onClick = {
-                                        title = tplTitle
-                                        if (customExpenseCategories.contains(tplCat)) {
-                                            category = tplCat
+                        // 2. Telegram-Emoji-Style Horizontal Frequent Titles Bar (عنوان‌های پرتکرار)
+                        val rankedFrequentTitles = remember(transactionType, frequentTitles, expenses, deletedFrequentTitles) {
+                            PersianDateAndUnitUtils.getRankedFrequentTitlesForType(
+                                transactionType = if (transactionType == "INCOME") "INCOME" else "EXPENSE",
+                                historicalExpenses = expenses,
+                                customFrequentItems = frequentTitles,
+                                deletedTitlesForType = deletedFrequentTitles
+                            )
+                        }
+
+                        if (rankedFrequentTitles.isNotEmpty() && transactionType != "TRANSFER") {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (isIncome) "عنوان‌های پرتکرار دریافت (لمس = انتخاب، 📌 = پین، ✕ = حذف):"
+                                        else "عنوان‌های پرتکرار پرداخت (لمس = انتخاب، 📌 = پین، ✕ = حذف):",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("frequent_titles_row")
+                                ) {
+                                    items(rankedFrequentTitles, key = { "${it.transactionType}_${it.title}" }) { freqItem ->
+                                        val isSelectedChip = title.equals(freqItem.title, ignoreCase = true)
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (isSelectedChip) {
+                                                accentColor.copy(alpha = 0.22f)
+                                            } else {
+                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                                            },
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (freqItem.isPinned) AmberWarning.copy(alpha = 0.7f)
+                                                else if (isSelectedChip) accentColor
+                                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                                            ),
+                                            modifier = Modifier
+                                                .clickable {
+                                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                                    title = freqItem.title
+                                                    category = freqItem.category
+                                                    showTitleError = false
+                                                }
+                                                .testTag("frequent_title_chip_${freqItem.title}")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${freqItem.emoji} ${freqItem.title}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = if (freqItem.isPinned || isSelectedChip) FontWeight.Bold else FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = if (freqItem.isPinned) "📌" else "📍",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier
+                                                        .clickable {
+                                                            onTogglePinFrequentTitle(freqItem.title, freqItem.transactionType)
+                                                        }
+                                                        .padding(horizontal = 2.dp)
+                                                        .testTag("pin_frequent_title_${freqItem.title}")
+                                                )
+                                                Text(
+                                                    text = "✕",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier
+                                                        .clickable {
+                                                            onDeleteFrequentTitle(freqItem.title, freqItem.transactionType)
+                                                        }
+                                                        .padding(horizontal = 2.dp)
+                                                        .testTag("delete_frequent_title_${freqItem.title}")
+                                                )
+                                            }
                                         }
-                                    },
-                                    label = { Text(tplTitle, style = MaterialTheme.typography.labelSmall) }
-                                )
+                                    }
+                                }
                             }
                         }
                     } else {
@@ -2348,7 +2469,6 @@ private fun ExpenseTrackerSubScreen(
                             }
                         }
 
-                        // Quick IOU Subject Templates
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -2364,7 +2484,144 @@ private fun ExpenseTrackerSubScreen(
                         }
                     }
 
-                    // Mandatory Title
+                    // 3. TOP VISUAL PRIORITY: Amount Input + Scroll Wheel Currency Picker (تومان پیش‌فرض)
+                    val selectedUnitOption = remember(selectedCurrencyUnitCode) {
+                        PersianDateAndUnitUtils.currencyWheelOptions.find {
+                            it.unitCode.equals(selectedCurrencyUnitCode, ignoreCase = true)
+                        } ?: PersianDateAndUnitUtils.currencyWheelOptions.first()
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                        border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "مبلغ تراکنش (${selectedUnitOption.labelFa}) *",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = accentColor,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "انتخابگر چرخشی واحد پول:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = amountText,
+                                onValueChange = {
+                                    amountText = PersianDateAndUnitUtils.toEnglishDigits(it)
+                                    if (amountText.isNotBlank()) showAmountError = false
+                                },
+                                isError = showAmountError,
+                                textStyle = MaterialTheme.typography.headlineSmall.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                label = { Text("مبلغ دقیق به ${selectedUnitOption.labelFa}") },
+                                placeholder = {
+                                    Text(
+                                        when (selectedUnitOption.unitCode) {
+                                            "HEZAR_TOMAN" -> "مثلاً 600 (معادل ۶۰۰,۰۰۰ تومان)"
+                                            "MILLION_TOMAN" -> "مثلاً 2.5 (معادل ۲,۵۰۰,۰۰۰ تومان)"
+                                            "IRR" -> "مثلاً 1000 (معادل ۱۰۰ تومان)"
+                                            else -> "مثلاً 1000 یا 600000 (بدون ضرب خودکار)"
+                                        }
+                                    )
+                                },
+                                supportingText = if (showAmountError) {
+                                    { Text("⚠️ وارد کردن مبلغ معتبر الزامی است", color = RoseError) }
+                                } else null,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("financial_amount_input")
+                            )
+
+                            // Scroll Wheel Picker for Currency Units (تومان پیش‌فرض، هزار تومان، میلیون تومان، ریال، دلار، یورو، درهم)
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("currency_wheel_picker")
+                            ) {
+                                items(PersianDateAndUnitUtils.currencyWheelOptions, key = { it.unitCode }) { unitOpt ->
+                                    val isUnitSelected = selectedCurrencyUnitCode.equals(unitOpt.unitCode, ignoreCase = true)
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isUnitSelected) ElectricTeal else MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isUnitSelected) ElectricTeal else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier
+                                            .clickable {
+                                                WorldClassOsUtils.HapticSignature.crispTick(context)
+                                                selectedCurrencyUnitCode = unitOpt.unitCode
+                                                currency = unitOpt.storedCurrency
+                                            }
+                                            .testTag("wheel_unit_${unitOpt.unitCode.lowercase()}")
+                                    ) {
+                                        Text(
+                                            text = unitOpt.labelFa,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isUnitSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            color = if (isUnitSelected) Color.Black else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Exact Financial Conversion Preview (Zero unwanted 1000x multiplication)
+                            val rawTypedAmt = amountText.toDoubleOrNull() ?: 0.0
+                            if (rawTypedAmt > 0.0) {
+                                val (resolvedAmt, resolvedCurr) = PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(
+                                    rawInputAmount = rawTypedAmt,
+                                    selectedUnitCode = selectedCurrencyUnitCode
+                                )
+                                val previewText = if (selectedCurrencyUnitCode == "IRR") {
+                                    val tomanEquivalent = PersianDateAndUnitUtils.convertCurrencyExact(rawTypedAmt, "IRR", "TOMAN") ?: 0.0
+                                    "ثبت نهایی: ${PersianDateAndUnitUtils.formatCurrencyAmount(resolvedAmt, "IRR")} (معادل دقیق: ${PersianDateAndUnitUtils.formatCurrencyAmount(tomanEquivalent, "TOMAN")})"
+                                } else {
+                                    "ثبت نهایی: ${PersianDateAndUnitUtils.formatCurrencyAmount(resolvedAmt, resolvedCurr)}"
+                                }
+                                Text(
+                                    text = previewText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ElectricTeal,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.testTag("exact_amount_preview_text")
+                                )
+                            }
+                        }
+                    }
+
+                    // 4. Smart Title Input with Instant Conversational Intent Detection
+                    val instantNluSuggestion = remember(title, currency, todayEpochDay) {
+                        if (title.trim().length >= 8 && title.any { it.isDigit() || it in '۰'..'۹' }) {
+                            GeminiAssistantService.detectInstantFinancialSuggestion(
+                                rawText = title,
+                                defaultCurrency = currency,
+                                todayEpochDay = todayEpochDay
+                            )
+                        } else null
+                    }
+
                     OutlinedTextField(
                         value = title,
                         onValueChange = {
@@ -2377,8 +2634,9 @@ private fun ExpenseTrackerSubScreen(
                                 when (transactionType) {
                                     "RECEIVABLE" -> "نام شخص (بدهکار) و بابت *"
                                     "DEBT" -> "نام شخص (طلبکار) و بابت *"
-                                    "INCOME" -> "عنوان درآمد *"
-                                    else -> "عنوان خرج *"
+                                    "INCOME" -> "عنوان دریافت (یا جمله کامل مثل: ۶۰۰ هزار تومان بابت فروش جمینای گرفتم) *"
+                                    "TRANSFER" -> "عنوان انتقال حساب *"
+                                    else -> "عنوان پرداخت (یا جمله کامل) *"
                                 }
                             )
                         },
@@ -2387,8 +2645,9 @@ private fun ExpenseTrackerSubScreen(
                                 when (transactionType) {
                                     "RECEIVABLE" -> "مثلاً: علی رضایی - قرض دستی..."
                                     "DEBT" -> "مثلاً: محمد - سهم شام..."
-                                    "INCOME" -> "مثلاً: حقوق ماهانه، پروژه..."
-                                    else -> "مثلاً: اسنپ، ناهار، قبض برق..."
+                                    "INCOME" -> "مثلاً: فروش Gemini، فروش خدمات، حقوق..."
+                                    "TRANSFER" -> "مثلاً: انتقال از کارت اصلی به پس‌انداز..."
+                                    else -> "مثلاً: غذا، تاکسی، خرید سوپرمارکت..."
                                 }
                             )
                         },
@@ -2401,61 +2660,51 @@ private fun ExpenseTrackerSubScreen(
                             .testTag("financial_title_input")
                     )
 
-                    // Amount Field
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = amountText,
-                            onValueChange = {
-                                amountText = PersianDateAndUnitUtils.toEnglishDigits(it)
-                                if (amountText.isNotBlank()) showAmountError = false
-                            },
-                            isError = showAmountError,
-                            label = { Text("مبلغ ($currency) *") },
-                            placeholder = { Text("مثلاً 500 یا 150000") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
+                    if (instantNluSuggestion != null && instantNluSuggestion.amount > 0.0) {
+                        val sugTypeLabel = when (instantNluSuggestion.transactionType) {
+                            "INCOME" -> "دریافت (+)"
+                            "TRANSFER" -> "انتقال"
+                            "RECEIVABLE" -> "طلب"
+                            "DEBT" -> "بدهی"
+                            else -> "پرداخت (−)"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = ElectricTeal.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, ElectricTeal.copy(alpha = 0.55f)),
                             modifier = Modifier
-                                .weight(1f)
-                                .testTag("financial_amount_input")
-                        )
-                        AssistChip(
-                            onClick = {
-                                val v = amountText.toDoubleOrNull() ?: 0.0
-                                if (v > 0 && v < 100000) {
-                                    amountText = (v * 1000).toLong().toString()
+                                .fillMaxWidth()
+                                .clickable {
+                                    WorldClassOsUtils.HapticSignature.crispTick(context)
+                                    transactionType = instantNluSuggestion.transactionType
+                                    selectedCurrencyUnitCode = instantNluSuggestion.currency
+                                    currency = instantNluSuggestion.currency
+                                    amountText = if (instantNluSuggestion.amount % 1.0 == 0.0) {
+                                        instantNluSuggestion.amount.toLong().toString()
+                                    } else {
+                                        instantNluSuggestion.amount.toString()
+                                    }
+                                    title = instantNluSuggestion.title
+                                    category = instantNluSuggestion.category
                                 }
-                            },
-                            label = { Text("×۱,۰۰۰") }
-                        )
-                    }
-
-                    // Multi-Currency Selector Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("واحد پول:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        listOf(
-                            "TOMAN" to "تومان",
-                            "USD" to "دلار ($)",
-                            "EUR" to "یورو (€)",
-                            "AED" to "درهم",
-                            "IRR" to "ریال"
-                        ).forEach { (currCode, currLabel) ->
-                            FilterChip(
-                                selected = currency.equals(currCode, ignoreCase = true),
-                                onClick = { currency = currCode },
-                                label = { Text(currLabel, style = MaterialTheme.typography.labelSmall) }
-                            )
+                                .testTag("instant_nlu_apply_chip")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "✨ تشخیص هوشمند: $sugTypeLabel • ${PersianDateAndUnitUtils.formatCurrencyAmount(instantNluSuggestion.amount, instantNluSuggestion.currency)} • «${instantNluSuggestion.title}» (لمس برای جایگذاری)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ElectricTeal,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
-                    // Account / Card Selector + Dynamic Expense Categories (for Tab 0)
+                    // 5. Account / Card Selector + Dynamic Categories (for Tab 0)
                     if (!isDebt && !isReceivable) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -2506,7 +2755,7 @@ private fun ExpenseTrackerSubScreen(
                         }
                     }
 
-                    // Optional Description
+                    // 6. Optional Description
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
@@ -2523,21 +2772,32 @@ private fun ExpenseTrackerSubScreen(
                             .testTag("financial_notes_input")
                     )
 
-                    val rawTypedAmt = amountText.toDoubleOrNull() ?: 0.0
-                    if (rawTypedAmt in 1.0..999.0 && currency.equals("TOMAN", ignoreCase = true)) {
-                        Text(
-                            text = "معادل: ${PersianDateAndUnitUtils.formatCurrencyAmount(rawTypedAmt * 1000.0, "TOMAN")}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ElectricTeal,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
+                    // 7. Always-Accessible Primary Submit Button
                     Button(
                         onClick = {
-                            val cleanTitle = title.trim()
+                            var cleanTitle = title.trim()
                             val rawAmt = amountText.toDoubleOrNull() ?: 0.0
-                            val amt = PersianDateAndUnitUtils.normalizeColloquialTomanAmount(rawAmt, currency)
+                            var (amt, resolvedCurrency) = PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(
+                                rawInputAmount = rawAmt,
+                                selectedUnitCode = selectedCurrencyUnitCode
+                            )
+                            var finalTxType = transactionType
+                            var finalCategory = category
+
+                            // If user typed a full natural sentence in Title and left Amount empty, auto-extract if unambiguous
+                            if (amt <= 0.0 && instantNluSuggestion != null && instantNluSuggestion.amount > 0.0) {
+                                amt = instantNluSuggestion.amount
+                                resolvedCurrency = instantNluSuggestion.currency
+                                cleanTitle = instantNluSuggestion.title
+                                finalTxType = instantNluSuggestion.transactionType
+                                finalCategory = instantNluSuggestion.category
+                            } else if (instantNluSuggestion != null && instantNluSuggestion.transactionType == "INCOME" && finalTxType == "EXPENSE") {
+                                // Prevent accidental expense logging when phrase clearly states income (e.g. بابت فروش ... گرفتم)
+                                finalTxType = "INCOME"
+                                cleanTitle = instantNluSuggestion.title
+                                finalCategory = instantNluSuggestion.category
+                            }
+
                             if (cleanTitle.isBlank()) {
                                 WorldClassOsUtils.HapticSignature.heavyImpact(context)
                                 showTitleError = true
@@ -2554,7 +2814,7 @@ private fun ExpenseTrackerSubScreen(
                             } else {
                                 notes.trim()
                             }
-                            onAddExpense(cleanTitle, category, amt, currency, finalNotes, transactionType)
+                            onAddExpense(cleanTitle, finalCategory, amt, resolvedCurrency, finalNotes, finalTxType)
                             title = ""
                             amountText = ""
                             notes = ""
@@ -2563,7 +2823,7 @@ private fun ExpenseTrackerSubScreen(
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = accentColor,
-                            contentColor = if (isReceivable || isDebt) Color.Black else Color.White
+                            contentColor = if (isReceivable || isDebt || transactionType == "TRANSFER") Color.Black else Color.White
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2575,10 +2835,11 @@ private fun ExpenseTrackerSubScreen(
                             text = when (transactionType) {
                                 "RECEIVABLE" -> "ثبت طلبکاری"
                                 "DEBT" -> "ثبت بدهکاری"
-                                "INCOME" -> "ثبت درآمد"
-                                else -> "ثبت خرج"
+                                "INCOME" -> "ثبت دریافت (+)"
+                                "TRANSFER" -> "ثبت انتقال حساب"
+                                else -> "ثبت پرداخت (−)"
                             },
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }

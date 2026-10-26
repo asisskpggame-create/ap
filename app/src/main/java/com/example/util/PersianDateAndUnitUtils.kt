@@ -427,12 +427,89 @@ object PersianDateAndUnitUtils {
         return total
     }
 
+    data class CurrencyWheelOption(
+        val unitCode: String,      // "TOMAN", "HEZAR_TOMAN", "MILLION_TOMAN", "IRR", "USD", "EUR", "AED"
+        val labelFa: String,       // "تومان", "هزار تومان", "میلیون تومان", "ریال", ...
+        val shortBadge: String,    // "تومان", "×هزار", "×میلیون", "ریال", "$", "€", "AED"
+        val storedCurrency: String,// "TOMAN", "IRR", "USD", "EUR", "AED"
+        val multiplierToStored: Double = 1.0
+    )
+
+    val currencyWheelOptions: List<CurrencyWheelOption> = listOf(
+        CurrencyWheelOption("TOMAN", "تومان", "تومان", "TOMAN", 1.0),
+        CurrencyWheelOption("HEZAR_TOMAN", "هزار تومان", "هزار تومان", "TOMAN", 1_000.0),
+        CurrencyWheelOption("MILLION_TOMAN", "میلیون تومان", "میلیون تومان", "TOMAN", 1_000_000.0),
+        CurrencyWheelOption("IRR", "ریال", "ریال", "IRR", 1.0),
+        CurrencyWheelOption("USD", "دلار ($)", "$", "USD", 1.0),
+        CurrencyWheelOption("EUR", "یورو (€)", "€", "EUR", 1.0),
+        CurrencyWheelOption("AED", "درهم (AED)", "درهم", "AED", 1.0)
+    )
+
     /**
-     * Normalizes colloquial Iranian Toman amounts:
-     * In everyday spoken/written Persian in Iran, saying "۵۰۰ تومان" or "۹۰ تومن" for an expense
-     * always means 500,000 Toman (۵۰۰ هزار تومان) or 90,000 Toman (۹۰ هزار تومان),
-     * because amounts 1..999 single Tomans do not exist in real-world transactions.
-     * Foreign currencies (EUR, USD, GBP, AED) are never multiplied unless "هزار" or "میلیون" is spoken.
+     * Resolves a user-entered numeric amount and selected wheel unit into (finalAmount, storedCurrency).
+     * Golden Rule:
+     * - Selecting "TOMAN" NEVER multiplies by 1,000 (1000 + TOMAN -> 1000.0 TOMAN).
+     * - Selecting "HEZAR_TOMAN" explicitly multiplies by 1,000 (600 + HEZAR_TOMAN -> 600,000.0 TOMAN).
+     * - Selecting "MILLION_TOMAN" explicitly multiplies by 1,000,000 (5 + MILLION_TOMAN -> 5,000,000.0 TOMAN).
+     * - 1 Toman = 10 Rials (IRR).
+     */
+    fun resolveEnteredAmountAndCurrency(
+        rawInputAmount: Double,
+        selectedUnitCode: String
+    ): Pair<Double, String> {
+        if (rawInputAmount <= 0.0) return 0.0 to "TOMAN"
+        val code = selectedUnitCode.trim().uppercase(Locale.US)
+        return when (code) {
+            "TOMAN" -> rawInputAmount to "TOMAN"
+            "HEZAR_TOMAN" -> (rawInputAmount * 1_000.0) to "TOMAN"
+            "MILLION_TOMAN" -> (rawInputAmount * 1_000_000.0) to "TOMAN"
+            "IRR_TO_TOMAN" -> (rawInputAmount / 10.0) to "TOMAN"
+            "IRR" -> rawInputAmount to "IRR"
+            "USD", "EUR", "GBP", "AED" -> rawInputAmount to code
+            else -> rawInputAmount to code
+        }
+    }
+
+    /**
+     * Converts between Iranian currency units using the exact legal ratio:
+     * 1 Toman = 10 Rials (10 IRR = 1 TOMAN).
+     * Returns null if conversion between foreign currencies is requested without an exchange rate.
+     */
+    fun convertCurrencyExact(
+        amount: Double,
+        fromUnit: String,
+        toUnit: String
+    ): Double? {
+        val from = fromUnit.trim().uppercase(Locale.US)
+        val to = toUnit.trim().uppercase(Locale.US)
+        if (from == to) return amount
+
+        val inToman: Double = when (from) {
+            "TOMAN" -> amount
+            "HEZAR_TOMAN" -> amount * 1_000.0
+            "MILLION_TOMAN" -> amount * 1_000_000.0
+            "IRR", "RIAL" -> amount / 10.0
+            else -> return null
+        }
+
+        return when (to) {
+            "TOMAN" -> inToman
+            "HEZAR_TOMAN" -> inToman / 1_000.0
+            "MILLION_TOMAN" -> inToman / 1_000_000.0
+            "IRR", "RIAL" -> inToman * 10.0
+            else -> null
+        }
+    }
+
+    /**
+     * Normalizes explicit unit multipliers in Persian text ONLY when "هزار", "میلیون", or "میلیارد"
+     * is explicitly present in [rawTextContext].
+     *
+     * CRITICAL RULE:
+     * - Never multiplies numbers when [rawTextContext] is blank or only contains "تومان" / "تومن"!
+     * - Entering 1000 with unit "TOMAN" stays 1,000 TOMAN (never becomes 1,000,000).
+     * - Saying "۶۰۰ هزار تومان" scales 600 by 1,000 -> 600,000 TOMAN.
+     * - Saying "۵ میلیون تومان" scales 5 by 1,000,000 -> 5,000,000 TOMAN.
      */
     fun normalizeColloquialTomanAmount(
         rawAmount: Double,
@@ -440,85 +517,310 @@ object PersianDateAndUnitUtils {
         rawTextContext: String = ""
     ): Double {
         if (rawAmount <= 0.0) return 0.0
-        val normCurrency = currency.uppercase(Locale.US)
-        val hasMillion = rawTextContext.contains("میلیون") || rawTextContext.contains("ملیون")
-        val hasThousand = rawTextContext.contains("هزار") || rawTextContext.contains("تومن") || rawTextContext.contains("تومان")
+        if (rawTextContext.isBlank()) return rawAmount
 
-        if (hasMillion && rawAmount < 10_000.0) {
+        val hasBillion = rawTextContext.contains("میلیارد")
+        val hasMillion = rawTextContext.contains("میلیون") || rawTextContext.contains("ملیون")
+        val hasThousand = rawTextContext.contains("هزار")
+
+        if (hasBillion && rawAmount < 1_000_000.0) {
+            return rawAmount * 1_000_000_000.0
+        }
+        if (hasMillion && rawAmount < 1_000_000.0) {
             return rawAmount * 1_000_000.0
         }
-        if (rawTextContext.contains("هزار") && rawAmount < 1_000.0) {
-            return rawAmount * 1_000.0
-        }
-        // In Iran, any TOMAN amount between 1 and 999 (e.g., "۵۰۰ تومان سیگار خریدم" or "۹۰ تومن قهوه")
-        // is colloquially in thousands of Tomans (× 1,000 -> 500,000 Toman).
-        if (normCurrency == "TOMAN" && rawAmount >= 1.0 && rawAmount < 1_000.0 && (hasThousand || rawTextContext.isBlank())) {
+        if (hasThousand && rawAmount < 1_000_000.0) {
             return rawAmount * 1_000.0
         }
         return rawAmount
     }
 
+    private val persianWordNumbers: List<Pair<String, Double>> = listOf(
+        "نهصد" to 900.0,
+        "هشتصد" to 800.0,
+        "هفتصد" to 700.0,
+        "ششصد" to 600.0,
+        "شیشصد" to 600.0,
+        "پانصد" to 500.0,
+        "پونصد" to 500.0,
+        "چهارصد" to 400.0,
+        "چارصد" to 400.0,
+        "سیصد" to 300.0,
+        "دویست" to 200.0,
+        "صد و پنجاه" to 150.0,
+        "یکصد" to 100.0,
+        "صد" to 100.0,
+        "نود" to 90.0,
+        "هشتاد" to 80.0,
+        "هفتاد" to 70.0,
+        "شصت" to 60.0,
+        "پنجاه" to 50.0,
+        "چهل" to 40.0,
+        "سی" to 30.0,
+        "بیست و پنج" to 25.0,
+        "بیست" to 20.0,
+        "پانزده" to 15.0,
+        "پونزده" to 15.0,
+        "چهارده" to 14.0,
+        "سیزده" to 13.0,
+        "دوازده" to 12.0,
+        "یازده" to 11.0,
+        "ده" to 10.0,
+        "نه" to 9.0,
+        "هشت" to 8.0,
+        "هفت" to 7.0,
+        "شش" to 6.0,
+        "شیش" to 6.0,
+        "پنج" to 5.0,
+        "چهار" to 4.0,
+        "سه" to 3.0,
+        "دو" to 2.0,
+        "یک" to 1.0,
+        "یه" to 1.0
+    )
+
+    private fun parseSpokenOrNumericToken(token: String): Double? {
+        val clean = toEnglishDigits(token).replace(",", "").replace("،", "").trim()
+        clean.toDoubleOrNull()?.let { return it }
+        if (clean.contains("یک و نیم") || clean.contains("یه و نیم")) return 1.5
+        if (clean.contains("دو و نیم")) return 2.5
+        if (clean.contains("نیم")) return 0.5
+        var sum = 0.0
+        var matched = false
+        var working = clean
+        for ((word, value) in persianWordNumbers) {
+            val regex = Regex("""(?:^|\s|\b)${Regex.escape(word)}(?:\s|\b|$)""")
+            if (regex.containsMatchIn(working)) {
+                sum += value
+                matched = true
+                working = working.replaceFirst(word, " ")
+            }
+        }
+        return if (matched && sum > 0.0) sum else null
+    }
+
     /**
      * Extracts a numeric amount from a Persian spoken or typed clause, supporting:
-     * - Digits with commas ("500,000", "500")
-     * - Compound million/thousand phrases ("۲ میلیون و ۵۰۰", "یک و نیم میلیون")
-     * - Spoken Persian number words ("پانصد تومن", "دویست تومان", "صد و پنجاه تومن", "نود تومن")
-     * - Automatic colloquial Toman scaling ("۵۰۰ تومان سیگار خریدم" -> 500,000.0)
+     * - Digits with commas ("500,000", "1,000", "1000")
+     * - Compound million/thousand phrases ("۲ میلیون و ۵۰۰ هزار", "یک میلیون و دویست هزار", "یک و نیم میلیون")
+     * - Spoken Persian number words ("ششصد هزار تومان", "پانصد هزار تومن", "یک میلیون تومان")
+     * - Strict adherence to unit words: "۱۰۰۰ تومان" -> 1000.0, "۶۰۰ هزار تومان" -> 600,000.0.
      */
     fun extractSpokenOrTypedCurrencyAmount(clause: String, currency: String): Double? {
-        val norm = toEnglishDigits(clause).replace(",", "").replace("،", "")
+        val norm = toEnglishDigits(clause)
+            .replace('ي', 'ی')
+            .replace('ك', 'ک')
+            .replace(",", "")
+            .replace("،", "")
+            .replace("٬", "")
+            .trim()
 
-        // 1. Check compound "X میلیون و Y" (e.g. "2 میلیون و 500")
-        val compoundMillionRegex = Regex("""(\d+(?:\.\d+)?)\s*(?:میلیون|ملیون)\s*و\s*(\d+(?:\.\d+)?)""")
-        val compoundMatch = compoundMillionRegex.find(norm)
-        if (compoundMatch != null) {
-            val millions = compoundMatch.groupValues[1].toDoubleOrNull() ?: 0.0
-            val remainder = compoundMatch.groupValues[2].toDoubleOrNull() ?: 0.0
-            val remScaled = if (remainder < 1000.0) remainder * 1_000.0 else remainder
-            return millions * 1_000_000.0 + remScaled
+        // 1. Check "یک و نیم میلیون" / "نیم میلیون" / "نیم میلیارد"
+        if (norm.contains("یک و نیم میلیون") || norm.contains("یه و نیم میلیون") || norm.contains("1.5 میلیون")) {
+            return 1_500_000.0
+        }
+        if (norm.contains("دو و نیم میلیون") || norm.contains("2.5 میلیون")) {
+            return 2_500_000.0
+        }
+        if (norm.contains("نیم میلیون") || norm.contains("نیم ملیون")) {
+            return 500_000.0
         }
 
-        // 2. Check explicit digits
+        // 2. Check compound "X میلیون و Y (هزار)?" (both digits and words, e.g. "2 میلیون و 500 هزار" or "دو میلیون و پانصد هزار")
+        val compoundSplit = norm.split(Regex("""\s*(?:میلیون|ملیون)\s+و\s*"""), limit = 2)
+        if (compoundSplit.size == 2) {
+            val leftPart = compoundSplit[0].trim().split(Regex("""\s+""")).takeLast(3).joinToString(" ")
+            val rightPartRaw = compoundSplit[1].trim()
+            val millionsVal = parseSpokenOrNumericToken(leftPart)
+            val rightTokens = rightPartRaw
+                .replace(Regex("""(هزار|تومان|تومن|ریال).*"""), "")
+                .trim()
+            val remainderVal = parseSpokenOrNumericToken(rightTokens)
+            if (millionsVal != null && millionsVal > 0.0) {
+                val remScaled = when {
+                    remainderVal == null -> 0.0
+                    remainderVal < 1000.0 -> remainderVal * 1_000.0
+                    else -> remainderVal
+                }
+                return millionsVal * 1_000_000.0 + remScaled
+            }
+        }
+
+        // 3. Check explicit digits in the text
         val numberRegex = Regex("""(\d+(?:\.\d+)?)""")
         val firstNum = numberRegex.find(norm)?.groupValues?.get(1)?.toDoubleOrNull()
         if (firstNum != null && firstNum > 0.0) {
             return normalizeColloquialTomanAmount(firstNum, currency, norm)
         }
 
-        // 3. Check spoken Persian number words (when Android SpeechRecognizer transcribes words instead of digits)
-        val spokenMap = listOf(
-            "نهصد" to 900.0,
-            "هشتصد" to 800.0,
-            "هفتصد" to 700.0,
-            "ششصد" to 600.0,
-            "شیشصد" to 600.0,
-            "پانصد" to 500.0,
-            "پونصد" to 500.0,
-            "چهارصد" to 400.0,
-            "چارصد" to 400.0,
-            "سیصد" to 300.0,
-            "دویست" to 200.0,
-            "صد و پنجاه" to 150.0,
-            "صد" to 100.0,
-            "نود" to 90.0,
-            "هشتاد" to 80.0,
-            "هفتاد" to 70.0,
-            "شصت" to 60.0,
-            "پنجاه" to 50.0,
-            "چهل" to 40.0,
-            "سی " to 30.0,
-            "بیست" to 20.0,
-            "پانزده" to 15.0,
-            "پونزده" to 15.0,
-            "ده " to 10.0
-        )
-        for ((word, value) in spokenMap) {
-            if (norm.contains(word)) {
-                return normalizeColloquialTomanAmount(value, currency, norm)
+        // 4. Check standalone "هزار تومان" / "میلیون تومان" without preceding digit
+        val beforeUnit = norm
+            .replace(Regex("""(میلیارد|میلیون|ملیون|هزار|تومان|تومن|ریال|دلار|یورو|درهم).*"""), "")
+            .trim()
+            .split(Regex("""\s+"""))
+            .takeLast(4)
+            .joinToString(" ")
+        val spokenVal = parseSpokenOrNumericToken(beforeUnit) ?: parseSpokenOrNumericToken(norm)
+        if (spokenVal != null && spokenVal > 0.0) {
+            return normalizeColloquialTomanAmount(spokenVal, currency, norm)
+        }
+
+        if (norm.contains("میلیون تومان") || norm.contains("میلیون تومن")) return 1_000_000.0
+        if (norm.contains("هزار تومان") || norm.contains("هزار تومن")) return 1_000.0
+
+        return null
+    }
+
+    /**
+     * Parses relative Persian date expressions into day offsets from [todayEpochDay]:
+     * - "امروز" / "امشب" -> 0
+     * - "دیروز" / "دیشب" -> -1
+     * - "پریروز" -> -2
+     * - "فردا" -> +1
+     * - "پس‌فردا" / "پس فردا" -> +2
+     * - "هفته بعد" / "هفته آینده" -> +7
+     * - "هفته پیش" / "هفته قبل" -> -7
+     * - "آخر ماه" -> days remaining until the end of the current Jalali month
+     */
+    fun extractRelativeDateOffsetDays(text: String, todayEpochDay: Long = currentLocalEpochDay()): Int {
+        val norm = text.replace('ي', 'ی').replace('ك', 'ک')
+        return when {
+            norm.contains("پس‌فردا") || norm.contains("پس فردا") -> 2
+            norm.contains("پریروز") -> -2
+            norm.contains("فردا") -> 1
+            norm.contains("دیروز") || norm.contains("دیشب") -> -1
+            norm.contains("هفته بعد") || norm.contains("هفته آینده") -> 7
+            norm.contains("هفته پیش") || norm.contains("هفته قبل") || norm.contains("هفته گذشته") -> -7
+            norm.contains("ماه بعد") || norm.contains("ماه آینده") -> 30
+            norm.contains("آخر ماه") || norm.contains("پایان ماه") -> {
+                val jalali = epochDayToJalali(todayEpochDay)
+                val maxDayOfMonth = when (jalali.month) {
+                    in 1..6 -> 31
+                    in 7..11 -> 30
+                    12 -> if (isJalaliLeapYear(jalali.year)) 30 else 29
+                    else -> 30
+                }
+                (maxDayOfMonth - jalali.day).coerceAtLeast(0)
+            }
+            else -> 0
+        }
+    }
+
+    // --- Telegram-Style Frequent Transaction Titles Engine ---
+
+    data class FrequentTransactionTitle(
+        val title: String,
+        val emoji: String,
+        val transactionType: String, // "EXPENSE" or "INCOME"
+        val category: String,
+        val usageCount: Int = 1,
+        val isPinned: Boolean = false
+    )
+
+    fun resolveEmojiForTitle(title: String, category: String = "", transactionType: String = "EXPENSE"): String {
+        val t = title.lowercase(Locale.US)
+        return when {
+            t.contains("gemini") || t.contains("جمینای") || t.contains("هوش مصنوعی") || t.contains("ai") -> "🤖"
+            t.contains("غذا") || t.contains("ناهار") || t.contains("شام") || t.contains("ساندویچ") || t.contains("پیتزا") || t.contains("رستوران") -> "🍔"
+            t.contains("قهوه") || t.contains("اسپرسو") || t.contains("لاته") || t.contains("کافه") || t.contains("چای") -> "☕"
+            t.contains("تاکسی") || t.contains("اسنپ") || t.contains("تپسی") || t.contains("مترو") || t.contains("کرایه") -> "🚕"
+            t.contains("بنزین") || t.contains("سوخت") || t.contains("ماشین") || t.contains("خودرو") -> "⛽"
+            t.contains("خرید") || t.contains("سوپرمارکت") || t.contains("فروشگاه") || t.contains("میوه") || t.contains("نان") -> "🛒"
+            t.contains("حقوق") || t.contains("دستمزد") || t.contains("یاری") || t.contains("واریز") -> "💰"
+            t.contains("فروش") || t.contains("پروژه") || t.contains("خدمات") || t.contains("فریلنس") || t.contains("طراحی") || t.contains("برنامه") -> "💻"
+            t.contains("قبض") || t.contains("اجاره") || t.contains("شارژ") || t.contains("اینترنت") || t.contains("اشتراک") -> "🧾"
+            t.contains("دارو") || t.contains("دکتر") || t.contains("پزشک") || t.contains("درمان") || t.contains("آزمایش") -> "💊"
+            t.contains("ورزش") || t.contains("باشگاه") -> "🏋️"
+            t.contains("کتاب") || t.contains("آموزش") || t.contains("دوره") -> "📚"
+            t.contains("سود") || t.contains("سرمایه") || t.contains("طلا") || t.contains("سهام") -> "📈"
+            t.contains("هدیه") || t.contains("پاداش") || t.contains("عیدی") -> "🎁"
+            transactionType.equals("INCOME", ignoreCase = true) -> "💵"
+            category.contains("غذا") -> "🍔"
+            category.contains("حمل") -> "🚕"
+            category.contains("خرید") -> "🛒"
+            category.contains("قبوض") -> "🧾"
+            category.contains("سلامت") -> "💊"
+            else -> "💳"
+        }
+    }
+
+    val defaultFrequentTitles: List<FrequentTransactionTitle> = listOf(
+        // EXPENSE (پرداخت) defaults
+        FrequentTransactionTitle("غذا", "🍔", "EXPENSE", "غذا و کافه", usageCount = 12, isPinned = true),
+        FrequentTransactionTitle("تاکسی", "🚕", "EXPENSE", "حمل‌ونقل", usageCount = 10, isPinned = true),
+        FrequentTransactionTitle("خرید", "🛒", "EXPENSE", "خرید", usageCount = 9, isPinned = true),
+        FrequentTransactionTitle("قهوه", "☕", "EXPENSE", "غذا و کافه", usageCount = 7, isPinned = false),
+        FrequentTransactionTitle("قبض و اشتراک", "🧾", "EXPENSE", "قبوض و اجاره", usageCount = 6, isPinned = false),
+        FrequentTransactionTitle("بنزین", "⛽", "EXPENSE", "حمل‌ونقل", usageCount = 5, isPinned = false),
+        FrequentTransactionTitle("دارو و درمان", "💊", "EXPENSE", "سلامت و درمان", usageCount = 4, isPinned = false),
+        // INCOME (دریافت) defaults
+        FrequentTransactionTitle("فروش Gemini", "🤖", "INCOME", "سرمایه‌گذاری", usageCount = 12, isPinned = true),
+        FrequentTransactionTitle("فروش خدمات", "💻", "INCOME", "سرمایه‌گذاری", usageCount = 10, isPinned = true),
+        FrequentTransactionTitle("حقوق", "💰", "INCOME", "سایر", usageCount = 9, isPinned = true),
+        FrequentTransactionTitle("پروژه آزاد", "💻", "INCOME", "سرمایه‌گذاری", usageCount = 6, isPinned = false),
+        FrequentTransactionTitle("سود بانکی", "📈", "INCOME", "سرمایه‌گذاری", usageCount = 5, isPinned = false),
+        FrequentTransactionTitle("پاداش", "🎁", "INCOME", "سایر", usageCount = 4, isPinned = false)
+    )
+
+    /**
+     * Ranks and filters frequent transaction titles strictly by [transactionType] ("EXPENSE" vs "INCOME"),
+     * combining saved/pinned items with actual historical transaction usage counts and excluding deleted titles.
+     */
+    fun getRankedFrequentTitlesForType(
+        transactionType: String,
+        historicalExpenses: List<ExpenseEntry>,
+        customFrequentItems: List<FrequentTransactionTitle> = defaultFrequentTitles,
+        deletedTitlesForType: Set<String> = emptySet()
+    ): List<FrequentTransactionTitle> {
+        val normType = if (transactionType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
+        val deletedNorm = deletedTitlesForType.map { it.trim().lowercase(Locale.US) }.toSet()
+        fun isDeletedKey(key: String): Boolean {
+            return key in deletedNorm || "${normType.lowercase(Locale.US)}|$key" in deletedNorm
+        }
+
+        val mergedMap = linkedMapOf<String, FrequentTransactionTitle>()
+
+        // 1. Seed from custom/default frequent items matching normType
+        for (item in customFrequentItems) {
+            val itemType = if (item.transactionType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
+            if (itemType != normType) continue
+            val key = item.title.trim().lowercase(Locale.US)
+            if (key.isBlank() || isDeletedKey(key)) continue
+            mergedMap[key] = item.copy(transactionType = normType)
+        }
+
+        // 2. Learn from actual historical transactions of the same type
+        for (entry in historicalExpenses) {
+            val entryType = when {
+                entry.isIncome -> "INCOME"
+                entry.isExpense -> "EXPENSE"
+                else -> continue
+            }
+            if (entryType != normType) continue
+            val cleanTitle = entry.title.trim()
+            val key = cleanTitle.lowercase(Locale.US)
+            if (key.isBlank() || isDeletedKey(key)) continue
+
+            val existing = mergedMap[key]
+            if (existing != null) {
+                mergedMap[key] = existing.copy(usageCount = existing.usageCount + 1)
+            } else {
+                mergedMap[key] = FrequentTransactionTitle(
+                    title = cleanTitle,
+                    emoji = resolveEmojiForTitle(cleanTitle, entry.category, normType),
+                    transactionType = normType,
+                    category = entry.category.ifBlank { "سایر" },
+                    usageCount = 1,
+                    isPinned = false
+                )
             }
         }
 
-        return null
+        return mergedMap.values.sortedWith(
+            compareByDescending<FrequentTransactionTitle> { it.isPinned }
+                .thenByDescending { it.usageCount }
+                .thenBy { it.title }
+        )
     }
 
     fun formatCurrencyAmount(amount: Double, currency: String, usePersianDigits: Boolean = true): String {
@@ -530,6 +832,8 @@ object PersianDateAndUnitUtils {
         val numStr = if (usePersianDigits) toPersianDigits(formattedNum) else formattedNum
         val label = when (currency.uppercase(Locale.US)) {
             "TOMAN" -> "تومان"
+            "HEZAR_TOMAN" -> "هزار تومان"
+            "MILLION_TOMAN" -> "میلیون تومان"
             "IRR" -> "ریال"
             "EUR" -> "€"
             "USD" -> "$"

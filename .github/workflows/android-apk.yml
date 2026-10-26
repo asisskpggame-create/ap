@@ -126,50 +126,44 @@ jobs:
         run: |
           gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.3.0-FinancePro-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.3.0-FinancePro-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.4.0-FinancePro-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.4.0-FinancePro-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-v1.3.0-APKs
+          name: Personal-Life-OS-v1.4.0-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.${{ github.run_number }}
-          name: "Personal Life OS v1.3.${{ github.run_number }} (Finance Pro + Live Bank SMS Inbox + Analytics Hub)"
+          tag_name: v1.4.${{ github.run_number }}
+          name: "Personal Life OS v1.4.${{ github.run_number }} (Unified 4-Pillar Architecture + Debt-to-Goal Link + Unified Reminders)"
           body: |
-            ## 💎 Personal Life OS v1.3.0 — Finance Pro & Liquid Glass Edition (`versionCode = 4`)
+            ## 💎 Personal Life OS v1.4.0 — Unified 4-Pillar Architecture & Liquid Glass Edition (`versionCode = 5`)
 
-            سیستم‌عامل جامع مدیریت مالی، اهداف، عادت‌ها، سلامت و دستیار هوشمند فارسی با اولویت‌بندی **امور مالی به‌عنوان تب اول**، **اتصال زنده به صندوق پیامک‌های بانکی ایران (`READ_SMS`)**، **مدیریت دسته‌بندی‌ها و دکمه‌های ۱-لمسی خرج** و **مرکز نمودار و روند تحلیلی**.
-
-            ---
-
-            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.3.0` - `versionCode = 4`)
-            - ⭐ **`Personal-Life-OS-v1.3.0-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
-            - 📦 **`Personal-Life-OS-v1.3.0-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
-            > **نکته نصب:** به دلیل ارتقای `versionCode` به `4`، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی مستقیماً روی آن‌ها آپدیت می‌شود.
+            سیستم‌عامل جامع مدیریت مالی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی (منطبق بر نقشه راه [`APP_ROADMAP_FA.md`](./APP_ROADMAP_FA.md) و تأییدشده در [`ROADMAP_PROGRESS.md`](./ROADMAP_PROGRESS.md)).
 
             ---
 
-            ### 🆕 قابلیت‌های جدید و بازطراحی نسخه `v1.3.0`
-            1. **💳 بازطراحی کامل تب «امور مالی» و قرارگیری در اولویت اول منوی برنامه:**
-               - تفکیک حرفه‌ای به ۲ بخش اختصاصی: **«ورودی و خروجی‌ها»** و **«طلب و بدهی»**.
-               - **صندوق پیامک‌های بانکی زنده (Auto-SMS Inbox Reader):** خواندن مستقیم پیامک‌های بانکی گوشی (`READ_SMS`)، تشخیص خودکار ۱۷ بانک ایرانی، استخراج مبلغ (تبدیل خودکار ریال به تومان)، نمایش **مانده حساب**، تشخیص خودکار پذیرنده/دسته‌بندی و ثبت تراکنش با ۱ لمس.
-               - **مدیریت دسته‌بندی‌های خرج و مخارج:** امکان افزودن دسته‌بندی‌های سفارشی جدید همراه با آیکون‌های اختصاصی.
-               - **دکمه‌های ثبت سریع ۱-لمسی (1-Tap Presets):** تعریف، ویرایش نام/قیمت و حذف دکمه‌های آماده برای مخارج پرتکرار روزانه.
-               - **لیست پیشرفته تراکنش‌ها:** مجهز به جستجوی زنده، ویرایش کامل تراکنش، تسویه ۱-لمسی طلب/بدهی، پشتیبانی چندارزی (تومان، دلار، یورو، درهم، ریال)، **خروجی اکسل (`CSV`)** و **کپی گزارش متنی**.
-               - **نمودار خطی روند ۳۰ روزه خرج و درآمد (`MonthlySpendingTrendsLineChart`) + نمودار حلقه‌ای سهم دسته‌بندی‌ها (`MonthlyVisualExpensesGlassCard`) + کارت تراز دارایی خالص (`Net Worth`).**
-            2. **📊 تبدیل صفحه خانه به مرکز «نمودار و روند» (Analytics & Trends Hub):**
-               - حذف فرم‌ها و دکمه‌های پراکنده و تمرکز کامل بر نمایش گرافیکی وضعیت، نمودارها و کارت‌های خلاصه به همراه دکمه‌های ناوبری مستقیم به تب‌های تخصصی.
-            3. **🎯 یکپارچه‌سازی تب «اهداف و عادت‌ها» و تب مستقل «سلامت و کالری»:**
-               - تفکیک کامل «اهداف بلندمدت/تسک‌ها» و «عادت‌های روتین روزانه» در تب اهداف و انتقال کامل ثبت خواب، ورزش، آب و کالری به تب اختصاصی سلامت.
+            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.4.0` - `versionCode = 5`)
+            - ⭐ **`Personal-Life-OS-v1.4.0-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
+            - 📦 **`Personal-Life-OS-v1.4.0-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
+            > **نکته نصب:** به دلیل ارتقای `versionCode` به `5` و مهاجرت غیرمخرب دیتابیس (`MIGRATION_5_6`)، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی و با حفظ تمام داده‌ها مستقیماً روی آن‌ها آپدیت می‌شود.
+
+            ---
+
+            ### 🆕 قابلیت‌های جدید نسخه `v1.4.0` (فازهای ۰ تا ۶ نقشه راه)
+            1. **🧭 ناوبری استاندارد ۴ بخشی:** ۱. مالی (`DAILY_LOG`)، ۲. اهداف و مسیر (`GOALS_AND_HABITS`)، ۳. داشبورد (`HOME`)، ۴. AI (`AI_ASSISTANT`).
+            2. **🔗 اتصال مستقیم بدهی به اهداف و مسیر (`Debt-to-Goal Link`):** ساخت برنامه بازپرداخت اقساط (`linkedDebtId`)، پرداخت جزئی قسط (`paidAmount`) با کلید ضدتکرار، عدم شمارش انتقال بین حساب‌های شخصی (`TRANSFER`) در درآمد/هزینه، و بستن خودکار تسک‌های قسط پس از تسویه بدهی.
+            3. **🔔 موتور یادآوری مشترک (`Unified Reminder Engine`):** پشتیبانی یکپارچه از کارها، بدهی‌ها، عادت‌ها، اهداف و یادآور روزانه ثبت هزینه‌ها با قابلیت `Snooze` بدون تکرار، تغییر موعد، لغو خودکار پس از تکمیل/تسویه و پوشش حریم خصوصی (`hideSensitiveContent`).
+            4. **📊 داشبورد هوشمند:** کارت «یادآوری‌های مهم و اقدام بعدی»، تفکیک صریح **«داده کافی نیست»** از مقدار `0`، برچسب **«(تخمینی)»** برای پیش‌بینی پایان ماه و شخصی‌سازی نمایش کارت‌ها.
+            5. **🤖 دستیار هوشمند کنترل‌شده و گفتار آفلاین فارسی:** پرسش تکمیلی در ابهام (`AskClarification`)، تحلیل مبتنی بر داده واقعی و بازه زمانی، پیش‌نمایش و الزام تأیید عملیات حساس و پشتیبانی از تبدیل گفتار به متن فارسی آفلاین.
           files: |
-            release-assets/Personal-Life-OS-v1.3.0-FinancePro-Debug.apk
-            release-assets/Personal-Life-OS-v1.3.0-FinancePro-Release.apk
+            release-assets/Personal-Life-OS-v1.4.0-FinancePro-Debug.apk
+            release-assets/Personal-Life-OS-v1.4.0-FinancePro-Release.apk
           draft: false
           prerelease: false
         env:

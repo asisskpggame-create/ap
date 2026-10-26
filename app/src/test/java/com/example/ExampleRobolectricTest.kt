@@ -29,25 +29,35 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify colloquial Toman voice parsing and Iranian bank SMS parser`() {
-    val parsedVoice1 = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+  fun `verify exact Toman vs Hezar Toman parsing and Iranian bank SMS parser`() {
+    // 1. Exact Toman ("۵۰۰ تومان") MUST stay 500.0 and NEVER multiply by 1000
+    val parsedExactToman = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
       rawText = "۵۰۰ تومان سیگار خریدم",
       todayEpochDay = 20000L,
       defaultCurrency = "TOMAN"
     )
-    assertEquals(1, parsedVoice1.operations.size)
-    assertEquals("AddExpense", parsedVoice1.operations[0].operationType)
-    assertEquals(500_000.0, parsedVoice1.operations[0].amount, 0.01)
-    assertEquals("TOMAN", parsedVoice1.operations[0].currency)
-    assertEquals("خرید سیگار", parsedVoice1.operations[0].title)
+    assertEquals(1, parsedExactToman.operations.size)
+    assertEquals("AddExpense", parsedExactToman.operations[0].operationType)
+    assertEquals(500.0, parsedExactToman.operations[0].amount, 0.01)
+    assertEquals("TOMAN", parsedExactToman.operations[0].currency)
+    assertEquals("EXPENSE", parsedExactToman.operations[0].transactionType)
 
+    // 2. Explicit Hezar Toman ("۵۰۰ هزار تومان") MUST become 500,000.0 TOMAN
+    val parsedHezarToman = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "۵۰۰ هزار تومان سیگار خریدم",
+      todayEpochDay = 20000L,
+      defaultCurrency = "TOMAN"
+    )
+    assertEquals(500_000.0, parsedHezarToman.operations[0].amount, 0.01)
+    assertEquals("TOMAN", parsedHezarToman.operations[0].currency)
+
+    // 3. Spoken words with explicit هزار ("پانصد هزار تومن") -> 500,000.0
     val parsedVoiceWords = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
-      rawText = "پانصد تومن سیگار خریدم",
+      rawText = "پانصد هزار تومن سیگار خریدم",
       todayEpochDay = 20000L,
       defaultCurrency = "TOMAN"
     )
     assertEquals(500_000.0, parsedVoiceWords.operations[0].amount, 0.01)
-    assertEquals("خرید سیگار", parsedVoiceWords.operations[0].title)
 
     val parsedEuro = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
       rawText = "یه قهوه ۳ یورویی خریدم",
@@ -62,6 +72,234 @@ class ExampleRobolectricTest {
     )
     assertEquals(500_000.0, smsParsed?.amountInToman ?: 0.0, 0.01)
     assertEquals("بانک ملت", smsParsed?.bankName)
+  }
+
+  @Test
+  fun `audit suite P0 P1 verify currency units 32 colloquial Persian sentences frequent titles and atomic update`() = kotlinx.coroutines.runBlocking {
+    val today = 20100L
+
+    // --- PART A: Currency Wheel Unit & Exact Conversion Audit (Zero Unwanted 1000x) ---
+    val (amtToman, currToman) = com.example.util.PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(1000.0, "TOMAN")
+    assertEquals(1000.0, amtToman, 0.01)
+    assertEquals("TOMAN", currToman)
+
+    val (amtHezar, currHezar) = com.example.util.PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(600.0, "HEZAR_TOMAN")
+    assertEquals(600_000.0, amtHezar, 0.01)
+    assertEquals("TOMAN", currHezar)
+
+    val (amtMillion, currMillion) = com.example.util.PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(2.5, "MILLION_TOMAN")
+    assertEquals(2_500_000.0, amtMillion, 0.01)
+    assertEquals("TOMAN", currMillion)
+
+    val (amtIrr, currIrr) = com.example.util.PersianDateAndUnitUtils.resolveEnteredAmountAndCurrency(1000.0, "IRR")
+    assertEquals(1000.0, amtIrr, 0.01)
+    assertEquals("IRR", currIrr)
+    assertEquals(100.0, com.example.util.PersianDateAndUnitUtils.convertCurrencyExact(1000.0, "IRR", "TOMAN") ?: 0.0, 0.01)
+    assertEquals(10_000.0, com.example.util.PersianDateAndUnitUtils.convertCurrencyExact(1000.0, "TOMAN", "IRR") ?: 0.0, 0.01)
+
+    // Ensure normalizeColloquialTomanAmount NEVER multiplies plain TOMAN by 1000
+    assertEquals(
+      1000.0,
+      com.example.util.PersianDateAndUnitUtils.normalizeColloquialTomanAmount(1000.0, "TOMAN", "۱۰۰۰ تومان"),
+      0.01
+    )
+    assertEquals(
+      600_000.0,
+      com.example.util.PersianDateAndUnitUtils.normalizeColloquialTomanAmount(600.0, "TOMAN", "۶۰۰ هزار تومان"),
+      0.01
+    )
+
+    // --- PART B: 32 Colloquial Persian Sentences Intent & Amount Classification Audit ---
+    data class SentenceAuditCase(
+      val sentence: String,
+      val expectedTxType: String,
+      val expectedAmount: Double,
+      val expectedCurrency: String = "TOMAN"
+    )
+
+    val colloquialCases = listOf(
+      // 1-10: INCOME (دریافت / فروش / حقوق / واریز / گرفتم بابت فروش)
+      SentenceAuditCase("۶۰۰ هزار تومان بابت فروش جمینای گرفتم", "INCOME", 600_000.0),
+      SentenceAuditCase("۶۰۰ هزار تومن از فروش Gemini دریافت کردم", "INCOME", 600_000.0),
+      SentenceAuditCase("۱۵ میلیون تومان حقوق گرفتم", "INCOME", 15_000_000.0),
+      SentenceAuditCase("۲ میلیون و ۵۰۰ هزار تومان بابت پروژه طراحی سایت دریافت کردم", "INCOME", 2_500_000.0),
+      SentenceAuditCase("۸۰۰ هزار تومان بابت فروش خدمات مشاوره به حسابم واریز شد", "INCOME", 800_000.0),
+      SentenceAuditCase("یک و نیم میلیون تومان سود بانکی واریز شد", "INCOME", 1_500_000.0),
+      SentenceAuditCase("۴۵۰ هزار تومان بابت فروش اکانت پول گرفتم", "INCOME", 450_000.0),
+      SentenceAuditCase("۳ میلیون تومان پاداش دریافت کردم", "INCOME", 3_000_000.0),
+      SentenceAuditCase("۹۰۰ هزار تومان بابت تعمیر لپتاپ دستمزد گرفتم", "INCOME", 900_000.0),
+      SentenceAuditCase("۱۲۰ دلار بابت پروژه فریلنسری درآمد داشتم", "INCOME", 120.0, "USD"),
+
+      // 11-22: EXPENSE (پرداخت / خرید / خرج / اسنپ گرفتم / کرایه)
+      SentenceAuditCase("۳۰۰ هزار تومن بابت اشتراک پرداخت کردم", "EXPENSE", 300_000.0),
+      SentenceAuditCase("۲۵۰ هزار تومان غذا خریدم", "EXPENSE", 250_000.0),
+      SentenceAuditCase("۸۵ هزار تومان اسنپ گرفتم", "EXPENSE", 85_000.0),
+      SentenceAuditCase("۱۲۰ هزار تومان تاکسی گرفتم", "EXPENSE", 120_000.0),
+      SentenceAuditCase("۴۰۰ هزار تومان خرید سوپرمارکت انجام دادم", "EXPENSE", 400_000.0),
+      SentenceAuditCase("۹۵ هزار تومان قهوه خوردم", "EXPENSE", 95_000.0),
+      SentenceAuditCase("۱۸۰ هزار تومان قبض اینترنت پرداخت کردم", "EXPENSE", 180_000.0),
+      SentenceAuditCase("۱۵۰ هزار تومان بنزین زدم", "EXPENSE", 150_000.0),
+      SentenceAuditCase("۶۵۰ هزار تومان دارو و ویزیت دکتر دادم", "EXPENSE", 650_000.0),
+      SentenceAuditCase("۱۰۰۰ تومان کارمزد بانکی کم شد", "EXPENSE", 1000.0),
+      SentenceAuditCase("۵۰۰۰ ریال صدقه دادم", "EXPENSE", 5000.0, "IRR"),
+      SentenceAuditCase("۲ میلیون تومان اجاره خونه پرداخت کردم", "EXPENSE", 2_000_000.0),
+
+      // 23-26: TRANSFER (انتقال بین حساب‌ها)
+      SentenceAuditCase("۵ میلیون تومان از حساب اصلی به پس‌انداز انتقال دادم", "TRANSFER", 5_000_000.0),
+      SentenceAuditCase("۳ میلیون تومان کارت به کارت به حساب خودم زدم", "TRANSFER", 3_000_000.0),
+      SentenceAuditCase("یک میلیون تومان جابجایی بین حساب انجام دادم", "TRANSFER", 1_000_000.0),
+      SentenceAuditCase("۷۰۰ هزار تومان انتقال به کارت پس‌انداز", "TRANSFER", 700_000.0),
+
+      // 27-29: RECEIVABLE (طلب / قرض دادن)
+      SentenceAuditCase("۲۰۰ هزار تومان از مشتری طلب دارم", "RECEIVABLE", 200_000.0),
+      SentenceAuditCase("یک میلیون تومان به علی قرض دادم", "RECEIVABLE", 1_000_000.0),
+      SentenceAuditCase("۴۰۰ هزار تومان از رضا طلبکارم", "RECEIVABLE", 400_000.0),
+
+      // 30-32: DEBT (بدهی / قرض گرفتن)
+      SentenceAuditCase("۵۰۰ هزار تومان به علی بدهکارم", "DEBT", 500_000.0),
+      SentenceAuditCase("۲ میلیون تومان از محمد قرض گرفتم", "DEBT", 2_000_000.0),
+      SentenceAuditCase("۱ میلیون و ۲۰۰ هزار تومان بدهی به صاحبخانه دارم", "DEBT", 1_200_000.0)
+    )
+
+    colloquialCases.forEachIndexed { idx, testCase ->
+      val parsed = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+        rawText = testCase.sentence,
+        todayEpochDay = today,
+        defaultCurrency = "TOMAN"
+      )
+      assertEquals(
+        "Case #${idx + 1} failed ops count for: ${testCase.sentence}",
+        1,
+        parsed.operations.size
+      )
+      val op = parsed.operations.first()
+      assertEquals(
+        "Case #${idx + 1} wrong transactionType for: ${testCase.sentence}",
+        testCase.expectedTxType,
+        op.transactionType
+      )
+      assertEquals(
+        "Case #${idx + 1} wrong amount for: ${testCase.sentence}",
+        testCase.expectedAmount,
+        op.amount,
+        0.01
+      )
+      assertEquals(
+        "Case #${idx + 1} wrong currency for: ${testCase.sentence}",
+        testCase.expectedCurrency,
+        op.currency
+      )
+    }
+
+    // Verify specific bug case: "۶۰۰ هزار تومان بابت فروش جمینای گرفتم" clean title is "فروش جمینای"
+    val geminiSale = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "۶۰۰ هزار تومان بابت فروش جمینای گرفتم",
+      todayEpochDay = today,
+      defaultCurrency = "TOMAN"
+    ).operations.first()
+    assertEquals("INCOME", geminiSale.transactionType)
+    assertEquals(600_000.0, geminiSale.amount, 0.01)
+    assertTrue("Expected title to contain فروش جمینای but was ${geminiSale.title}", geminiSale.title.contains("فروش جمینای"))
+
+    // Verify ambiguous sentence without direction asks clarification instead of guessing
+    val ambiguousNoVerb = com.example.ai.GeminiAssistantService.parsePersianCommandDeterministic(
+      rawText = "۵۰۰ هزار تومان با علی",
+      todayEpochDay = today,
+      defaultCurrency = "TOMAN"
+    )
+    assertTrue(ambiguousNoVerb.isAmbiguous)
+    assertEquals("AskClarification", ambiguousNoVerb.operations.first().operationType)
+
+    // --- PART C: Frequent Titles Separation, Ranking, Pinning & Deletion Audit ---
+    val sampleHistory = listOf(
+      com.example.data.model.ExpenseEntry(
+        id = "1",
+        title = "فروش Gemini",
+        category = "فروش و خدمات",
+        amount = 600_000.0,
+        transactionType = "INCOME"
+      ),
+      com.example.data.model.ExpenseEntry(
+        id = "2",
+        title = "فروش Gemini",
+        category = "فروش و خدمات",
+        amount = 600_000.0,
+        transactionType = "INCOME"
+      ),
+      com.example.data.model.ExpenseEntry(
+        id = "3",
+        title = "قهوه تخصصی",
+        category = "غذا و کافه",
+        amount = 95_000.0,
+        transactionType = "EXPENSE"
+      )
+    )
+
+    val incomeTitles = com.example.util.PersianDateAndUnitUtils.getRankedFrequentTitlesForType(
+      transactionType = "INCOME",
+      historicalExpenses = sampleHistory,
+      customFrequentItems = com.example.util.PersianDateAndUnitUtils.defaultFrequentTitles,
+      deletedTitlesForType = emptySet()
+    )
+    val expenseTitles = com.example.util.PersianDateAndUnitUtils.getRankedFrequentTitlesForType(
+      transactionType = "EXPENSE",
+      historicalExpenses = sampleHistory,
+      customFrequentItems = com.example.util.PersianDateAndUnitUtils.defaultFrequentTitles,
+      deletedTitlesForType = emptySet()
+    )
+
+    assertTrue(incomeTitles.all { it.transactionType == "INCOME" })
+    assertTrue(expenseTitles.all { it.transactionType == "EXPENSE" })
+    assertTrue(incomeTitles.any { it.title == "فروش Gemini" })
+    assertTrue(expenseTitles.none { it.title == "فروش Gemini" })
+    assertTrue(expenseTitles.any { it.title == "قهوه تخصصی" })
+
+    // Deleting a frequent title removes it from the ranked list
+    val afterDeleteIncome = com.example.util.PersianDateAndUnitUtils.getRankedFrequentTitlesForType(
+      transactionType = "INCOME",
+      historicalExpenses = sampleHistory,
+      customFrequentItems = com.example.util.PersianDateAndUnitUtils.defaultFrequentTitles,
+      deletedTitlesForType = setOf("INCOME|فروش gemini")
+    )
+    assertTrue(afterDeleteIncome.none { it.title.equals("فروش Gemini", ignoreCase = true) })
+
+    // --- PART D: Atomic Expense Edit & Delete Consistency ---
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val db = androidx.room.Room.inMemoryDatabaseBuilder(
+      context,
+      com.example.data.local.LifeOsDatabase::class.java
+    ).allowMainThreadQueries().build()
+    val repo = com.example.data.repository.LifeOsRepository(cloudDb = null, localDao = db.lifeOsDao())
+    val userId = com.example.data.local.LifeOsDatabase.LOCAL_DEVICE_USER_ID
+
+    val createdId = repo.addExpense(
+      title = "فروش جمینای",
+      category = "فروش و خدمات",
+      amount = 600_000.0,
+      currency = "TOMAN",
+      localEpochDay = today,
+      notes = "ثبت اولیه",
+      transactionType = "INCOME"
+    ).getOrThrow()
+
+    val originalEntry = db.lifeOsDao().getExpenseById(userId, createdId)!!.toDomain()
+    assertEquals(600_000.0, originalEntry.amount, 0.01)
+    assertEquals("INCOME", originalEntry.transactionType)
+
+    // Atomic update preserves ID and updates amount/title accurately
+    repo.updateExpense(
+      originalEntry.copy(
+        title = "فروش اشتراک Gemini Pro",
+        amount = 750_000.0
+      )
+    ).getOrThrow()
+
+    val updatedEntry = db.lifeOsDao().getExpenseById(userId, createdId)!!.toDomain()
+    assertEquals(createdId, updatedEntry.id)
+    assertEquals("فروش اشتراک Gemini Pro", updatedEntry.title)
+    assertEquals(750_000.0, updatedEntry.amount, 0.01)
+
+    db.close()
   }
 
   @get:org.junit.Rule
