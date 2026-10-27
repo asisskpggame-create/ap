@@ -75,7 +75,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             این اپلیکیشن نسخه وب پورت شده از نسخه بومی اندروید (Native Android Personal Life OS) است. با پشتیبانی کامل از زبان فارسی، تقویم جلالی، اسکنر پیامک‌های بانکی، دستیار هوشمند جمینای و صندوق امن طراحی شده است.
           </p>
           <div className="text-[11px] text-slate-500">
-            نسخه: ۱.۵.۰ • پلتفرم: React + Vite + Tailwind CSS
+            نسخه: ۱.۵.۰R • پلتفرم: React + Vite + Tailwind CSS
           </div>
         </div>
       </div>

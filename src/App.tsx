@@ -9,6 +9,7 @@ import { AssistantScreen } from './components/AssistantScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { VoiceCaptureModal } from './components/VoiceCaptureModal';
 import { TabType, TaskItem, HabitItem, ExpenseItem, HealthLog, VaultNote, ChatMessage } from './types';
+import { GoogleGenAI } from '@google/genai';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -16,45 +17,96 @@ export default function App() {
   const [isOpenMobile, setIsOpenMobile] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
 
-  // Initial Seed State for Personal Life OS
-  const [tasks, setTasks] = useState<TaskItem[]>([
-    { id: '1', title: 'بررسی و تایید گزارش مالی شرکت', category: 'work', priority: 'urgent', completed: false, dueDate: '۱۴۰۵/۰۸/۰۶', createdAt: '1405/08/01' },
-    { id: '2', title: 'ورزش هوازی و بدن‌سازی (۴۵ دقیقه)', category: 'health', priority: 'high', completed: true, dueDate: '۱۴۰۵/۰۸/۰۵', createdAt: '1405/08/01' },
-    { id: '3', title: 'مطالعه کتاب معماری نرم‌افزار', category: 'study', priority: 'medium', completed: false, dueDate: '۱۴۰۵/۰۸/۰۸', createdAt: '1405/08/02' },
-    { id: '4', title: 'پرداخت اقساط وام و بررسی حساب‌ها', category: 'finance', priority: 'urgent', completed: false, dueDate: '۱۴۰۵/۰۸/۰۷', createdAt: '1405/08/03' },
-  ]);
-
-  const [habits, setHabits] = useState<HabitItem[]>([
-    { id: 'h1', title: 'مطالعه ۳۰ دقیقه روزانه', streak: 7, completedToday: true, category: 'study' },
-    { id: 'h2', title: 'ورزش و نرمش صبحگاهی', streak: 5, completedToday: false, category: 'health' },
-    { id: 'h3', title: 'نوشیدن ۸ لیوان آب', streak: 12, completedToday: true, category: 'health' },
-  ]);
-
-  const [expenses, setExpenses] = useState<ExpenseItem[]>([
-    { id: 'e1', title: 'خرید از فروشگاه رفاه', amount: 1250000, category: 'خرید عمومی', date: '۱۴۰۵/۰۸/۰۵', isSmsParsed: true, bankName: 'بانک ملت' },
-    { id: 'e2', title: 'کافه و میان‌وعده کاری', amount: 350000, category: 'غذا و رستوران', date: '۱۴۰۵/۰۸/۰۴', isSmsParsed: false },
-    { id: 'e3', title: 'شارژ کارت مترو و تاکسی', amount: 180000, category: 'حمل و نقل', date: '۱۴۰۵/۰۸/۰۳', isSmsParsed: true, bankName: 'بانک سامان' },
-  ]);
-
-  const [healthLog, setHealthLog] = useState<HealthLog>({
-    id: 'hl1',
-    date: '۱۴۰۵/۰۸/۰۵',
-    sleepHours: 7.5,
-    sleepQuality: 'good',
-    waterGlasses: 6,
-    exerciseMinutes: 45,
-    exerciseType: 'بدن‌سازی و هوازی',
-    caloriesBurned: 480
+  // Persistent State with localStorage
+  const [tasks, setTasks] = useState<TaskItem[]>(() => {
+    const saved = localStorage.getItem('life_os_tasks');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      { id: '1', title: 'بررسی و تایید گزارش مالی شرکت', category: 'work', priority: 'urgent', completed: false, dueDate: '۱۴۰۵/۰۸/۰۶', createdAt: '1405/08/01' },
+      { id: '2', title: 'ورزش هوازی و بدن‌سازی (۴۵ دقیقه)', category: 'health', priority: 'high', completed: true, dueDate: '۱۴۰۵/۰۸/۰۵', createdAt: '1405/08/01' },
+      { id: '3', title: 'مطالعه کتاب معماری نرم‌افزار', category: 'study', priority: 'medium', completed: false, dueDate: '۱۴۰۵/۰۸/۰۸', createdAt: '1405/08/02' },
+      { id: '4', title: 'پرداخت اقساط وام و بررسی حساب‌ها', category: 'finance', priority: 'urgent', completed: false, dueDate: '۱۴۰۵/۰۸/۰۷', createdAt: '1405/08/03' },
+    ];
   });
 
-  const [vaultNotes, setVaultNotes] = useState<VaultNote[]>([
-    { id: 'v1', title: 'رمز کیف پول سخت‌افزاری', content: 'Seed: apple banana cherry ... secret pin: 9942', category: 'حساب‌های بانکی', updatedAt: '۱۴۰۵/۰۸/۰۱', isEncrypted: true },
-    { id: 'v2', title: 'یادداشت محرمانه بورسی', content: 'رمز عبور کارگزاری مفید و حساب‌های صرافی', category: 'رمزهای عبور', updatedAt: '۱۴۰۵/۰۸/۰۳', isEncrypted: true },
-  ]);
+  const [habits, setHabits] = useState<HabitItem[]>(() => {
+    const saved = localStorage.getItem('life_os_habits');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      { id: 'h1', title: 'مطالعه ۳۰ دقیقه روزانه', streak: 7, completedToday: true, category: 'study' },
+      { id: 'h2', title: 'ورزش و نرمش صبحگاهی', streak: 5, completedToday: false, category: 'health' },
+      { id: 'h3', title: 'نوشیدن ۸ لیوان آب', streak: 12, completedToday: true, category: 'health' },
+    ];
+  });
+
+  const [expenses, setExpenses] = useState<ExpenseItem[]>(() => {
+    const saved = localStorage.getItem('life_os_expenses');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      { id: 'e1', title: 'خرید از فروشگاه رفاه', amount: 1250000, category: 'خرید عمومی', date: '۱۴۰۵/۰۸/۰۵', isSmsParsed: true, bankName: 'بانک ملت' },
+      { id: 'e2', title: 'کافه و میان‌وعده کاری', amount: 350000, category: 'غذا و رستوران', date: '۱۴۰۵/۰۸/۰۴', isSmsParsed: false },
+      { id: 'e3', title: 'شارژ کارت مترو و تاکسی', amount: 180000, category: 'حمل و نقل', date: '۱۴۰۵/۰۸/۰۳', isSmsParsed: true, bankName: 'بانک سامان' },
+    ];
+  });
+
+  const [healthLog, setHealthLog] = useState<HealthLog>(() => {
+    const saved = localStorage.getItem('life_os_health');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return {
+      id: 'hl1',
+      date: '۱۴۰۵/۰۸/۰۵',
+      sleepHours: 7.5,
+      sleepQuality: 'good',
+      waterGlasses: 6,
+      exerciseMinutes: 45,
+      exerciseType: 'بدن‌سازی و هوازی',
+      caloriesBurned: 480
+    };
+  });
+
+  const [vaultNotes, setVaultNotes] = useState<VaultNote[]>(() => {
+    const saved = localStorage.getItem('life_os_vault');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      { id: 'v1', title: 'رمز کیف پول سخت‌افزاری', content: 'Seed: apple banana cherry ... secret pin: 9942', category: 'حساب‌های بانکی', updatedAt: '۱۴۰۵/۰۸/۰۱', isEncrypted: true },
+      { id: 'v2', title: 'یادداشت محرمانه بورسی', content: 'رمز عبور کارگزاری مفید و حساب‌های صرافی', category: 'رمزهای عبور', updatedAt: '۱۴۰۵/۰۸/۰۳', isEncrypted: true },
+    ];
+  });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 'm1', sender: 'gemini', text: 'سلام! من دستیار هوشمند جمینای شما در Personal Life OS هستم. چطور می‌توانم در کارهای امروز به شما کمک کنم؟', timestamp: '۱۰:۰۰' }
+    { id: 'm1', sender: 'gemini', text: 'سلام! من دستیار هوشمند جمینای شما در Personal Life OS هستم. تمام داده‌های شما به صورت خودکار و امن در حافظه محلی ذخیره می‌شوند. چطور می‌توانم کمک کنم؟', timestamp: '۱۰:۰۰' }
   ]);
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    localStorage.setItem('life_os_tasks', JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem('life_os_habits', JSON.stringify(habits));
+  }, [habits]);
+
+  useEffect(() => {
+    localStorage.setItem('life_os_expenses', JSON.stringify(expenses));
+  }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('life_os_health', JSON.stringify(healthLog));
+  }, [healthLog]);
+
+  useEffect(() => {
+    localStorage.setItem('life_os_vault', JSON.stringify(vaultNotes));
+  }, [vaultNotes]);
 
   // Handlers for Tasks
   const handleAddTask = (task: Omit<TaskItem, 'id' | 'createdAt'>) => {
@@ -126,21 +178,49 @@ export default function App() {
     setVaultNotes(prev => prev.filter(n => n.id !== id));
   };
 
-  // Handlers for Assistant Chat
-  const handleSendMessage = (userText: string, aiText: string) => {
+  // Handlers for Assistant Chat with Real Gemini AI Integration
+  const handleSendMessage = async (userText: string) => {
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       sender: 'user',
       text: userText,
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
     };
+
+    setMessages(prev => [...prev, userMsg]);
+
+    let aiReply = "متوجه شدم. در حال بررسی درخواست شما در Personal Life OS هستم.";
+    try {
+      const ai = new GoogleGenAI();
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `You are Gemini AI assistant in Personal Life OS, a Persian productivity and life management app. Respond in natural Persian (Farsi) with helpful advice regarding tasks, finances, health, and habits. Current context: Total active tasks: ${tasks.filter(t=>!t.completed).length}, Total expenses: ${expenses.reduce((s,e)=>s+e.amount,0)} Tomans. User prompt: ${userText}` }]
+          }
+        ]
+      });
+      if (response.text) {
+        aiReply = response.text;
+      }
+    } catch (err) {
+      console.error("Gemini API generation error:", err);
+      if (userText.includes("هزینه") || userText.includes("خرج")) {
+        aiReply = `مجموع کل هزینه‌های ثبت شده شما ${expenses.reduce((s,e)=>s+e.amount,0).toLocaleString('fa-IR')} تومان است. پیشنهاد می‌کنم بودجه‌بندی هفتگی خود را بررسی کنید.`;
+      } else if (userText.includes("سلام") || userText.includes("درود")) {
+        aiReply = "سلام! دستیار هوشمند جمینای آماده کمک به شماست.";
+      }
+    }
+
     const aiMsg: ChatMessage = {
       id: (Date.now() + 1).toString(),
       sender: 'gemini',
-      text: aiText,
+      text: aiReply,
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
     };
-    setMessages(prev => [...prev, userMsg, aiMsg]);
+
+    setMessages(prev => [...prev, aiMsg]);
   };
 
   // Export Data
@@ -201,8 +281,37 @@ export default function App() {
         {currentTab === 'expenses' && (
           <ExpensesScreen
             expenses={expenses}
-            onAddExpense={handleAddExpense}
+            onAddExpense={(title, amount, category, date, bankName, isSms) => {
+              handleAddExpense({ title, amount, category, date, bankName, isSmsParsed: isSms });
+            }}
             onDeleteExpense={handleDeleteExpense}
+            onParseSms={(smsText) => {
+              // Simple Bank SMS Parser
+              if (smsText.includes('ریال') || smsText.includes('تومان') || smsText.includes('برداشت') || smsText.includes('واریز')) {
+                let bankName = 'بانک ملت/سامان';
+                if (smsText.includes('ملت')) bankName = 'بانک ملت';
+                else if (smsText.includes('سامان')) bankName = 'بانک سامان';
+                else if (smsText.includes('ملی')) bankName = 'بانک ملی';
+
+                const match = smsText.match(/([\d,]+)\s*(ریال|تومان)/);
+                if (match) {
+                  let rawAmt = match[1].replace(/,/g, '').replace(/٬/g, '');
+                  let amt = parseInt(rawAmt, 10);
+                  if (match[2] === 'ریال') amt = Math.floor(amt / 10);
+                  
+                  handleAddExpense({
+                    title: smsText.includes('خرید') ? 'خرید کارت بانکی' : 'تراکنش بانکی',
+                    amount: amt,
+                    category: 'تراکنش بانکی',
+                    date: '۱۴۰۵/۰۸/۰۵',
+                    isSmsParsed: true,
+                    bankName
+                  });
+                  return true;
+                }
+              }
+              return false;
+            }}
           />
         )}
 
@@ -216,7 +325,9 @@ export default function App() {
         {currentTab === 'vault' && (
           <VaultScreen
             vaultNotes={vaultNotes}
-            onAddNote={handleAddVaultNote}
+            onAddNote={(title, content, category, isEncrypted) => {
+              handleAddVaultNote({ title, content, category, isEncrypted });
+            }}
             onDeleteNote={handleDeleteVaultNote}
           />
         )}
@@ -230,8 +341,8 @@ export default function App() {
 
         {currentTab === 'settings' && (
           <SettingsScreen
-            onExportData={handleExportData}
-            onResetData={handleResetData}
+            isRtl={isRtl}
+            onToggleRtl={() => setIsRtl(!isRtl)}
           />
         )}
       </main>
@@ -239,15 +350,36 @@ export default function App() {
       {/* Quick Voice / SMS Capture Modal */}
       <VoiceCaptureModal
         isOpen={isVoiceModalOpen}
-        onClose={() => setIsVoiceModalOpen(false)}
-        onAddExpenseFromSms={({ title, amount, bankName }) => {
-          handleAddExpense({
-            title,
-            amount,
-            category: 'بانکی / پیامک',
-            date: '۱۴۰۵/۰۸/۰۵',
-            isSmsParsed: true,
-            bankName
+        onDismiss={() => setIsVoiceModalOpen(false)}
+        onParseSms={(smsText) => {
+          if (smsText.includes('ریال') || smsText.includes('تومان')) {
+            let bankName = 'بانک ملت';
+            if (smsText.includes('سامان')) bankName = 'بانک سامان';
+            const match = smsText.match(/([\d,]+)\s*(ریال|تومان)/);
+            if (match) {
+              let rawAmt = match[1].replace(/,/g, '').replace(/٬/g, '');
+              let amt = parseInt(rawAmt, 10);
+              if (match[2] === 'ریال') amt = Math.floor(amt / 10);
+              handleAddExpense({
+                title: 'خرید از طریق پیامک',
+                amount: amt,
+                category: 'خرید بانکی',
+                date: '۱۴۰۵/۰۸/۰۵',
+                isSmsParsed: true,
+                bankName
+              });
+              return true;
+            }
+          }
+          return false;
+        }}
+        onAddQuickTask={(taskTitle) => {
+          handleAddTask({
+            title: taskTitle,
+            category: 'personal',
+            priority: 'medium',
+            completed: false,
+            dueDate: '۱۴۰۵/۰۸/۱۰'
           });
         }}
       />

@@ -7,7 +7,8 @@ import {
   Trash2, 
   CheckCircle,
   Building2,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import { ExpenseItem } from '../types';
 import { formatToman, parseBankSms } from '../utils/persianUtils';
@@ -42,17 +43,25 @@ export const ExpensesScreen: React.FC<ExpensesScreenProps> = ({
       onAddExpense({
         title: parsed.merchant,
         amount: parsed.amount,
-        category: 'بانکی / پیامک',
+        category: parsed.type === 'deposit' ? 'درآمد / واریزی' : 'بانکی / پیامک',
         date: '۱۴۰۵/۰۸/۰۵',
         isSmsParsed: true,
         bankName: parsed.bankName
       });
-      setParseResult(`موفق: تراکنش ${formatToman(parsed.amount)} از ${parsed.bankName} ثبت شد.`);
+      setParseResult(`موفق: تراکنش ${formatToman(parsed.amount)} از ${parsed.bankName} (${parsed.type === 'deposit' ? 'واریز' : 'برداشت'}) ثبت شد.`);
       setSmsInput('');
     } else {
       setParseResult('خطا در تحلیل پیامک. الگوی مبلغ یا بانک شناسایی نشد.');
     }
   };
+
+  const sampleSmsList = [
+    { label: 'بلو (سامانه پُل)', text: 'بلو\nانتقال پل\nمبلغ: ۱,۵۰۰,۰۰۰ ریال\nبه: علیرضا یوسفی\nمانده: ۶۲,۶۶۱,۴۵۲ ریال\nکد پیگیری: ۹۸۷۶۵۴۳۲۱' },
+    { label: 'بانک رفاه (قالب ویژه R)', text: 'رفاه حساب 62****13\nبرداشت1,960,000R کد2000\nخرید فروشگاهی\nبمانده1,231,509R' },
+    { label: 'بانک ملت (بهسازان)', text: 'بانک ملت\nبرداشت از: ۶۱۰۴۳۳******۱۲۳۴\nمبلغ: ۵۰۰,۰۰۰ ریال\nمانده: ۸,۴۲۰,۰۰۰ ریال\nپیگیری: ۹۸۷۶۵۴' },
+    { label: 'بانک صادرات (فشرده +)', text: '300325283197\n1,698,500+\n1403/8/5-11:43\nمانده:32,317,981' },
+    { label: 'بانک تجارت (*تجارت*)', text: '*بانک تجارت*\nبرداشت: ۷۲۰,۰۰۰ ریال\nاز طریق: شتاب\nمانده: ۳۱,۴۰۱,۷۹۳ ریال' }
+  ];
 
   const handleManualAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,15 +106,30 @@ export const ExpensesScreen: React.FC<ExpensesScreenProps> = ({
             <h3 className="font-bold text-slate-100 text-base">اسکنر هوشمند پیامک بانکی</h3>
           </div>
           <p className="text-xs text-slate-400">
-            متن پیامک بانکی خود (سامان، ملت، ملی، صادرات و...) را اینجا وارد کنید تا به صورت خودکار مبلغ و فروشگاه استخراج شود:
+            متن پیامک بانکی خود را وارد کنید یا برای تست سریع یکی از نمونه‌های زیر را انتخاب نمایید:
           </p>
+
+          {/* Sample Buttons for testing */}
+          <div className="flex flex-wrap gap-2">
+            {sampleSmsList.map((sample, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setSmsInput(sample.text)}
+                className="text-[11px] bg-slate-800 text-cyan-300 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg border border-cyan-500/20 transition flex items-center space-x-1 space-x-reverse"
+              >
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>{sample.label}</span>
+              </button>
+            ))}
+          </div>
 
           <form onSubmit={handleParseSms} className="space-y-4">
             <textarea
-              rows={3}
+              rows={4}
               value={smsInput}
               onChange={e => setSmsInput(e.target.value)}
-              placeholder="مثلا: برداشت از حساب 6037... مبلغ 1,250,000 ریال خرید فروشگاه رفاه..."
+              placeholder="متن پیامک بانکی..."
               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
             />
             <button
