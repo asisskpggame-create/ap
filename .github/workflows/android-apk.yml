@@ -16,16 +16,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
 
       - name: Restore Debug Keystore (Preserves Firebase Google Sign-In SHA-1)
         run: |
@@ -120,7 +123,7 @@ jobs:
 
       - name: Run Unit & Accounting Verification Suite
         run: |
-          gradle testDebugUnitTest --stacktrace
+          ./gradlew testDebugUnitTest --no-configuration-cache --stacktrace
 
       - name: Build Signed Debug & Release APKs
         env:
@@ -128,7 +131,7 @@ jobs:
           STORE_PASSWORD: androidrelease
           KEY_PASSWORD: androidrelease
         run: |
-          gradle assembleDebug assembleRelease --stacktrace
+          ./gradlew assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
           cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.5.0-FinancePro-Debug.apk
           cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.5.0-FinancePro-Release.apk
