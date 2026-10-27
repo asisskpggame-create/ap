@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer subtle violet ring -->
+    <path
+        android:fillColor="#FF8B5CF6"
+        android:pathData="M54,24A30,30 0 1,1 24,54A30,30 0 0,1 54,24ZM54,29A25,25 0 1,0 79,54A25,25 0 0,0 54,29Z" />
+    <!-- Inner electric cyan command core & AI spark -->
+    <path
+        android:fillColor="#FF00E5CC"
+        android:pathData="M54,32 L60,46 L74,52 L60,58 L54,72 L48,58 L34,52 L48,46 Z" />
+    <!-- Center node -->
+    <path
+        android:fillColor="#FF090D16"
+        android:pathData="M54,48A4,4 0 1,1 50,52A4,4 0 0,1 54,48Z" />
+</vector>
