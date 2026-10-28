@@ -1,41 +1,80 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer utilities {
-  .glass-card {
-    background: rgba(15, 23, 42, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  
-  .glass-card-hover {
-    transition: all 0.2s ease-in-out;
-  }
-  .glass-card-hover:hover {
-    background: rgba(30, 41, 59, 0.75);
-    border-color: rgba(6, 182, 212, 0.3);
-    box-shadow: 0 0 25px rgba(6, 182, 212, 0.15);
+@layer base {
+  :root {
+    --font-sans: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
   }
 
-  .water-wave-bg {
-    background: radial-gradient(circle at 50% 120%, rgba(14, 165, 233, 0.15), rgba(15, 23, 42, 0.9));
+  body {
+    font-family: var(--font-sans);
+    direction: rtl;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
-/* Custom Scrollbar */
+/* Glassmorphism utility classes */
+.glass-panel {
+  background: rgba(18, 24, 38, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-interactive {
+  background: rgba(18, 24, 38, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-panel-interactive:hover {
+  background: rgba(26, 34, 52, 0.8);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.glass-card-subtle {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Water wave animation */
+@keyframes waveMotion {
+  0% {
+    transform: translateX(0) translateZ(0) scaleY(1);
+  }
+  50% {
+    transform: translateX(-25%) translateZ(0) scaleY(0.9);
+  }
+  100% {
+    transform: translateX(-50%) translateZ(0) scaleY(1);
+  }
+}
+
+.animate-wave {
+  animation: waveMotion 12s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+  transform-origin: bottom center;
+}
+
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(0, 0, 0, 0.2);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.3);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.6);
+  background: rgba(255, 255, 255, 0.25);
 }
