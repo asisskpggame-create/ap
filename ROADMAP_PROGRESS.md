@@ -1,7 +1,7 @@
 # گزارش پیشرفت، ممیزی مهندسی و وضعیت واقعی پروژه (`ROADMAP_PROGRESS.md`)
 
 **مخزن:** `Personal Life OS` (`https://github.com/asisskpggame-create/ap` — شاخه `main`)  
-**نسخه رسمی:** `v1.5.0` (`versionCode = 6`)  
+**نسخه رسمی:** `v1.5.0R` (`versionCode = 6`)  
 **شناسه بسته:** `com.aistudio.personallifeos.kxmpzq`  
 **پشته فنی واقعی:** Android Gradle Plugin `9.0.0`, Gradle `9.3.1`, Kotlin `2.2.10`, KSP `2.3.2`, `compileSdk = 36`, `minSdk = 24`, Room `2.7.0` (`version = 6`), DataStore Preferences `1.1.3`, Firebase Auth + Firestore (`33.10.0`).  
 **وضعیت بیلد (`compile_applet`):** `PASS`  

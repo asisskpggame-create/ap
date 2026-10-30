@@ -1,6 +1,6 @@
 <div dir="rtl" align="center">
 
-# 💎 Personal Life OS — Unified 4-Pillar Architecture & Liquid Glass Edition (v1.4.0)
+# 💎 Personal Life OS — Unified 4-Pillar Architecture & Liquid Glass Edition (v1.5.0R)
 ### سیستم‌عامل جامع مدیریت مالی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی
 
 [![Android CI/CD — Build & Release APK](https://img.shields.io/badge/GitHub_Actions-Auto_Release_APK-10B981?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/android-apk.yml)
@@ -24,8 +24,8 @@
 ### 📚 اسناد رسمی نقشه راه و ممیزی فنی در مخزن:
 - 🗺️ **[نقشه راه بازطراحی چهاربخشی (`APP_ROADMAP_FA.md`)](./APP_ROADMAP_FA.md):** سند مرجع معماری، قوانین دامنه مالی، اتصال بدهی به مسیر، موتور یادآوری مشترک و معیارهای پذیرش.
 - 📋 **[فهرست جامع ممیزی قابلیت‌ها (`FEATURE_INVENTORY.md`)](./FEATURE_INVENTORY.md):** تطبیق خط‌به‌خط قابلیت‌ها، فایل‌ها، جداول دیتابیس و مسیرهای ناوبری.
-- ✅ **[گزارش پیشرفت و نتایج تست (`ROADMAP_PROGRESS.md`)](./ROADMAP_PROGRESS.md):** گزارش اجرای فازهای صفر تا شش و نتایج واقعی ماتریس ۱۲ گانه تست (`PASS`).
-- 📝 **[تاریخچه تغییرات (`CHANGELOG.md`)](./CHANGELOG.md):** شرح کامل ویژگی‌های نسخه‌های `v1.0.0` تا `v1.4.0`.
+- ✅ **[گزارش پیشرفت و نتایج تست (`ROADMAP_PROGRESS.md`)](./ROADMAP_PROGRESS.md):** گزارش اجرای فازهای صفر تا شش و نتایج واقعی ماتریس تست (`PASS`).
+- 📝 **[تاریخچه تغییرات (`CHANGELOG.md`)](./CHANGELOG.md):** شرح کامل ویژگی‌های نسخه‌های `v1.0.0` تا `v1.5.0R`.
 - 🔒 **[مشخصات امنیتی (`security_spec.md`)](./security_spec.md):** قوانین امنیتی Zero-Trust در Cloud Firestore و رمزنگاری داده‌ها.
 
 ---
@@ -36,17 +36,17 @@
 
 | نام فایل APK | کاربرد و ویژگی‌ها | پیشنهاد برای نصب |
 | :--- | :--- | :--- |
-| **`Personal-Life-OS-v1.4.0-FinancePro-Debug.apk`** | امضاشده با کلید اصلی پروژه (دارای گواهی SHA-1 ثبت‌شده در Firebase برای ورود با گوگل / Google Sign-In) | ⭐ **پیشنهادی برای نصب روزمره و تست کامل قابلیت‌های ابری** |
-| **`Personal-Life-OS-v1.4.0-FinancePro-Release.apk`** | نسخه ریلیز امضاشده با کلید انتشار (`my-upload-key.jks`) برای توزیع عمومی | مناسب استفاده در حالت آفلاین/لوکال و انتشار |
+| **`Personal-Life-OS-v1.5.0R-FinancePro-Debug.apk`** | امضاشده با کلید اصلی پروژه (دارای گواهی SHA-1 ثبت‌شده در Firebase برای ورود با گوگل / Google Sign-In) | ⭐ **پیشنهادی برای نصب روزمره و تست کامل قابلیت‌های ابری** |
+| **`Personal-Life-OS-v1.5.0R-FinancePro-Release.apk`** | نسخه ریلیز امضاشده با کلید انتشار (`my-upload-key.jks`) برای توزیع عمومی | مناسب استفاده در حالت آفلاین/لوکال و انتشار |
 
 ### مراحل نصب روی گوشی (از جمله Samsung Galaxy S24 Ultra):
 1. وارد بخش **[Releases](../../releases)** در همین مخزن گیت‌هاب شوید.
-2. آخرین نسخه (`v1.4.x`) را باز کرده و فایل **`Personal-Life-OS-v1.4.0-FinancePro-Debug.apk`** را دانلود کنید.
-3. فایل را روی گوشی باز کرده و گزینه **Install / Update** را بزنید (به دلیل ارتقای `versionCode = 5` و مهاجرت غیرمخرب `MIGRATION_5_6`، بدون نیاز به حذف نسخه قبلی و با حفظ تمام داده‌ها مستقیماً آپدیت می‌شود).
+2. آخرین نسخه (`v1.5.0R`) را باز کرده و فایل **`Personal-Life-OS-v1.5.0R-FinancePro-Debug.apk`** را دانلود کنید.
+3. فایل را روی گوشی باز کرده و گزینه **Install / Update** را بزنید (به دلیل ارتقای `versionCode = 6` و مهاجرت غیرمخرب `MIGRATION_5_6`، بدون نیاز به حذف نسخه قبلی و با حفظ تمام داده‌ها مستقیماً آپدیت می‌شود).
 
 ---
 
-## 🧭 معماری چهاربخشی برنامه (نسخه `v1.4.0`)
+## 🧭 معماری چهاربخشی برنامه (نسخه `v1.5.0R`)
 
 ساختار ناوبری برنامه بر اساس چهار ستون اصلی منوی پایین سازمان‌دهی شده است تا هر قابلیت یک منبع حقیقت واحد (`Single Source of Truth`) داشته باشد:
 
