@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
@@ -27,6 +29,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +57,10 @@ import com.example.personallifeos.ui.theme.TextSecondary
 
 @Composable
 fun SettingsScreen(
+    notificationSettings: NotificationSettingsState = NotificationSettingsState(),
+    onUpdateNotificationSettings: (NotificationSettingsState) -> Unit = {},
+    onOpenNotificationCenter: () -> Unit = {},
+    onOpenBankSelector: () -> Unit = {},
     onResetData: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -69,16 +77,112 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "تنظیمات و پشتیبان‌گیری",
+                    text = "تنظیمات، اعلان‌ها و پشتیبان‌گیری",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
                 Text(
-                    text = "مدیریت داده‌ها، امنیت، نسخه پشتیبان و مشخصات سیستم‌عامل Personal Life OS",
+                    text = "مدیریت فیش‌خوان زنده بانکی، سرشماره‌ها، امنیت و مشخصات Personal Life OS نسخه 1.6.0R",
                     fontSize = 12.sp,
                     color = TextMuted
                 )
+            }
+        }
+
+        // Smart Notification & Bank Selector Card
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(0.5.dp, BorderCyanGlow, RoundedCornerShape(20.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = CyanPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "مرکز اعلان هوشمند و فیش‌خوان بانکی (سبک میرزا)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("شنود زنده فیش‌های بانکی", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("پارس خودکار پیامک‌های بانک و نمایش بنر شناور", fontSize = 11.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = notificationSettings.liveReceiptListenerEnabled,
+                            onCheckedChange = {
+                                onUpdateNotificationSettings(notificationSettings.copy(liveReceiptListenerEnabled = it))
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = CyanPrimary)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("پوشش حریم خصوصی مبالغ در اعلان", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("مخفی کردن مبلغ تراکنش روی صفحه قفل", fontSize = 11.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = notificationSettings.maskSensitiveAmounts,
+                            onCheckedChange = {
+                                onUpdateNotificationSettings(notificationSettings.copy(maskSensitiveAmounts = it))
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = EmeraldAccent)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = onOpenBankSelector,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E6F30)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_open_bank_selector_btn")
+                        ) {
+                            Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("افزودن بانک جدید", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = onOpenNotificationCenter,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_open_notif_center_btn")
+                        ) {
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("مرکز اعلان‌ها", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
@@ -187,9 +291,9 @@ fun SettingsScreen(
                         )
                     }
                     Text(text = "نام نرم‌افزار: Personal Life OS", fontSize = 12.sp, color = TextSecondary)
-                    Text(text = "نسخه: 1.5.0 (versionCode = 6)", fontSize = 12.sp, color = TextSecondary)
+                    Text(text = "نسخه: 1.6.0R (versionCode = 7)", fontSize = 12.sp, color = EmeraldAccent, fontWeight = FontWeight.Bold)
                     Text(text = "فریم‌ورک: Jetpack Compose + Material Design 3 + Room", fontSize = 12.sp, color = TextSecondary)
-                    Text(text = "موتور هوشمند: پشتیبانی از تمام بانک‌ها، نئوبانک‌ها و سامانه پل", fontSize = 12.sp, color = CyanPrimary)
+                    Text(text = "موتور هوشمند: فیش‌خوان زنده به سبک میرزا + موتور ممیزی‌شده پیامک بانکی", fontSize = 12.sp, color = CyanPrimary)
                 }
             }
         }

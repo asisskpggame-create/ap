@@ -3,20 +3,25 @@ package com.example.personallifeos.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -39,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -51,22 +57,23 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.personallifeos.ui.screens.AssistantScreen
+import com.example.personallifeos.ui.screens.BankVisualSelectorDialog
 import com.example.personallifeos.ui.screens.DashboardScreen
 import com.example.personallifeos.ui.screens.ExpensesScreen
+import com.example.personallifeos.ui.screens.FloatingReceiptNotificationBanner
 import com.example.personallifeos.ui.screens.HealthScreen
+import com.example.personallifeos.ui.screens.NotificationCenterDialog
 import com.example.personallifeos.ui.screens.SettingsScreen
 import com.example.personallifeos.ui.screens.TasksScreen
 import com.example.personallifeos.ui.screens.VaultScreen
 import com.example.personallifeos.ui.screens.VoiceCaptureDialog
+import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BgDark
 import com.example.personallifeos.ui.theme.CyanPrimary
+import com.example.personallifeos.ui.theme.EmeraldAccent
 import com.example.personallifeos.ui.theme.SurfaceDark
 import com.example.personallifeos.ui.theme.TextMuted
 import com.example.personallifeos.ui.theme.TextPrimary
-import com.example.personallifeos.sms.BankSmsParsedResult
-import com.example.personallifeos.sms.BankType
-import com.example.personallifeos.sms.IranianBankSmsEngine
-import com.example.personallifeos.sms.SmsTransactionDirection
 import com.example.personallifeos.ui.theme.TextSecondary
 import com.example.personallifeos.ui.viewmodel.MainViewModel
 import com.example.personallifeos.util.PersianUtils
@@ -81,7 +88,7 @@ sealed class Screen(val route: String, val titleFa: String, val icon: ImageVecto
     data object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
 }
 
-// 4-Pillar Core Navigation of Version 1.5.0
+// 4-Pillar Core Navigation of Version 1.6.0R
 val navigationItems = listOf(
     Screen.Dashboard,
     Screen.Expenses,
@@ -97,6 +104,8 @@ fun PersonalLifeOsApp(
 ) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Dashboard) }
     var isVoiceModalOpen by remember { mutableStateOf(false) }
+    var isBankSelectorOpen by remember { mutableStateOf(false) }
+    var isNotificationCenterOpen by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 720
@@ -108,6 +117,13 @@ fun PersonalLifeOsApp(
     val vaultNotes by viewModel.vaultNotes.collectAsState()
     val chatMessages by viewModel.messages.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
+    val configuredBanks by viewModel.configuredBanks.collectAsState()
+    val pendingReviewSms by viewModel.pendingReviewSms.collectAsState()
+    val bankNotifications by viewModel.bankNotifications.collectAsState()
+    val notificationSettings by viewModel.notificationSettings.collectAsState()
+    val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
+
+    val unreadCount = bankNotifications.count { !it.isRead }
 
     BackHandler(enabled = currentScreen != Screen.Dashboard) {
         currentScreen = Screen.Dashboard
@@ -147,30 +163,64 @@ fun PersonalLifeOsApp(
                 topBar = {
                     TopAppBar(
                         title = {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "Personal Life OS",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .padding(start = 10.dp)
+                                        .padding(start = 8.dp)
                                         .clip(CircleShape)
                                         .background(Color(0x2606B6D4))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
-                                        text = PersianUtils.getPersianDateString(),
-                                        fontSize = 11.sp,
+                                        text = "v1.6.0R",
+                                        fontSize = 10.sp,
                                         color = CyanPrimary,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                         },
                         actions = {
+                            // Mirza Add Bank Quick Button
+                            IconButton(
+                                onClick = { isBankSelectorOpen = true },
+                                modifier = Modifier.testTag("topbar_add_bank_btn")
+                            ) {
+                                Icon(
+                                    Icons.Default.AccountBalance,
+                                    contentDescription = "افزودن بانک جدید",
+                                    tint = EmeraldAccent
+                                )
+                            }
+
+                            // Smart Notification Center Quick Button with Unread Badge
+                            IconButton(
+                                onClick = { isNotificationCenterOpen = true },
+                                modifier = Modifier.testTag("topbar_notifications_btn")
+                            ) {
+                                BadgedBox(
+                                    badge = {
+                                        if (unreadCount > 0) {
+                                            Badge(containerColor = AmberWarning, contentColor = Color.Black) {
+                                                Text(PersianUtils.formatPersianNumber(unreadCount.toLong()), fontSize = 9.sp)
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        contentDescription = "مرکز اعلان و فیش‌خوان زنده",
+                                        tint = if (unreadCount > 0) AmberWarning else TextSecondary
+                                    )
+                                }
+                            }
+
                             IconButton(
                                 onClick = {
                                     currentScreen = if (currentScreen == Screen.Vault) Screen.Dashboard else Screen.Vault
@@ -249,66 +299,88 @@ fun PersonalLifeOsApp(
                 },
                 containerColor = BgDark
             ) { paddingValues ->
-                Box(modifier = Modifier.padding(paddingValues)) {
-                    when (currentScreen) {
-                        Screen.Dashboard -> DashboardScreen(
-                            tasks = tasks,
-                            habits = habits,
-                            expenses = expenses,
-                            healthLog = healthLog,
-                            onNavigate = { route ->
-                                currentScreen = when (route) {
-                                    "tasks" -> Screen.Tasks
-                                    "expenses" -> Screen.Expenses
-                                    "assistant" -> Screen.Assistant
-                                    "health" -> Screen.Health
-                                    "vault" -> Screen.Vault
-                                    "settings" -> Screen.Settings
-                                    else -> Screen.Dashboard
-                                }
-                            },
-                            onOpenVoiceModal = { isVoiceModalOpen = true },
-                            onToggleTask = { viewModel.toggleTask(it) },
-                            onToggleHabit = { viewModel.toggleHabit(it) }
-                        )
+                Column(modifier = Modifier.padding(paddingValues)) {
+                    FloatingReceiptNotificationBanner(
+                        activeNotification = activeFloatingBanner,
+                        maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
+                        onDismiss = { viewModel.dismissFloatingBanner() },
+                        onOpenNotificationCenter = {
+                            viewModel.dismissFloatingBanner()
+                            isNotificationCenterOpen = true
+                        }
+                    )
 
-                        Screen.Tasks -> TasksScreen(
-                            tasks = tasks,
-                            habits = habits,
-                            onAddTask = { title, cat, prio, due -> viewModel.addTask(title, cat, prio, due) },
-                            onToggleTask = { viewModel.toggleTask(it) },
-                            onDeleteTask = { viewModel.deleteTask(it) },
-                            onToggleHabit = { viewModel.toggleHabit(it) },
-                            onAddHabit = { viewModel.addHabit(it) }
-                        )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        when (currentScreen) {
+                            Screen.Dashboard -> DashboardScreen(
+                                tasks = tasks,
+                                habits = habits,
+                                expenses = expenses,
+                                healthLog = healthLog,
+                                onNavigate = { route ->
+                                    currentScreen = when (route) {
+                                        "tasks" -> Screen.Tasks
+                                        "expenses" -> Screen.Expenses
+                                        "assistant" -> Screen.Assistant
+                                        "health" -> Screen.Health
+                                        "vault" -> Screen.Vault
+                                        "settings" -> Screen.Settings
+                                        else -> Screen.Dashboard
+                                    }
+                                },
+                                onOpenVoiceModal = { isVoiceModalOpen = true },
+                                onToggleTask = { viewModel.toggleTask(it) },
+                                onToggleHabit = { viewModel.toggleHabit(it) }
+                            )
 
-                        Screen.Expenses -> ExpensesScreen(
-                            expenses = expenses,
-                            onAddExpense = { title, amount, cat, bank, isSms -> viewModel.addExpense(title, amount, cat, bank, isSms) },
-                            onDeleteExpense = { viewModel.deleteExpense(it) },
-                            onParseSms = { viewModel.parseAndAddSms(it) }
-                        )
+                            Screen.Tasks -> TasksScreen(
+                                tasks = tasks,
+                                habits = habits,
+                                onAddTask = { title, cat, prio, due -> viewModel.addTask(title, cat, prio, due) },
+                                onToggleTask = { viewModel.toggleTask(it) },
+                                onDeleteTask = { viewModel.deleteTask(it) },
+                                onToggleHabit = { viewModel.toggleHabit(it) },
+                                onAddHabit = { viewModel.addHabit(it) }
+                            )
 
-                        Screen.Health -> HealthScreen(
-                            healthLog = healthLog,
-                            onUpdateWater = { viewModel.updateWater(it) }
-                        )
+                            Screen.Expenses -> ExpensesScreen(
+                                expenses = expenses,
+                                configuredBanks = configuredBanks,
+                                pendingReviewSms = pendingReviewSms,
+                                onAddExpense = { title, amount, cat, bank, isSms -> viewModel.addExpense(title, amount, cat, bank, isSms) },
+                                onDeleteExpense = { viewModel.deleteExpense(it) },
+                                onParseSms = { sms, sender -> viewModel.parseAndAddSms(sms, sender) },
+                                onConfirmReview = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
+                                onDismissReview = { viewModel.dismissPendingReview() },
+                                onOpenBankSelector = { isBankSelectorOpen = true },
+                                onOpenNotificationCenter = { isNotificationCenterOpen = true }
+                            )
 
-                        Screen.Vault -> VaultScreen(
-                            vaultNotes = vaultNotes,
-                            onAddNote = { title, content, cat -> viewModel.addVaultNote(title, content, cat) },
-                            onDeleteNote = { viewModel.deleteVaultNote(it) }
-                        )
+                            Screen.Health -> HealthScreen(
+                                healthLog = healthLog,
+                                onUpdateWater = { viewModel.updateWater(it) }
+                            )
 
-                        Screen.Assistant -> AssistantScreen(
-                            messages = chatMessages,
-                            isLoading = isChatLoading,
-                            onSendMessage = { viewModel.sendChatMessage(it) }
-                        )
+                            Screen.Vault -> VaultScreen(
+                                vaultNotes = vaultNotes,
+                                onAddNote = { title, content, cat -> viewModel.addVaultNote(title, content, cat) },
+                                onDeleteNote = { viewModel.deleteVaultNote(it) }
+                            )
 
-                        Screen.Settings -> SettingsScreen(
-                            onResetData = { viewModel.resetData() }
-                        )
+                            Screen.Assistant -> AssistantScreen(
+                                messages = chatMessages,
+                                isLoading = isChatLoading,
+                                onSendMessage = { viewModel.sendChatMessage(it) }
+                            )
+
+                            Screen.Settings -> SettingsScreen(
+                                notificationSettings = notificationSettings,
+                                onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
+                                onOpenNotificationCenter = { isNotificationCenterOpen = true },
+                                onOpenBankSelector = { isBankSelectorOpen = true },
+                                onResetData = { viewModel.resetData() }
+                            )
+                        }
                     }
                 }
             }
@@ -320,6 +392,27 @@ fun PersonalLifeOsApp(
             onAddExpenseFromSms = { smsText ->
                 viewModel.parseAndAddSms(smsText)
             }
+        )
+
+        BankVisualSelectorDialog(
+            isOpen = isBankSelectorOpen,
+            onDismiss = { isBankSelectorOpen = false },
+            onSaveBankConfig = { bank, sender, reqMatch ->
+                viewModel.saveBankConfig(bank, sender, reqMatch)
+            }
+        )
+
+        NotificationCenterDialog(
+            isOpen = isNotificationCenterOpen,
+            notifications = bankNotifications,
+            settings = notificationSettings,
+            onUpdateSettings = { viewModel.updateNotificationSettings(it) },
+            onSimulateIncomingSms = { sender, raw -> viewModel.simulateIncomingBankSms(sender, raw) },
+            onConfirmNeedsReview = { item, dir -> viewModel.confirmNotificationReview(item, dir) },
+            onDismissNotification = { viewModel.dismissNotification(it) },
+            onMarkAllRead = { viewModel.markAllNotificationsRead() },
+            onOpenBankSelector = { isBankSelectorOpen = true },
+            onClose = { isNotificationCenterOpen = false }
         )
     }
 }

@@ -4,6 +4,162 @@ import java.security.MessageDigest
 
 object IranianBankSmsEngine {
 
+    // Template registry with explicit version numbers (Audit Fix #2)
+    private val templateVersions = mutableMapOf(
+        "MELLI_STD" to 1,
+        "MELLI_TRANSFER" to 1,
+        "MELLAT_WITHDRAW" to 1,
+        "MELLAT_DEPOSIT" to 1,
+        "SADERAT_ALGEBRAIC" to 1,
+        "TEJARAT_STD" to 1,
+        "SEPAH_STD" to 1,
+        "BLUBANK_COLLOQUIAL" to 1,
+        "BLUBANK_POL_STD" to 1,
+        "VEPOD_STD" to 1,
+        "REFAH_COMPACT" to 1,
+        "GARDESHGARI_STD" to 1,
+        "KESHAVARZI_STD" to 1,
+        "SAMAN_STD" to 1,
+        "PASARGAD_STD" to 1,
+        "MASKAN_STD" to 1,
+        "GENERIC_ANCHORED" to 1
+    )
+
+    // Verified template keys in format "${bank.name}:${templateId}@v${version}"
+    private val verifiedTemplates = mutableSetOf<String>()
+
+    // Bank sender policies configured by user or defaults (Audit Fix #3)
+    private val bankConfigs = mutableMapOf<BankType, BankUserConfig>()
+
+    // In-memory processed idempotency keys (in addition to Room persistence)
+    private val processedIdempotencyKeys = mutableSetOf<String>()
+
+    init {
+        resetDefaultState()
+    }
+
+    fun resetDefaultState() {
+        verifiedTemplates.clear()
+        bankConfigs.clear()
+        processedIdempotencyKeys.clear()
+        templateVersions["MELLI_STD"] = 1
+        templateVersions["MELLI_TRANSFER"] = 1
+        templateVersions["MELLAT_WITHDRAW"] = 1
+        templateVersions["MELLAT_DEPOSIT"] = 1
+        templateVersions["SADERAT_ALGEBRAIC"] = 1
+        templateVersions["TEJARAT_STD"] = 1
+        templateVersions["SEPAH_STD"] = 1
+        templateVersions["BLUBANK_COLLOQUIAL"] = 1
+        templateVersions["BLUBANK_POL_STD"] = 1
+        templateVersions["VEPOD_STD"] = 1
+        templateVersions["REFAH_COMPACT"] = 1
+        templateVersions["GARDESHGARI_STD"] = 1
+        templateVersions["KESHAVARZI_STD"] = 1
+        templateVersions["SAMAN_STD"] = 1
+        templateVersions["PASARGAD_STD"] = 1
+        templateVersions["MASKAN_STD"] = 1
+        templateVersions["GENERIC_ANCHORED"] = 1
+
+        // Default verified core templates at v1
+        verifyTemplate(BankType.MELLI, "MELLI_STD", 1)
+        verifyTemplate(BankType.MELLAT, "MELLAT_WITHDRAW", 1)
+        verifyTemplate(BankType.SADERAT, "SADERAT_ALGEBRAIC", 1)
+        verifyTemplate(BankType.TEJARAT, "TEJARAT_STD", 1)
+        verifyTemplate(BankType.SEPAH, "SEPAH_STD", 1)
+        verifyTemplate(BankType.BLUBANK, "BLUBANK_COLLOQUIAL", 1)
+        verifyTemplate(BankType.BLUBANK_POL, "BLUBANK_POL_STD", 1)
+        verifyTemplate(BankType.VEPOD, "VEPOD_STD", 1)
+        verifyTemplate(BankType.REFAH, "REFAH_COMPACT", 1)
+        verifyTemplate(BankType.GARDESHGARI, "GARDESHGARI_STD", 1)
+        verifyTemplate(BankType.KESHAVARZI, "KESHAVARZI_STD", 1)
+        verifyTemplate(BankType.SAMAN, "SAMAN_STD", 1)
+        verifyTemplate(BankType.PASARGAD, "PASARGAD_STD", 1)
+        verifyTemplate(BankType.MASKAN, "MASKAN_STD", 1)
+    }
+
+    fun getTemplateKey(bank: BankType, templateId: String, version: Int): String {
+        return "${bank.name}:${templateId}@v${version}"
+    }
+
+    fun verifyTemplate(bank: BankType, templateId: String, version: Int = getTemplateVersion(templateId)) {
+        verifiedTemplates.add(getTemplateKey(bank, templateId, version))
+    }
+
+    fun updateTemplateVersion(templateId: String, newVersion: Int) {
+        templateVersions[templateId] = newVersion
+    }
+
+    fun getTemplateVersion(templateId: String): Int {
+        return templateVersions[templateId] ?: 1
+    }
+
+    fun isTemplateVerified(bank: BankType, templateId: String, version: Int = getTemplateVersion(templateId)): Boolean {
+        return verifiedTemplates.contains(getTemplateKey(bank, templateId, version))
+    }
+
+    fun configureBankSenderPolicy(
+        bank: BankType,
+        senderNumber: String,
+        requireSenderMatch: Boolean,
+        verifyDefaultTemplate: Boolean = true
+    ) {
+        val current = bankConfigs[bank]
+        val defaultTid = defaultTemplateIdForBank(bank)
+        val ver = getTemplateVersion(defaultTid)
+        val updatedKeys = (current?.verifiedTemplateKeys ?: emptySet()).toMutableSet()
+        if (verifyDefaultTemplate) {
+            val key = getTemplateKey(bank, defaultTid, ver)
+            updatedKeys.add(key)
+            verifiedTemplates.add(key)
+        }
+        bankConfigs[bank] = BankUserConfig(
+            bank = bank,
+            senderNumber = normalizeDigits(senderNumber).trim(),
+            requireSenderMatch = requireSenderMatch,
+            verifiedTemplateKeys = updatedKeys
+        )
+    }
+
+    fun getConfiguredBanks(): List<BankUserConfig> {
+        if (bankConfigs.isEmpty()) {
+            return listOf(
+                BankUserConfig(BankType.MELLI, "98300017", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLI, "MELLI_STD", 1))),
+                BankUserConfig(BankType.BLUBANK, "982000", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.BLUBANK, "BLUBANK_COLLOQUIAL", 1))),
+                BankUserConfig(BankType.MELLAT, "98200033", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLAT, "MELLAT_WITHDRAW", 1))),
+                BankUserConfig(BankType.SADERAT, "98300060", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.SADERAT, "SADERAT_ALGEBRAIC", 1)))
+            )
+        }
+        return bankConfigs.values.toList()
+    }
+
+    fun defaultTemplateIdForBank(bank: BankType): String = when (bank) {
+        BankType.MELLI -> "MELLI_STD"
+        BankType.MELLAT -> "MELLAT_WITHDRAW"
+        BankType.SADERAT -> "SADERAT_ALGEBRAIC"
+        BankType.TEJARAT -> "TEJARAT_STD"
+        BankType.SEPAH -> "SEPAH_STD"
+        BankType.BLUBANK -> "BLUBANK_COLLOQUIAL"
+        BankType.BLUBANK_POL -> "BLUBANK_POL_STD"
+        BankType.VEPOD -> "VEPOD_STD"
+        BankType.REFAH -> "REFAH_COMPACT"
+        BankType.GARDESHGARI -> "GARDESHGARI_STD"
+        BankType.KESHAVARZI -> "KESHAVARZI_STD"
+        BankType.SAMAN -> "SAMAN_STD"
+        BankType.PASARGAD -> "PASARGAD_STD"
+        BankType.MASKAN -> "MASKAN_STD"
+        else -> "GENERIC_ANCHORED"
+    }
+
+    fun markIdempotencyKeyProcessed(key: String) {
+        if (key.isNotBlank()) {
+            processedIdempotencyKeys.add(key)
+        }
+    }
+
+    fun isDuplicateKey(key: String): Boolean {
+        return key.isNotBlank() && processedIdempotencyKeys.contains(key)
+    }
+
     /**
      * Converts Persian and Arabic digits to standard ASCII digits.
      */
@@ -14,7 +170,7 @@ object IranianBankSmsEngine {
         for (i in 0..9) {
             result = result.replace(fa[i], ('0' + i)).replace(ar[i], ('0' + i))
         }
-        return result
+        return result.replace('ك', 'ک').replace('ي', 'ی')
     }
 
     /**
@@ -31,11 +187,20 @@ object IranianBankSmsEngine {
         return otpKeywords.any { text.contains(it) }
     }
 
+    fun isFailedTransactionSms(rawText: String): Boolean {
+        val text = rawText.lowercase()
+        val failedKeywords = listOf(
+            "ناموفق", "تراکنش ناموفق", "عدم موفقیت", "لغو شد", "با خطا مواجه"
+        )
+        return failedKeywords.any { text.contains(it) }
+    }
+
     /**
-     * Parses an Iranian Bank SMS text into a structured BankSmsParsedResult.
+     * Parses an Iranian Bank SMS text into a structured BankSmsParsedResult with full audit checks.
      */
-    fun parse(rawSms: String): BankSmsParsedResult {
+    fun parse(rawSms: String, senderAddress: String? = null): BankSmsParsedResult {
         val cleanText = normalizeDigits(rawSms).trim()
+        val cleanSender = senderAddress?.let { normalizeDigits(it).trim() }?.takeIf { it.isNotBlank() }
 
         if (isOtpOrServiceSms(cleanText)) {
             val hash = calculateHash("OTP_" + cleanText.take(50))
@@ -44,6 +209,9 @@ object IranianBankSmsEngine {
                 direction = SmsTransactionDirection.UNKNOWN,
                 amountRial = 0L,
                 amountToman = 0L,
+                detectedCurrency = DetectedCurrencyUnit.UNKNOWN,
+                verificationStatus = SmsVerificationStatus.REJECTED,
+                reviewReasonFa = "پیامک رمز پویا یا اطلاع‌رسانی غیرمالی",
                 idempotencyKey = hash,
                 isOtpOrServiceMessage = true,
                 suggestedCategory = "اطلاع‌رسانی",
@@ -51,9 +219,31 @@ object IranianBankSmsEngine {
             )
         }
 
+        if (isFailedTransactionSms(cleanText)) {
+            val hash = calculateHash("FAILED_" + cleanText.take(50))
+            return BankSmsParsedResult(
+                bank = detectBank(cleanText),
+                direction = SmsTransactionDirection.UNKNOWN,
+                amountRial = 0L,
+                amountToman = 0L,
+                detectedCurrency = DetectedCurrencyUnit.UNKNOWN,
+                verificationStatus = SmsVerificationStatus.REJECTED,
+                reviewReasonFa = "تراکنش ناموفق بانکی (ثبت نشد)",
+                idempotencyKey = hash,
+                isOtpOrServiceMessage = false,
+                isFailedTransaction = true,
+                suggestedCategory = "تراکنش ناموفق",
+                summaryFa = "تراکنش ناموفق بانکی (رد شده)"
+            )
+        }
+
         val bank = detectBank(cleanText)
         val direction = detectDirection(cleanText)
-        val (amountRial, amountToman) = extractAmount(cleanText)
+        val amountExtraction = extractAmountWithCurrency(cleanText)
+        val amountRial = amountExtraction.first
+        val amountToman = amountExtraction.second
+        val detectedCurrency = amountExtraction.third
+
         val (balanceRial, balanceToman) = extractBalance(cleanText)
         val accountOrCard = extractAccountOrCard(cleanText)
         val destination = extractDestination(cleanText)
@@ -62,8 +252,42 @@ object IranianBankSmsEngine {
         val merchant = extractMerchantOrTerminal(cleanText)
         val suggestedCategory = guessCategory(cleanText, destination, merchant, direction)
 
+        val templateId = detectTemplateId(bank, direction, cleanText)
+        val templateVersion = getTemplateVersion(templateId)
+        val templateVerified = isTemplateVerified(bank, templateId, templateVersion)
+
+        // Check sender policy (Audit Fix #3)
+        val senderCheck = evaluateSenderPolicy(bank, cleanSender)
+
         val hashPayload = "${bank.name}_${direction.name}_${amountRial}_${trackingCode ?: dateTime ?: cleanText.take(40)}"
         val idempotencyKey = calculateHash(hashPayload)
+
+        val reviewReasons = mutableListOf<String>()
+        if (bank == BankType.UNKNOWN) {
+            reviewReasons.add("نام بانک مشخص نیست")
+        }
+        if (direction == SmsTransactionDirection.UNKNOWN) {
+            reviewReasons.add("نوع تراکنش (واریز/برداشت) نامشخص است")
+        }
+        if (detectedCurrency == DetectedCurrencyUnit.UNKNOWN) {
+            reviewReasons.add("واحد پول (ریال/تومان) در پیامک تصریح نشده است")
+        }
+        if (amountToman <= 0L) {
+            reviewReasons.add("مبلغ معتبر تراکنش یافت نشد")
+        }
+        if (!templateVerified) {
+            reviewReasons.add("قالب پیامک ($templateId نسخه $templateVersion) تأیید نشده است")
+        }
+        if (!senderCheck.first) {
+            reviewReasons.add(senderCheck.second ?: "سرشماره فرستنده با پروفایل بانک تطابق ندارد")
+        }
+
+        val status = when {
+            amountToman <= 0L && direction == SmsTransactionDirection.UNKNOWN -> SmsVerificationStatus.REJECTED
+            isDuplicateKey(idempotencyKey) -> SmsVerificationStatus.DUPLICATE
+            reviewReasons.isNotEmpty() -> SmsVerificationStatus.NEEDS_REVIEW
+            else -> SmsVerificationStatus.AUTO_ACCEPTED
+        }
 
         val summaryFa = buildString {
             append(bank.faName)
@@ -84,6 +308,18 @@ object IranianBankSmsEngine {
             direction = direction,
             amountRial = amountRial,
             amountToman = amountToman,
+            detectedCurrency = detectedCurrency,
+            templateId = templateId,
+            templateVersion = templateVersion,
+            isTemplateVerified = templateVerified,
+            senderAddress = cleanSender,
+            isSenderMatched = senderCheck.first,
+            verificationStatus = status,
+            reviewReasonFa = if (status == SmsVerificationStatus.DUPLICATE) {
+                "این پیامک قبلاً ثبت شده است (تکراری)"
+            } else {
+                reviewReasons.takeIf { it.isNotEmpty() }?.joinToString("؛ ")
+            },
             balanceRial = balanceRial,
             balanceToman = balanceToman,
             accountOrCard = accountOrCard,
@@ -94,31 +330,118 @@ object IranianBankSmsEngine {
             suggestedCategory = suggestedCategory,
             idempotencyKey = idempotencyKey,
             isOtpOrServiceMessage = false,
+            isFailedTransaction = false,
             summaryFa = summaryFa
         )
     }
 
+    /**
+     * Audit Fix #1:
+     * Validates a manual review confirmation before allowing it to be recorded.
+     * Returns null if valid, or an explicit Persian error message if invalid.
+     */
+    fun validateManualConfirmReview(
+        parsed: BankSmsParsedResult,
+        overrideDirection: SmsTransactionDirection? = null,
+        overrideCurrency: DetectedCurrencyUnit? = null,
+        overrideBank: BankType? = null,
+        overrideAmountToman: Long? = null
+    ): String? {
+        if (parsed.isOtpOrServiceMessage || parsed.isFailedTransaction) {
+            return "پیامک غیرمالی یا تراکنش ناموفق قابل ثبت نیست."
+        }
+        if (isDuplicateKey(parsed.idempotencyKey)) {
+            return "این تراکنش قبلاً ثبت شده است (مسدود شده توسط کلید ضدتکرار)."
+        }
+        val finalBank = overrideBank ?: parsed.bank
+        if (finalBank == BankType.UNKNOWN) {
+            return "لطفاً بانک مربوطه را مشخص کنید."
+        }
+        val finalDirection = overrideDirection ?: parsed.direction
+        if (finalDirection == SmsTransactionDirection.UNKNOWN) {
+            return "نوع تراکنش (واریز یا برداشت/هزینه) نامشخص است؛ لطفاً نوع تراکنش را تعیین کنید."
+        }
+        val finalCurrency = overrideCurrency ?: parsed.detectedCurrency
+        if (finalCurrency == DetectedCurrencyUnit.UNKNOWN) {
+            return "واحد پول نامشخص است؛ لطفاً واحد پول (ریال یا تومان) را مشخص کنید."
+        }
+        val finalAmount = overrideAmountToman ?: parsed.amountToman
+        if (finalAmount <= 0L) {
+            return "مبلغ تراکنش باید بزرگ‌تر از صفر باشد."
+        }
+        return null
+    }
+
+    private fun evaluateSenderPolicy(bank: BankType, cleanSender: String?): Pair<Boolean, String?> {
+        val customConfig = bankConfigs[bank]
+        if (customConfig != null) {
+            val expected = normalizeDigits(customConfig.senderNumber).lowercase()
+            if (customConfig.requireSenderMatch) {
+                if (cleanSender.isNullOrBlank()) {
+                    return Pair(false, "ارسال سرشماره برای ${bank.faName} الزامی است اما سرشماره‌ای دریافت نشد")
+                }
+                val normalizedActual = cleanSender.lowercase()
+                if (!normalizedActual.contains(expected) && !expected.contains(normalizedActual)) {
+                    return Pair(false, "سرشماره ($cleanSender) با سرشماره ثبت‌شده (${customConfig.senderNumber}) همخوانی ندارد")
+                }
+            } else if (!cleanSender.isNullOrBlank() && expected.isNotBlank()) {
+                val normalizedActual = cleanSender.lowercase()
+                if (!normalizedActual.contains(expected) && !expected.contains(normalizedActual)) {
+                    return Pair(false, "سرشماره فرستنده ($cleanSender) با سرشماره انتخابی بانک مطابقت ندارد")
+                }
+            }
+            return Pair(true, null)
+        }
+
+        // Default sender policy when user hasn't customized this bank yet:
+        // Sender is optional unless provided and explicitly conflicting with known bank senders.
+        if (!cleanSender.isNullOrBlank() && bank != BankType.UNKNOWN && bank.defaultSenders.isNotEmpty()) {
+            val actualLower = cleanSender.lowercase()
+            val matchesDefault = bank.defaultSenders.any { def ->
+                val d = def.lowercase()
+                actualLower.contains(d) || d.contains(actualLower)
+            }
+            if (!matchesDefault) {
+                return Pair(false, "سرشماره فرستنده ($cleanSender) متعلق به ${bank.faName} نیست")
+            }
+        }
+        return Pair(true, null)
+    }
+
+    private fun detectTemplateId(bank: BankType, direction: SmsTransactionDirection, text: String): String {
+        return when (bank) {
+            BankType.MELLI -> if (direction == SmsTransactionDirection.TRANSFER_CARD || direction == SmsTransactionDirection.TRANSFER_PAYA) "MELLI_TRANSFER" else "MELLI_STD"
+            BankType.MELLAT -> if (direction == SmsTransactionDirection.DEPOSIT) "MELLAT_DEPOSIT" else "MELLAT_WITHDRAW"
+            BankType.SADERAT -> "SADERAT_ALGEBRAIC"
+            BankType.TEJARAT -> "TEJARAT_STD"
+            BankType.SEPAH, BankType.KOSAR -> "SEPAH_STD"
+            BankType.BLUBANK -> "BLUBANK_COLLOQUIAL"
+            BankType.BLUBANK_POL -> "BLUBANK_POL_STD"
+            BankType.VEPOD -> "VEPOD_STD"
+            BankType.REFAH -> "REFAH_COMPACT"
+            BankType.GARDESHGARI -> "GARDESHGARI_STD"
+            BankType.KESHAVARZI -> "KESHAVARZI_STD"
+            BankType.SAMAN -> "SAMAN_STD"
+            BankType.PASARGAD -> "PASARGAD_STD"
+            BankType.MASKAN -> "MASKAN_STD"
+            else -> "GENERIC_ANCHORED"
+        }
+    }
+
     fun detectBank(text: String): BankType {
-        // Special Refah format: "رفاه حساب ..." or "بمانده...R"
         if (text.contains("رفاه") || (text.contains("بمانده") && text.contains("R"))) return BankType.REFAH
-
-        // Special BluBank: "بلو", "بلوبانک", "پرید", "انتقال پل"
-        if (text.contains("بلوبانک") || text.contains("از حساب شما پرید") || text.contains("انتقال پل") || (text.startsWith("بلو") && text.lines().size > 1)) return BankType.BLUBANK
-
-        // Special Pasargad / Wepod: "ویپاد", "Wepod", "311."
+        if (text.contains("انتقال پل") || (text.contains("بلو") && text.contains("پل"))) return BankType.BLUBANK_POL
+        if (text.contains("بلوبانک") || text.contains("از حساب شما پرید") || (text.startsWith("بلو") && text.lines().size > 1)) return BankType.BLUBANK
         if (text.contains("ویپاد") || text.contains("wepod") || text.contains("311.8000")) return BankType.VEPOD
         if (text.contains("پاسارگاد")) return BankType.PASARGAD
 
-        // Saderat algebraic compressed format: numbers followed by amount with + or -
         val saderatAlgebraic = Regex("^[0-9]{10,16}\\s*\\n\\s*([0-9,]+)[+-]", RegexOption.MULTILINE)
         if (saderatAlgebraic.containsMatchIn(text) || text.contains("صادرات") || text.contains("سامانه سپهر")) return BankType.SADERAT
 
-        // Institutions
         if (text.contains("کوثر") || text.contains("505801")) return BankType.KOSAR
         if (text.contains("ملل") || text.contains("عسکریه") || text.contains("606256")) return BankType.MELAL
         if (text.contains("نور") && text.contains("ملی")) return BankType.NOOR
 
-        // Major Banks
         if (text.contains("ملی ایران") || text.contains("بانک ملی") || text.contains("سداد")) return BankType.MELLI
         if (text.contains("ملت") || text.contains("بهسازان") || text.contains("610433")) return BankType.MELLAT
         if (text.contains("تجارت") || text.contains("*بانک تجارت*")) return BankType.TEJARAT
@@ -147,8 +470,11 @@ object IranianBankSmsEngine {
         return BankType.UNKNOWN
     }
 
+    /**
+     * Audit Fix #1:
+     * NEVER defaults to WITHDRAWAL when direction is ambiguous. Returns UNKNOWN instead.
+     */
     fun detectDirection(text: String): SmsTransactionDirection {
-        // Special case: Saderat algebraic (+ is deposit, - is withdrawal)
         val saderatMatch = Regex("([0-9,]+)([+-])").find(text)
         if (saderatMatch != null) {
             val sign = saderatMatch.groupValues[2]
@@ -157,28 +483,35 @@ object IranianBankSmsEngine {
 
         if (text.contains("انتقال پل") || text.contains("سامانه پل")) return SmsTransactionDirection.TRANSFER_POL
         if (text.contains("انتقال پایا") || text.contains("پایا")) return SmsTransactionDirection.TRANSFER_PAYA
-        if (text.contains("انتقال به کارت") || text.contains("انتقال کارت") || text.contains("کارت به کارت")) return SmsTransactionDirection.TRANSFER_CARD
+        if (text.contains("انتقال به کارت") || text.contains("انتقال کارت") || text.contains("کارت به کارت") || text.contains("انتقال وجه")) return SmsTransactionDirection.TRANSFER_CARD
 
-        // Anchor match: جهت واریز ("واریز", "افزایش", "بستانکار", "نشست", "+")
-        if (text.contains("واریز") || text.contains("واریزمبلغ") || text.contains("افزایش") || text.contains("بستانکار") || text.contains("نشست") || text.contains("واریز مبلغ")) {
+        val hasDeposit = text.contains("واریز") || text.contains("واریزمبلغ") || text.contains("افزایش") || text.contains("بستانکار") || text.contains("نشست") || text.contains("واریز مبلغ")
+        val hasWithdraw = text.contains("برداشت") || text.contains("برداشت پول") || text.contains("پرید") || text.contains("کسر") || text.contains("بدهکار") || text.contains("خرید") || text.contains("خريد") || text.contains("پایانه")
+
+        if (hasDeposit && !hasWithdraw) {
             return SmsTransactionDirection.DEPOSIT
         }
-
-        // Anchor match: جهت برداشت ("برداشت", "خرید", "کسر", "بدهکار", "پرید", "-")
-        if (text.contains("خرید") || text.contains("خريد") || text.contains("پایانه")) return SmsTransactionDirection.PURCHASE
-        if (text.contains("برداشت") || text.contains("برداشت پول") || text.contains("پرید") || text.contains("کسر") || text.contains("بدهکار")) {
+        if (hasWithdraw && !hasDeposit) {
+            if (text.contains("خرید") || text.contains("خريد") || text.contains("پایانه")) {
+                return SmsTransactionDirection.PURCHASE
+            }
             return SmsTransactionDirection.WITHDRAWAL
         }
 
-        return SmsTransactionDirection.WITHDRAWAL
+        return SmsTransactionDirection.UNKNOWN
     }
 
     fun extractAmount(text: String): Pair<Long, Long> {
-        // 1. Look for algebraic format: 1,698,500+ or 2,500,000-
-        val algebraic = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)[+-]").find(text)
+        val res = extractAmountWithCurrency(text)
+        return Pair(res.first, res.second)
+    }
+
+    fun extractAmountWithCurrency(text: String): Triple<Long, Long, DetectedCurrencyUnit> {
+        // 1. Saderat algebraic format: 1,698,500+ or 2,500,000- (Rial by Saderat standard)
+        val algebraic = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,})[+-]").find(text)
         if (algebraic != null) {
             val rawNum = algebraic.groupValues[1].replace(",", "").toLongOrNull() ?: 0L
-            return Pair(rawNum, rawNum / 10)
+            return Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
         }
 
         // 2. Refah format: برداشت1,960,000R or واریز1,960,000R
@@ -186,31 +519,38 @@ object IranianBankSmsEngine {
         val refahMatch = refahRegex.find(text)
         if (refahMatch != null) {
             val rawNum = refahMatch.groupValues[1].replace(",", "").toLongOrNull() ?: 0L
-            return Pair(rawNum, rawNum / 10)
+            return Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
         }
 
         // 3. BluBank informal: 900,000 ریال از حساب شما پرید
-        val bluRegex = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(?:ریال|تومان)?\\s*از حساب شما پرید")
+        val bluRegex = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?\\s*از حساب شما پرید")
         val bluMatch = bluRegex.find(text)
         if (bluMatch != null) {
             val rawNum = bluMatch.groupValues[1].replace(",", "").toLongOrNull() ?: 0L
-            return Pair(rawNum, rawNum / 10)
-        }
-
-        // 4. Standard anchored pattern: (واریز|برداشت|مبلغ|خرید|کسر|نشست|بستانکار|بدهکار) [: ]+ ([0-9,]+) (ریال|تومان)?
-        val standardRegex = Regex("(?:واریز|برداشت|مبلغ|خرید|خريد|انتقال وجه|انتقال پل|انتقال|کسر|نشست|بستانکار|بدهکار)\\s*(?:مبلغ|وجه)?[:\\s]+([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?")
-        val stdMatch = standardRegex.find(text)
-        if (stdMatch != null) {
-            val rawNum = stdMatch.groupValues[1].replace(",", "").toLongOrNull() ?: 0L
-            val unit = stdMatch.groupValues[2]
-            return if (unit == "تومان") {
-                Pair(rawNum * 10, rawNum)
-            } else {
-                Pair(rawNum, rawNum / 10)
+            val unit = bluMatch.groupValues[2]
+            return when (unit) {
+                "تومان" -> Triple(rawNum * 10, rawNum, DetectedCurrencyUnit.TOMAN)
+                "ریال" -> Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
+                else -> Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.UNKNOWN)
             }
         }
 
-        // 5. Fallback: find comma-separated numbers excluding balance anchors
+        // 4. Standard anchored pattern
+        val standardRegex = Regex("(?:واریز|برداشت|مبلغ|خرید|خريد|انتقال وجه|انتقال پل|انتقال|کسر|نشست|بستانکار|بدهکار)\\s*(?:مبلغ|وجه)?[:\\s]+([0-9]{1,3}(?:[,/.][0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?")
+        val stdMatch = standardRegex.find(text)
+        if (stdMatch != null) {
+            val rawNum = stdMatch.groupValues[1].replace(Regex("[,/.]"), "").toLongOrNull() ?: 0L
+            val unit = stdMatch.groupValues[2]
+            return when {
+                unit == "تومان" -> Triple(rawNum * 10, rawNum, DetectedCurrencyUnit.TOMAN)
+                unit == "ریال" -> Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
+                text.contains("تومان") -> Triple(rawNum * 10, rawNum, DetectedCurrencyUnit.TOMAN)
+                text.contains("ریال") -> Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
+                else -> Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.UNKNOWN)
+            }
+        }
+
+        // 5. Fallback: comma-separated numbers excluding balance anchors
         val anyNumberRegex = Regex("([0-9]{1,3}(?:,[0-9]{3})+)")
         val allNumbers = anyNumberRegex.findAll(text).map { it.groupValues[1] }.toList()
         for (numStr in allNumbers) {
@@ -218,22 +558,26 @@ object IranianBankSmsEngine {
             val prefix = if (idx > 12) text.substring(idx - 12, idx) else text.take(idx)
             if (!prefix.contains("مانده") && !prefix.contains("موجودی") && !prefix.contains("بمانده")) {
                 val rawNum = numStr.replace(",", "").toLongOrNull() ?: 0L
-                return Pair(rawNum, rawNum / 10)
+                val currency = when {
+                    text.contains("تومان") -> DetectedCurrencyUnit.TOMAN
+                    text.contains("ریال") -> DetectedCurrencyUnit.RIAL
+                    else -> DetectedCurrencyUnit.UNKNOWN
+                }
+                val toman = if (currency == DetectedCurrencyUnit.TOMAN) rawNum else rawNum / 10
+                return Triple(rawNum, toman, currency)
             }
         }
 
-        return Pair(0L, 0L)
+        return Triple(0L, 0L, DetectedCurrencyUnit.UNKNOWN)
     }
 
     fun extractBalance(text: String): Pair<Long?, Long?> {
-        // Refah: بمانده1,231,509R
         val refahBal = Regex("بمانده\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*R?", RegexOption.IGNORE_CASE).find(text)
         if (refahBal != null) {
             val num = refahBal.groupValues[1].replace(",", "").toLongOrNull()
             if (num != null) return Pair(num, num / 10)
         }
 
-        // Anchors: "مانده:", "موجودی:", "مانده حساب:", "بمانده"
         val balRegex = Regex("(?:مانده حساب|مانده|موجودی|بمانده)[:\\s]*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?")
         val match = balRegex.find(text)
         if (match != null) {
@@ -247,14 +591,12 @@ object IranianBankSmsEngine {
     }
 
     fun extractAccountOrCard(text: String): String? {
-        // Anchors: "کارت:", "حساب:", "سپرده:", "به:", "از:", "به کارت:", "از کارت:", "به حساب:", "از حساب:", "به سپرده:", "از سپرده:"
         val cardRegex = Regex("(?:به کارت|از کارت|به حساب|از حساب|به سپرده|از سپرده|کارت|حساب|سپرده|به|از)[:\\s]+([0-9.*-]{4,28})")
         val match = cardRegex.find(text)
         return match?.groupValues?.get(1)?.trim()
     }
 
     fun extractDestination(text: String): String? {
-        // Anchors: e.g. "به: علیرضا یوسفی", "انتقال از: ویپاد"
         val destRegex = Regex("(?:به|انتقال به|واریز به|انتقال از)[:\\s]+([\\u0600-\\u06FF\\s]{3,30})")
         val match = destRegex.find(text)
         val candidate = match?.groupValues?.get(1)?.trim()
@@ -265,7 +607,6 @@ object IranianBankSmsEngine {
     }
 
     fun extractTrackingCode(text: String): String? {
-        // Anchors: "پیگیری:", "کد ارجاع:", "شماره پیگیری:", "ردیف:", "سند:", "کد مرجع:", "کد رهگیری:", "شماره ارجاع:", "شناسه پیگیری:"
         val trackRegex = Regex("(?:پیگیری|کد پیگیری|شماره پیگیری|کد ارجاع|ارجاع|شماره ارجاع|ردیف|سند|شماره سند|کد مرجع|کد رهگیری|شناسه پیگیری)[:\\s]+([0-9]+)")
         val match = trackRegex.find(text)
         return match?.groupValues?.get(1)
@@ -292,7 +633,7 @@ object IranianBankSmsEngine {
         if (full.contains("کافه") || full.contains("قهوه") || full.contains("رستوران") || full.contains("فست فود") || full.contains("پیتزا")) {
             return "کافه و رستوران"
         }
-        if (full.contains("کوروش") || full.contains("دیلی مارکت") || full.contains("هایپرمی") || full.contains("سوپرمارکت") || full.contains("لبنیات")) {
+        if (full.contains("کوروش") || full.contains("دیلی مارکت") || full.contains("هایپرمی") || full.contains("سوپرمارکت") || full.contains("لبنیات") || full.contains("رفاه")) {
             return "سوپرمارکت و مواد غذایی"
         }
         if (full.contains("داروخانه") || full.contains("درمانگاه") || full.contains("دکتر") || full.contains("بیمارستان")) {
@@ -323,9 +664,6 @@ object IranianBankSmsEngine {
         return "%,d".format(amount)
     }
 
-    /**
-     * Preloaded real-world samples covering ALL 33 bank and neo-bank templates from the user specification.
-     */
     val SAMPLE_SMS_TEMPLATES: Map<String, String> = mapOf(
         "ملی (سداد)" to """بانک ملی ایران
 واریز: ۱,۲۵۰,۰۰۰ ریال
@@ -353,13 +691,6 @@ object IranianBankSmsEngine {
 مانده: ۳۱,۴۰۱,۷۹۳ ریال
 1403/09/29 14:22""",
 
-        "سپه (داتین)" to """بانک سپه
-برداشت: ۱,۵۰۰,۰۰۰ ریال
-از: ۵۸۹۲۱۰******۷۸۹۰
-مانده: ۹,۸۰۰,۰۰۰ ریال
-ردیف: ۳۴۲۱
-۱۴۰۳/۰۹/۰۸ ۱۳:۴۰""",
-
         "بلوبانک (محاوره‌ای)" to """بلو
 برداشت پول
 علیرضا عزیز، 900,000 ریال از حساب شما پرید.
@@ -375,19 +706,12 @@ object IranianBankSmsEngine {
 کد پیگیری: ۹۸۷۶۵۴۳۲۱
 1403/09/10 11:15""",
 
-        "ویپاد (پاسارگاد)" to """بانک پاسارگاد
-واریز مبلغ 2,000,000 ریال به حساب 311.8000.987654.1
-انتقال از: ویپاد
-موجودی: 6,800,000 ریال
-شماره پیگیری: 457812
-1403/09/14-11:05""",
-
-        "مسکن (ناواکو)" to """بانک مسکن
-واریز: ۲,۰۰۰,۰۰۰ ریال
-به حساب: ۴۱*****۷۸۹
-مانده: ۱۲,۳۰۰,۰۰۰ ریال
-۱۴۰۳/۰۹/۰۴-۱۵:۳۰
-شماره پیگیری: ۴۴۲۲۱۱""",
+        "گردشگری" to """بانک گردشگری
+واریز: ۲,۲۰۰,۰۰۰ ریال
+به حساب: ۱۱۰*****۶۵۴
+مانده: ۱۶,۵۰۰,۰۰۰ ریال
+کد مرجع: ۸۸۷۶۵۴
+۱۴۰۳/۰۹/۰۹ ۲۱:۱۵""",
 
         "کشاورزی (مهرگستر)" to """بانک کشاورزی
 برداشت از: ۶۰۳۷۷۰******۱۲۳۴
@@ -396,164 +720,23 @@ object IranianBankSmsEngine {
 تاریخ: ۱۴۰۳/۰۸/۲۲ ساعت: ۱۰:۱۴
 پیگیری: ۵۵۸۴۹۳""",
 
-        "توسعه تعاون" to """بانک توسعه تعاون
-واریز: ۵۰۰,۰۰۰ ریال
-به کارت: ۵۰۲۹۰۸******۳۲۱۱
-موجودی: ۳,۲۰۰,۰۰۰ ریال
-پیگیری: ۱۲۴۵۷۸
-۱۴۰۳/۰۹/۱۰ ۰۹:۱۵""",
-
-        "صنعت و معدن" to """بانک صنعت و معدن
-برداشت مبلغ: ۱۰,۰۰۰,۰۰۰ ریال
-از حساب: ۰۱*****۴۵۶
-مانده: ۱۱۰,۰۰۰,۰۰۰ ریال
-سند: ۹۰۸۱۷۲
-۱۴۰۳/۰۸/۱۵ ۱۱:۲۰""",
-
-        "توسعه صادرات" to """بانک توسعه صادرات
-واریز: ۵۰,۰۰۰,۰۰۰ ریال
-به حساب: ۰۱*****۳۴۵
-مانده: ۱۸۰,۰۰۰,۰۰۰ ریال
-پیگیری: ۷۸۹۱۲۳
-۱۴۰۳/۰۹/۰۱ ۱۰:۴۰""",
-
-        "پست بانک" to """پست بانک
-برداشت: ۴۵۰,۰۰۰ ریال
-از: ۶۲۷۷۶۰******۴۴۳۳
-مانده: ۱,۸۰۰,۰۰۰ ریال
-۱۴۰۳/۰۹/۰۸ ۱۳:۴۵
-ارجاع: ۷۸۹۰۱۲""",
-
         "رفاه کارگران" to """رفاه حساب 62****13
 برداشت1,960,000R کد2000
 خريد ازپايانه بانک تجارت الكترونيك پارش·پ039799
 بمانده1,231,509R
 1399/12/26-16:56""",
 
-        "مهر ایران" to """بانک مهر ایران
-واریز: ۳,۰۰۰,۰۰۰ ریال
-به سپرده: ۱-۱۲۳۴۵۶-۴۰-۳۰۰۱
-مانده: ۴۵,۰۰۰,۰۰۰ ریال
-کد پیگیری: ۸۹۶۵۴۱
-۱۴۰۳/۰۹/۰۳ ۱۷:۰۲""",
-
-        "رسالت" to """بانک قرض الحسنه رسالت
-برداشت از حساب: ۱۰*****۲۳۴۵
-مبلغ: ۱,۲۰۰,۰۰۰ ریال
-مانده: ۵,۴۰۰,۰۰۰ ریال
-تاریخ: ۱۴۰۳/۰۹/۱۲ ۱۲:۰۰
-کد پیگیری: ۶۶۵۴۳۲""",
-
-        "پاسارگاد" to """بانک پاسارگاد
-واریز مبلغ ۱,۰۰۰,۰۰۰ ریال به حساب ۲۳۴.۸۰۰۰.۱۲۳۴۵۶.۱
-موجودی: ۱۵,۴۰۰,۰۰۰ ریال
-شماره پیگیری: ۸۸۷۷۶۶
-۱۴۰۳/۰۹/۰۵-۱۶:۱۰""",
-
-        "سامان" to """خرید: ۳۴۰,۰۰۰ ریال
+        "سامان" to """بانک سامان
+خرید: ۳۴۰,۰۰۰ ریال
 از کارت: ۶۲۱۹۸۶******۹۰۱۲
 مانده: ۴,۲۵۰,۰۰۰ ریال
 کد ارجاع: ۱۲۳۴۵۶۷۸
 ۱۴۰۳/۰۹/۱۵ ۲۱:۰۵""",
 
-        "پارسیان (لوتوس)" to """بانک پارسیان
-انتقال به کارت
-مبلغ: ۲,۵۰۰,۰۰۰ ریال
-از حساب: ۰۱*****۹۸۷۶
-مانده: ۱۸,۲۰۰,۰۰۰ ریال
-شماره سند: ۴۵۹۸۷۶
-۱۴۰۳/۰۹/۱۱ ۱۰:۱۵""",
-
-        "آینده (توسن)" to """بانک آینده
-برداشت: ۷۵۰,۰۰۰ ریال
-از سپرده: ۰۲*****۹۰۱۲
-مانده: ۱۸,۳۵۰,۰۰۰ ریال
-کد پیگیری: ۳۴۵۱۲۶
-۱۴۰۳/۰۹/۰۲ ۲۰:۱۰""",
-
-        "بانک شهر" to """بانک شهر
-واریز مبلغ: ۵,۰۰۰,۰۰۰ ریال
-به کارت: ۵۰۴۷۰۶******۷۷۸۸
-موجودی: ۲۲,۱۰۰,۰۰۰ ریال
-کد رهگیری: ۹۹۸۸۷۷
-۱۴۰۳/۰۸/۳۰ ۰۸:۵۰""",
-
-        "گردشگری" to """بانک گردشگری
-واریز: ۲,۲۰۰,۰۰۰ ریال
-به حساب: ۱۱۰*****۶۵۴
-مانده: ۱۶,۵۰۰,۰۰۰ ریال
-کد مرجع: ۸۸۷۶۵۴
-۱۴۰۳/۰۹/۰۹ ۲۱:۱۵""",
-
-        "اقتصاد نوین" to """بانک اقتصاد نوین
-خرید: ۱,۱۰۰,۰۰۰ ریال
-از کارت: ۶۲۷۴۱۲******۵۵۴۴
-مانده: ۹,۸۰۰,۰۰۰ ریال
-پیگیری: ۱۲۳۹۸۷
-۱۴۰۳/۰۹/۰۸ ۱۹:۲۵""",
-
-        "سینا" to """بانک سینا
-برداشت از حساب: ۱۲۳*****۴۵
-مبلغ: ۶۰۰,۰۰۰ ریال
-مانده: ۴,۱۰۰,۰۰۰ ریال
-شماره ارجاع: ۳۴۲۵۱۶
-۱۴۰۳/۰۹/۰۶ ۱۴:۳۵""",
-
-        "بانک دی" to """بانک دی
-واریز: ۸۰۰,۰۰۰ ریال
-به: ۵۰۲۹۳۸******۱۱۲۲
-مانده: ۲,۹۰۰,۰۰۰ ریال
-ردیف: ۹۸۴۵
-۱۴۰۳/۰۸/۲۵ ۱۶:۴۰""",
-
-        "کارآفرین" to """بانک کارآفرین
-برداشت مبلغ: ۳,۴۰۰,۰۰۰ ریال
-از حساب: ۵۴*****۱۱۲
-مانده حساب: ۵۴,۰۰۰,۰۰۰ ریال
-شماره پیگیری: ۳۳۴۴۵۵
-۱۴۰۳/۰۸/۲۷ ۱۱:۴۵""",
-
-        "ایران زمین" to """بانک ایران زمین
-واریز: ۹۵۰,۰۰۰ ریال
-به: ۵۰۵۷۸۵******۳۴۱۲
-موجودی: ۶,۳۰۰,۰۰۰ ریال
-کد ارجاع: ۷۸۹۳۲۱
-۱۴۰۳/۰۹/۰۱ ۱۰:۰۵""",
-
-        "سرمایه" to """بانک سرمایه
-برداشت: ۳۰۰,۰۰۰ ریال
-از کارت: ۶۳۹۶۰۷******۸۸۹۹
-مانده: ۷,۲۰۰,۰۰۰ ریال
-کد پیگیری: ۶۵۴۹۸۷
-۱۴۰۳/۰۸/۲۲ ۱۸:۲۰""",
-
-        "خاورمیانه" to """بانک خاورمیانه
-انتقال وجه
-مبلغ: ۵۰,۰۰۰,۰۰۰ ریال
-از حساب: ۱۰۰*****۰۱
-مانده: ۱,۴۵۰,۰۰۰,۰۰۰ ریال
-شناسه پیگیری: ۸۷۴۵۱۲
-۱۴۰۳/۰۹/۱۴ ۱۳:۱۰""",
-
-        "مؤسسه ملل" to """موسسه اعتباری ملل
-واریز: ۷۰۰,۰۰۰ ریال
-به کارت: ۶۰۶۲۵۶******۷۷۱۱
-مانده: ۲,۳۰۰,۰۰۰ ریال
-پیگیری: ۸۸۹۹۰۰
-۱۴۰۳/۰۹/۰۷ ۱۶:۵۰""",
-
-        "کوثر (ادغام در سپه)" to """بانک سپه (کوثر سابق)
-برداشت: ۴۰۰,۰۰۰ ریال
-از: ۵۰۵۸۰۱******۲۲۳۳
-مانده: ۵,۱۰۰,۰۰۰ ریال
-ردیف: ۷۸۱۲
-۱۴۰۳/۰۹/۰۳ ۱۱:۵۰""",
-
-        "نور (انتقال به ملی)" to """بانک ملی ایران
-واریز: ۸۵۰,۰۰۰ ریال
-به: ۰۱*****۹۹۰۰
-مانده: ۱۲,۶۵۰,۰۰۰ ریال
-۱۴۰۳/۰۹/۰۲-۰۹:۱۴
-پیگیری: ۳۳۴۴۱۱"""
+        "پیامک مبهم (تست بررسی)" to """بانک ملت
+حساب ۶۱۰۴۳۳******۱۲۳۴
+مبلغ: ۸۵۰,۰۰۰ ریال
+مانده: ۹,۱۰۰,۰۰۰ ریال
+تاریخ: ۱۴۰۳/۰۹/۱۸"""
     )
 }

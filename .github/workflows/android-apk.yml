@@ -139,43 +139,44 @@ jobs:
         run: |
           ./gradlew assembleDebug assembleRelease --stacktrace || gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.5.0-FinancePro-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.5.0-FinancePro-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-v1.5.0-APKs
+          name: Personal-Life-OS-v1.6.0R-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.${{ github.run_number }}
-          name: "Personal Life OS v1.5.${{ github.run_number }} (Unified SMS Engine + BigDecimal Precision + Persistent Idempotency)"
+          tag_name: v1.6.0R-${{ github.run_number }}
+          name: "Personal Life OS v1.6.0R (Mirza Visual Bank Selector + Smart Notification Center + Audited SMS Engine)"
           body: |
-            ## 💎 Personal Life OS v1.5.0 — Unified Financial & SMS Engine Edition (`versionCode = 6`)
+            ## 💎 Personal Life OS v1.6.0R — Smart Notification & Mirza Bank Engine Edition (`versionCode = 7`)
 
-            سیستم‌عامل جامع مدیریت مالی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی (منطبق بر نقشه راه [`APP_ROADMAP_FA.md`](./APP_ROADMAP_FA.md) و تأییدشده در [`ROADMAP_PROGRESS.md`](./ROADMAP_PROGRESS.md)).
-
-            ---
-
-            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.5.0` - `versionCode = 6`)
-            - ⭐ **`Personal-Life-OS-v1.5.0-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
-            - 📦 **`Personal-Life-OS-v1.5.0-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
-            > **نکته نصب:** به دلیل ارتقای `versionCode` به `6` و مهاجرت غیرمخرب دیتابیس (`MIGRATION_5_6`)، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی و با حفظ تمام داده‌ها مستقیماً روی آن‌ها آپدیت می‌شود.
+            سیستم‌عامل جامع مدیریت مالی، فیش‌خوان زنده بانکی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی.
 
             ---
 
-            ### 🆕 قابلیت‌های نسخه `v1.5.0`
-            1. **🏦 موتور واحد پردازش پیامک بانکی ایران (`com.example.sms`):** پشتیبانی از ۱۰+ بانک ایرانی، تشخیص جداکننده‌های ترکیبی (`2/500/000` و `2.500.000`)، فیلتر قطعی پیامک‌های رمز پویا (OTP)، تراکنش‌های ناموفق، مانده‌گیری و تبلیغاتی، و هشدار صریح در صورت ابهام واحد پول یا سرشماره مشترک (`NEEDS_REVIEW`).
-            2. **🎯 دقت حسابداری `BigDecimal` و ضدتکرار دائمی (`Persistent Idempotency`):** محاسبه تمامی جمع‌ها، تبدیل‌های ریال/تومان و مانده بدهی/طلب با `BigDecimal` (`RoundingMode.HALF_UP`) و ذخیره اثرانگشت تراکنش (`idempotencyKey`) در دیتابیس Room برای جلوگیری قطعی از ثبت تکراری پیامک‌ها حتی پس از بستن برنامه.
-            3. **🔗 اتصال مستقیم بدهی به اهداف و مسیر (`Debt-to-Goal Link`):** ساخت برنامه بازپرداخت اقساط (`linkedDebtId`)، پرداخت جزئی قسط (`paidAmount`) با بروزرسانی دقیق `remainingAmount` در کارت تراز مطالبات و بدهی‌ها، و عدم شمارش انتقال بین حساب‌های شخصی (`TRANSFER`) در درآمد/هزینه.
-            4. **🔔 موتور یادآوری مشترک و داشبورد هوشمند:** پشتیبانی یکپارچه از کارها، بدهی‌ها، عادت‌ها، اهداف و یادآور روزانه ثبت هزینه‌ها با پوشش حریم خصوصی (`hideSensitiveContent`).
+            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.6.0R` - `versionCode = 7`)
+            - ⭐ **`Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ قابل نصب و آپدیت مستقیم روی نسخه‌های قبلی بدون پاک شدن داده‌ها.
+            - 📦 **`Personal-Life-OS-v1.6.0R-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده نیتیو اندروید (Jetpack Compose + Material 3 + Room).
+
+            ---
+
+            ### 🆕 قابلیت‌های نسخه `v1.6.0R` (`versionCode = 7`)
+            1. **🏦 شیت گرافیکی «افزودن بانک جدید» به سبک میرزا (`BankVisualSelectorSheet`):** پیش‌نمایش زنده کارت بانکی سورمه‌ای با تراشه طلایی، انتخاب سریع از میان ۱۲ بانک و نئوبانک ایرانی (ملی، بلوبانک، بلوبانک حالت پل، گردشگری، صادرات، ملت، تجارت، کشاورزی، سامان، پاسارگاد، رفاه، مسکن)، ثبت سرشماره اختصاصی و انتخابگر سرشماره‌های دریافت‌شده.
+            2. **🔔 مرکز اعلان هوشمند و فیش‌خوان زنده (`NotificationCenterSheet` + `FloatingReceiptNotificationBanner`):** بنر شناور بالای صفحه هنگام دریافت فیش بانکی، شبیه‌ساز ۱-لمسی دریافت زنده پیامک، تأیید یا رد سریع تراکنش‌های مبهم (`NEEDS_REVIEW`) و پوشش حریم خصوصی مبالغ (`Privacy Mask`).
+            3. **🛡️ ممیزی کامل موتور پیامک بانکی (`IranianBankSmsEngine`):**
+               - جلوگیری قطعی از ثبت خودکار پیامک‌های با نوع نامشخص (`UNKNOWN` هرگز به‌طور پیش‌فرض هزینه نمی‌شود).
+               - اعتبارسنجی در سطح قالب و نسخه (`templateId@vVersion`)؛ تغییر نسخه قالب تأیید قبلی را باطل می‌کند.
+               - سیاست صریح تطابق سرشماره فرستنده (`requireSenderMatch`) و مسدودسازی پیامک‌های تکراری (`idempotencyKey`).
           files: |
-            release-assets/Personal-Life-OS-v1.5.0-FinancePro-Debug.apk
-            release-assets/Personal-Life-OS-v1.5.0-FinancePro-Release.apk
+            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
+            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
           draft: false
           prerelease: false
         env:
