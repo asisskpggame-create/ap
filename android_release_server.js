@@ -1,15 +1,10 @@
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = 3000;
 const APK_PATH = path.resolve(__dirname, 'app/build/outputs/apk/debug/app-debug.apk');
 const BACKUP_APK_PATH = path.resolve(__dirname, '.build-outputs/app-debug.apk');
-const DIST_DIR = path.resolve(__dirname, 'dist');
 
 function getAvailableApkPath() {
   if (fs.existsSync(APK_PATH)) return APK_PATH;
@@ -17,22 +12,12 @@ function getAvailableApkPath() {
   return null;
 }
 
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-};
-
 const server = http.createServer((req, res) => {
-  const url = (req.url || '/').split('?')[0];
+  const url = req.url.split('?')[0];
 
   if (url === '/health' || url === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.6.0R', versionCode: 7, testsPassing: '30/30' }));
+    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.5.0', versionCode: 6 }));
     return;
   }
 
@@ -48,10 +33,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       appName: 'Personal Life OS',
-      platform: 'Android Native / Web Hybrid',
-      versionName: '1.6.0R',
-      versionCode: 7,
-      testsPassing: '30/30',
+      platform: 'Android Native (Kotlin + Jetpack Compose)',
+      versionName: '1.5.0',
+      versionCode: 6,
+      testsPassing: '43/43',
       apkReady: !!apkFile,
       apkSizeMb: apkSizeMb,
       downloadUrl: '/download/app-debug.apk'
@@ -59,26 +44,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (url === '/preview' || url.startsWith('/assets/')) {
-    const targetFile = url === '/preview'
-      ? path.join(DIST_DIR, 'index.html')
-      : path.join(DIST_DIR, url.replace(/^\/+/, ''));
-    if (targetFile.startsWith(DIST_DIR) && fs.existsSync(targetFile) && fs.statSync(targetFile).isFile()) {
-      const ext = path.extname(targetFile).toLowerCase();
-      res.writeHead(200, {
-        'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-        'Cache-Control': 'no-cache'
-      });
-      fs.createReadStream(targetFile).pipe(res);
-      return;
-    }
-  }
-
   if (url === '/download/app-debug.apk') {
     const apkFile = getAvailableApkPath();
     if (!apkFile) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('فایل APK در این کانتینر یافت نشد. نسخه ریلیز از طریق پایپ‌لاین GitHub Actions (تگ v1.6.0R) ساخته و منتشر می‌شود.');
+      res.end('فایل APK یافت نشد. لطفاً منتظر پایان بیلد بمانید.');
       return;
     }
 
@@ -87,7 +57,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, {
         'Content-Type': 'application/vnd.android.package-archive',
         'Content-Length': stat.size,
-        'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk"'
+        'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.5.0-FinancePro-Debug.apk"'
       });
       const stream = fs.createReadStream(apkFile);
       stream.pipe(res);
@@ -262,50 +232,47 @@ const server = http.createServer((req, res) => {
   <div class="container">
     <div class="badge">
       <span class="pulse"></span>
-      نسخه ۱.۶.۰R نیتیو اندروید (مرکز نوتیفیکیشن و فیش بانکی — آماده نصب)
+      نسخه ۱.۵.۰ نیتیو اندروید (آماده نصب)
     </div>
 
     <h1>سیستم‌عامل زندگی من (Personal Life OS)</h1>
     <p class="subtitle">
-      این پروژه یک اپلیکیشن <strong>نیتیو اندروید (Kotlin + Jetpack Compose + Room)</strong> به همراه موتور ممیزی‌شده پیامک و شنونده نوتیفیکیشن فیش بانکی است.
-      داشبورد انتشار و دریافت فایل نصبی APK نسخه <strong>1.6.0R</strong> آماده می‌باشد.
+      این پروژه یک اپلیکیشن کاملاً <strong>نیتیو اندروید (Kotlin + Jetpack Compose + Room)</strong> است.
+      فایل نصبی APK نسخه جدید کامپایل و آماده دریافت می‌باشد.
     </p>
 
     <div class="download-card">
-      <a href="/download/app-debug.apk" class="btn-download" download="Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk">
+      <a href="/download/app-debug.apk" class="btn-download" download="Personal-Life-OS-v1.5.0-FinancePro-Debug.apk">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
-        دانلود مستقیم فایل نصبی APK (نسخه 1.6.0R)
-      </a>
-      <a href="/preview" class="btn-download" style="margin-top: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);">
-        🖥️ اجرای زنده اپلیکیشن در مرورگر (Web Preview v1.6.0R)
+        دانلود مستقیم فایل نصبی APK (نسخه ۱.۵.۰)
       </a>
       <div class="file-meta">
         <span>📦 حجم: ${apkSizeText}</span>
-        <span>🏷️ کد نسخه: ۷ (versionCode = 7)</span>
-        <span>✅ ۳۰/۳۰ تست ممیزی پاس‌شده (۱۰۰٪)</span>
+        <span>🏷️ کد نسخه: ۶ (versionCode = 6)</span>
+        <span>✅ ۴۳ تست پاس‌شده (۱۰۰٪)</span>
       </div>
     </div>
 
     <div class="grid">
       <div class="grid-item">
-        <strong>🔔 مرکز هوشمند نوتیفیکیشن و لاگ فیش‌ها</strong>
-        <span>شنونده نوتیفیکیشن بلوبانک (عادی و پل)، ویپاد، بام ملی و ملت با ثبت خودکار یا ۱-کلیکی</span>
+        <strong>🏦 موتور هوشمند پیامک بانکی</strong>
+        <span>پشتیبانی از ۱۸+ بانک ایرانی، تفکیک تومان/ریال و فیلتر رمز پویا</span>
       </div>
       <div class="grid-item">
-        <strong>🏦 انتخابگر بصری بانک‌ها (الگوی میرزا)</strong>
-        <span>انتخاب سریع بانک با لوگوی اختصاصی، کارت پیش‌نمایش زنده و سرشماره‌های پیشنهادی</span>
+        <strong>🎯 محاسبات مالی با BigDecimal</strong>
+        <span>دقت حسابداری دقیق، بدون خطای ممیز شناور در تراز و اقساط</span>
       </div>
       <div class="grid-item">
-        <strong>🛡️ اعتبارسنجی در سطح قالب و مسدودسازی UNKNOWN</strong>
-        <span>فعال‌سازی مستقل هر قالب بر اساس نسخه فعلی (tpl.version) و جلوگیری قطعی از ثبت پیش‌فرض</span>
+        <strong>🔒 کلید ضدتکرار در دیتابیس</strong>
+        <span>جلوگیری قطعی از ثبت تکراری پیامک‌ها در Room</span>
       </div>
       <div class="grid-item">
-        <strong>🚀 گیت‌هاب اکشن و ریلیز 1.6.0R</strong>
-        <span>پوشش کامل ۳۰ تست رگرسیون، بیلد و تایپ‌چک بدون خطا (کد نسخه ۷)</span>
+        <strong>🚀 گیت‌هاب اکشن و ریلیز</strong>
+        <span>سازگار با JDK 21 و آماده برای انتشار خودکار در GitHub Releases</span>
       </div>
     </div>
 

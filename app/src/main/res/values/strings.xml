@@ -1,4 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Personal Life OS</string>
+    <string name="nav_dashboard">داشبورد</string>
+    <string name="nav_tasks">وظایف و عادت‌ها</string>
+    <string name="nav_expenses">هزینه‌ها و پیامک</string>
+    <string name="nav_health">سلامت و خواب</string>
+    <string name="nav_vault">صندوق امن</string>
+    <string name="nav_assistant">دستیار جمینای</string>
+    <string name="nav_settings">تنظیمات</string>
+
+    <string name="quick_voice_action">ضبط صوت سریع</string>
+    <string name="add_task">وظیفه جدید</string>
+    <string name="add_expense">ثبت هزینه</string>
+    <string name="add_habit">عادت جدید</string>
+    <string name="add_vault_note">یادداشت امن جدید</string>
+
+    <string name="unlock_vault">بازگشایی صندوق امن</string>
+    <string name="enter_pin">رمز ۴ رقمی را وارد کنید</string>
+    <string name="pin_error">رمز عبور نادرست است (پیش‌فرض: 1234)</string>
 </resources>

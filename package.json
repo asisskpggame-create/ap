@@ -1,14 +1,12 @@
 {
   "name": "personal-life-os",
   "private": true,
-  "version": "1.6.0R",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
-    "dev": "node android_release_server.js",
-    "dev:web": "vite --host 0.0.0.0 --port 3000",
+    "dev": "node android_release_server.cjs",
     "build": "vite build",
-    "test": "node --experimental-strip-types --test src/utils/__tests__/bankSmsParser.test.ts",
-    "lint": "tsc --noEmit"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "@google/genai": "latest",

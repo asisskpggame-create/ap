@@ -1,15 +1,14 @@
-import React from 'react';
-import {
-  HeartPulse,
-  Droplets,
-  Moon,
-  Dumbbell,
-  Flame,
-  Plus,
-  Minus,
+import React, { useState } from 'react';
+import { 
+  HeartPulse, 
+  Moon, 
+  Droplets, 
+  Flame, 
+  Plus, 
+  Activity,
+  CheckCircle2
 } from 'lucide-react';
 import { HealthLog } from '../types';
-import { formatPersianNumber } from '../utils/persianUtils';
 
 interface HealthScreenProps {
   healthLog: HealthLog;
@@ -18,155 +17,151 @@ interface HealthScreenProps {
 
 export const HealthScreen: React.FC<HealthScreenProps> = ({
   healthLog,
-  onUpdateHealth,
+  onUpdateHealth
 }) => {
+  const [waterCount, setWaterCount] = useState(healthLog.waterGlasses);
+  const [sleepHours, setSleepHours] = useState(healthLog.sleepHours);
+  const [exerciseMins, setExerciseMins] = useState(healthLog.exerciseMinutes);
+
+  const handleAddWater = () => {
+    const next = waterCount + 1;
+    setWaterCount(next);
+    onUpdateHealth({ waterGlasses: next });
+  };
+
+  const handleMinusWater = () => {
+    if (waterCount > 0) {
+      const next = waterCount - 1;
+      setWaterCount(next);
+      onUpdateHealth({ waterGlasses: next });
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fadeIn">
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <HeartPulse className="w-7 h-7 text-rose-400" />
-          پایش سلامت، هیدراتاسیون و فعالیت روزانه
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          ثبت میزان نوشیدن آب، کیفیت خواب، ورزش و کالری مصرفی امروز ({healthLog.date})
-        </p>
+        <h2 className="text-2xl font-bold text-slate-100">سلامت، خواب و تندرستی</h2>
+        <p className="text-xs text-slate-400">پایش خواب شبانه، میزان مصرف آب، ورزش و کالری مصرفی روزانه</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Water Intake */}
-        <div className="glass-card water-wave-bg rounded-2xl p-5 border border-cyan-500/20 space-y-4">
+      {/* Top Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Sleep Card */}
+        <div className="glass-card rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-cyan-300">مصرف آب روزانه</span>
-            <Droplets className="w-5 h-5 text-cyan-400" />
+            <span className="text-xs text-slate-400">خواب شبانه</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+              <Moon className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-white">
-            {formatPersianNumber(healthLog.waterGlasses)} <span className="text-sm font-normal text-slate-400">/ ۸ لیوان</span>
+          <div className="text-2xl font-bold text-slate-100">{healthLog.sleepHours} ساعت</div>
+          <p className="text-xs text-indigo-400">کیفیت: {healthLog.sleepQuality}</p>
+        </div>
+
+        {/* Water Hydration Card */}
+        <div className="glass-card rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">آب مصرفی روزانه</span>
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+              <Droplets className="w-4 h-4" />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  waterGlasses: Math.max(0, healthLog.waterGlasses - 1),
-                })
-              }
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() =>
-                onUpdateHealth({ waterGlasses: healthLog.waterGlasses + 1 })
-              }
-              className="flex-1 py-2 px-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              افزودن ۱ لیوان
-            </button>
+          <div className="text-2xl font-bold text-slate-100">{waterCount} لیوان</div>
+          <p className="text-xs text-cyan-400">هدف: ۸ لیوان در روز</p>
+        </div>
+
+        {/* Exercise Card */}
+        <div className="glass-card rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">ورزش و تحرک</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center">
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-slate-100">{healthLog.exerciseMinutes} دقیقه</div>
+          <p className="text-xs text-rose-400">{healthLog.exerciseType}</p>
+        </div>
+
+        {/* Calories Card */}
+        <div className="glass-card rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">کالری سوزانده شده</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <Flame className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-slate-100">{healthLog.caloriesBurned} کیلوکالری</div>
+          <p className="text-xs text-amber-400">عملکرد عالی</p>
+        </div>
+      </div>
+
+      {/* Interactive Water & Sleep Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Water Tracker Module */}
+        <div className="glass-card rounded-2xl p-6 space-y-4">
+          <div className="flex items-center space-x-2 space-x-reverse text-cyan-400">
+            <Droplets className="w-5 h-5" />
+            <h3 className="font-bold text-slate-100 text-base">مدیریت مصرف آب</h3>
+          </div>
+          <p className="text-xs text-slate-400">با هر لیوان آب مصرفی، دکمه زیر را لمس کنید تا هیدراته بمانید.</p>
+          
+          <div className="flex items-center justify-between bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+            <div>
+              <span className="text-sm font-bold text-slate-200">تعداد لیوان آب امروز</span>
+              <p className="text-2xl font-bold text-cyan-400 mt-1">{waterCount} لیوان</p>
+            </div>
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <button
+                onClick={handleMinusWater}
+                className="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition"
+              >
+                -
+              </button>
+              <button
+                onClick={handleAddWater}
+                className="w-10 h-10 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition shadow-lg shadow-cyan-500/20"
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Sleep */}
-        <div className="glass-card rounded-2xl p-5 border border-indigo-500/20 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-indigo-300">مدت زمان خواب</span>
-            <Moon className="w-5 h-5 text-indigo-400" />
+        {/* Sleep Log Settings */}
+        <div className="glass-card rounded-2xl p-6 space-y-4">
+          <div className="flex items-center space-x-2 space-x-reverse text-indigo-400">
+            <Moon className="w-5 h-5" />
+            <h3 className="font-bold text-slate-100 text-base">ثبت و ویرایش ساعات خواب</h3>
           </div>
-          <div className="text-3xl font-extrabold text-white">
-            {formatPersianNumber(healthLog.sleepHours)}{' '}
-            <span className="text-sm font-normal text-slate-400">ساعت</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  sleepHours: Math.max(0, Number((healthLog.sleepHours - 0.5).toFixed(1))),
-                })
-              }
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  sleepHours: Number((healthLog.sleepHours + 0.5).toFixed(1)),
-                })
-              }
-              className="flex-1 py-2 px-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs flex items-center justify-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              نیم ساعت
-            </button>
-          </div>
-        </div>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">مدت زمان خواب (ساعت)</label>
+              <input 
+                type="number"
+                value={sleepHours}
+                onChange={e => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setSleepHours(val);
+                  onUpdateHealth({ sleepHours: val });
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
 
-        {/* Exercise */}
-        <div className="glass-card rounded-2xl p-5 border border-emerald-500/20 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-emerald-300">ورزش و تحرک</span>
-            <Dumbbell className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="text-3xl font-extrabold text-white">
-            {formatPersianNumber(healthLog.exerciseMinutes)}{' '}
-            <span className="text-sm font-normal text-slate-400">دقیقه</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  exerciseMinutes: Math.max(0, healthLog.exerciseMinutes - 10),
-                })
-              }
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  exerciseMinutes: healthLog.exerciseMinutes + 10,
-                })
-              }
-              className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              ۱۰ دقیقه
-            </button>
-          </div>
-        </div>
-
-        {/* Calories */}
-        <div className="glass-card rounded-2xl p-5 border border-amber-500/20 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-amber-300">کالری سوزانده‌شده</span>
-            <Flame className="w-5 h-5 text-amber-400" />
-          </div>
-          <div className="text-3xl font-extrabold text-white">
-            {formatPersianNumber(healthLog.caloriesBurned)}{' '}
-            <span className="text-sm font-normal text-slate-400">کیلوکالری</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  caloriesBurned: Math.max(0, healthLog.caloriesBurned - 50),
-                })
-              }
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() =>
-                onUpdateHealth({
-                  caloriesBurned: healthLog.caloriesBurned + 50,
-                })
-              }
-              className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              ۵۰ کالری
-            </button>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">کیفیت خواب</label>
+              <select
+                value={healthLog.sleepQuality}
+                onChange={e => onUpdateHealth({ sleepQuality: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="poor">نیاز به بهبود (Poor)</option>
+                <option value="fair">متوسط (Fair)</option>
+                <option value="good">خوب (Good)</option>
+                <option value="excellent">عالی و عمیق (Excellent)</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>

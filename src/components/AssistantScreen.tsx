@@ -26,8 +26,7 @@ export const AssistantScreen: React.FC<AssistantScreenProps> = ({
     let aiResponseText = '';
 
     try {
-      const metaEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
-      const apiKey = metaEnv?.VITE_GEMINI_API_KEY || '';
+      const apiKey = (import.meta.env as any).VITE_GEMINI_API_KEY || '';
       if (apiKey) {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({

@@ -10,8 +10,7 @@ import {
   ArrowUpRight,
   Flame,
   Calendar,
-  ShieldCheck,
-  BellRing
+  ShieldCheck
 } from 'lucide-react';
 import { TaskItem, HabitItem, ExpenseItem, HealthLog } from '../types';
 import { formatToman } from '../utils/persianUtils';
@@ -22,9 +21,6 @@ interface DashboardScreenProps {
   expenses: ExpenseItem[];
   healthLog: HealthLog;
   onOpenVoiceModal: () => void;
-  onOpenNotificationCenter?: () => void;
-  unreadNotificationsCount?: number;
-  pendingReceiptNotificationsCount?: number;
   onNavigate: (tab: any) => void;
   onToggleTask: (id: string) => void;
   onToggleHabit: (id: string) => void;
@@ -36,9 +32,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   expenses,
   healthLog,
   onOpenVoiceModal,
-  onOpenNotificationCenter,
-  unreadNotificationsCount = 0,
-  pendingReceiptNotificationsCount = 0,
   onNavigate,
   onToggleTask,
   onToggleHabit
@@ -55,33 +48,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 space-x-reverse px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5 animate-spin" />
-              <span>دستیار هوشمند زندگی و شنونده فیش بانکی فعال است (v1.6.0R)</span>
+              <span>دستیار هوشمند زندگی فعال است</span>
             </div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-100 tracking-tight">
-              روز به‌خیر، دستیار صوتی و نوتیفیکیشن بانکی آماده است 🌟
+              روز به‌خیر، دستیار صوتی و مالی آماده است 🌟
             </h2>
             <p className="text-sm text-slate-400 max-w-xl">
-              امروز ۱۴۰۵/۰۸/۰۵ — تمام حساب‌ها، وظایف و عادت‌های شما منظم و هماهنگ هستند. فیش‌های دریافتی از نوتیفیکیشن بانک‌ها و پیامک‌ها به صورت لحظه‌ای پایش می‌شوند.
+              امروز ۱۴۰۵/۰۸/۰۵ — تمام حساب‌ها، وظایف و عادت‌های شما منظم و هماهنگ هستند. پیامک‌های بانکی خود را اسکن کنید یا با ویس‌کپچر یادداشت بردارید.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {onOpenNotificationCenter && (
-              <button
-                onClick={onOpenNotificationCenter}
-                className="flex items-center space-x-2 space-x-reverse px-4 py-3 rounded-2xl bg-slate-900/90 border border-amber-500/40 text-amber-300 text-xs font-bold hover:bg-slate-800 transition shadow-lg shadow-amber-950/20"
-              >
-                <BellRing className="w-4 h-4 text-amber-400" />
-                <span>لاگ نوتیفیکیشن فیش‌ها</span>
-                {(pendingReceiptNotificationsCount > 0 || unreadNotificationsCount > 0) && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-extrabold">
-                    {pendingReceiptNotificationsCount > 0
-                      ? `${pendingReceiptNotificationsCount} در انتظار`
-                      : `${unreadNotificationsCount} جدید`}
-                  </span>
-                )}
-              </button>
-            )}
+          <div className="flex items-center gap-3">
             <button
               onClick={onOpenVoiceModal}
               className="flex items-center space-x-2 space-x-reverse px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium text-sm shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:scale-[1.02] transition"
