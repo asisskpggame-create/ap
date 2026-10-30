@@ -16,19 +16,36 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Dependencies, Run 30/30 SMS & Notification Tests, and Build Web Bundle
+        run: |
+          npm install --include=dev --no-audit --no-fund
+          npm test
+          npm run lint
+          npm run build
+
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK Platform 36 & Build-Tools 36.0.0
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
-
-      - name: Grant Execute Permission for Gradlew
-        run: chmod +x gradlew
 
       - name: Restore Debug Keystore (Preserves Firebase Google Sign-In SHA-1)
         run: |
@@ -54,124 +71,52 @@ jobs:
               -dname "CN=Personal Life OS,O=AIStudio,C=US"
           fi
 
-      - name: Ensure .env and Firebase Config exist for Standalone APK Build
-        run: |
-          if [ ! -f .env ]; then
-            cp .env.example .env || echo "GEMINI_API_KEY=" > .env
-          fi
-          if [ ! -f app/google-services.json ]; then
-            cat << 'EOF' > app/google-services.json
-          {
-            "project_info": {
-              "project_number": "957078935606",
-              "project_id": "gen-lang-client-0280793534",
-              "storage_bucket": "gen-lang-client-0280793534.firebasestorage.app"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:957078935606:android:925e0574c700d106c9a097",
-                  "android_client_info": {
-                    "package_name": "com.aistudio.personallifeos.kxmpzq"
-                  }
-                },
-                "oauth_client": [
-                  {
-                    "client_id": "957078935606-m9055dtit0577lvkjmp2sqvffbld1ueg.apps.googleusercontent.com",
-                    "client_type": 1,
-                    "android_info": {
-                      "package_name": "com.aistudio.personallifeos.kxmpzq",
-                      "certificate_hash": "24f9fedb0e3af68bfe2bf6b906ce1114aa87b09d"
-                    }
-                  },
-                  {
-                    "client_id": "957078935606-nfbplhuqu6k4g2j1r5rm83m4e04u8s8t.apps.googleusercontent.com",
-                    "client_type": 3
-                  }
-                ],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDniF4amC-qH1eL1NqLKOvo6EgZdqhvda8"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": [
-                      {
-                        "client_id": "957078935606-nfbplhuqu6k4g2j1r5rm83m4e04u8s8t.apps.googleusercontent.com",
-                        "client_type": 3
-                      }
-                    ]
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
-          fi
-
-          if [ ! -f app/src/main/res/values/firebase_applet_config.xml ]; then
-            mkdir -p app/src/main/res/values
-            cat << 'EOF' > app/src/main/res/values/firebase_applet_config.xml
-          <?xml version="1.0" encoding="utf-8" standalone="no"?>
-          <resources>
-              <string name="firestore_database_id" translatable="false">ai-studio-android-personal-a911cedb-55ed-4d73-8197-39f8e08a22de</string>
-          </resources>
-          EOF
-          fi
-
-      - name: Run Unit & Accounting Verification Suite
-        run: |
-          ./gradlew testDebugUnitTest --no-configuration-cache --stacktrace
-
-      - name: Build Signed Debug & Release APKs
+      - name: Build Signed Debug & Release APKs (v1.6.0R - versionCode 7)
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: androidrelease
           KEY_PASSWORD: androidrelease
         run: |
-          ./gradlew assembleDebug assembleRelease --stacktrace
+          gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.5.0R-FinancePro-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.5.0R-FinancePro-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-v1.5.0R-APKs
+          name: Personal-Life-OS-v1.6.0R-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
-      - name: Publish GitHub Release with APK
+      - name: Publish GitHub Release with APK (v1.6.0R)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.0R
-          name: "Personal Life OS v1.5.0R (Audited Iranian Bank SMS Engine + Template Verification + Persistent Idempotency)"
+          tag_name: v1.6.0R
+          name: "Personal Life OS v1.6.0R (Smart Notification Center, Bank Receipt Listener & Visual Bank Selector — versionCode 7)"
           body: |
-            ## 💎 Personal Life OS v1.5.0R — Audited Financial & SMS Engine Release (`versionCode = 6`)
+            ## 💎 Personal Life OS v1.6.0R — Smart Notification Center & Bank Receipt Listener Release (`versionCode = 7`)
 
-            سیستم‌عامل جامع مدیریت مالی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی (منطبق بر نقشه راه [`APP_ROADMAP_FA.md`](./APP_ROADMAP_FA.md) و تأییدشده در [`ROADMAP_PROGRESS.md`](./ROADMAP_PROGRESS.md)).
-
-            ---
-
-            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.5.0R` - `versionCode = 6`)
-            - ⭐ **`Personal-Life-OS-v1.5.0R-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ پشتیبانی کامل از ورود با حساب گوگل (Google Sign-In / Firebase Auth)، همگام‌سازی ابری و تمام امکانات آفلاین.
-            - 📦 **`Personal-Life-OS-v1.5.0R-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده (مناسب استفاده در حالت آفلاین/لوکال روی گوشی).
-            > **نکته نصب:** به دلیل ارتقای `versionCode` به `6` و مهاجرت غیرمخرب دیتابیس (`MIGRATION_5_6`)، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی و با حفظ تمام داده‌ها مستقیماً روی آن‌ها آپدیت می‌شود.
+            سیستم‌عامل جامع مدیریت مالی، مرکز هوشمند نوتیفیکیشن و لاگ فیش‌های بانکی (الهام‌گرفته از معماری میرزا)، انتخابگر بصری بانک‌ها و دستیار هوشمند فارسی.
 
             ---
 
-            ### 🆕 قابلیت‌های نسخه `v1.5.0R`
-            1. **🛡️ موتور ممیزی‌شده پردازش پیامک بانکی ایران (`29/29 PASS`):** اعتبارسنجی در سطح هر قالب (`Template-Level Verification`) و نسخه قالب (`tpl.version`)، مسدودسازی کامل ثبت پیش‌فرض `UNKNOWN`، سیاست صریح تطابق سرشماره فرستنده (`evaluateSenderPolicy`)، و اعتبارسنجی ساختار پروفایل‌ها هنگام بارگذاری (`sanitizeLoadedBankProfiles`).
-            2. **🏦 مدیریت پروفایل بانک‌ها (`BankManager`):** امکان افزودن بانک سفارشی، تعریف سرشماره و کلیدواژه‌ها، تست نمونه پیامک واقعی، تأیید خروجی و فعال‌سازی ثبت خودکار تنها برای قالب‌های تأییدشده.
-            3. **🎯 دقت حسابداری `BigDecimal` و ضدتکرار دائمی (`Persistent Idempotency`):** محاسبه تمامی جمع‌ها، تبدیل‌های ریال/تومان و مانده بدهی/طلب با `BigDecimal` (`RoundingMode.HALF_UP`) و ذخیره اثرانگشت تراکنش (`fingerprint` / `idempotencyKey`) برای جلوگیری قطعی از ثبت تکراری پیامک‌ها.
-            4. **🔗 اتصال مستقیم بدهی به اهداف و مسیر (`Debt-to-Goal Link`) و موتور یادآوری مشترک:** ساخت برنامه بازپرداخت اقساط (`linkedDebtId`)، پرداخت جزئی قسط (`paidAmount`) و پشتیبانی یکپارچه از کارها، بدهی‌ها، عادت‌ها و اهداف.
+            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.6.0R` - `versionCode = 7`)
+            - ⭐ **`Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk` (پیشنهادی):** امضاشده با کلید اصلی پروژه؛ آماده نصب مستقیم روی گوشی اندروید.
+            - 📦 **`Personal-Life-OS-v1.6.0R-FinancePro-Release.apk`:** نسخه ریلیز امضاشده با کلید انتشار (`my-upload-key.jks`).
+            > **نکته نصب:** به دلیل ارتقای `versionCode` به `7`، این نسخه بدون نیاز به پاک کردن نسخه‌های قبلی و با حفظ تمام داده‌ها مستقیماً آپدیت می‌شود.
+
+            ---
+
+            ### 🆕 قابلیت‌های نسخه `v1.6.0R` (`versionCode = 7`)
+            1. **🔔 مرکز هوشمند نوتیفیکیشن و شنونده زنده فیش‌های بانکی (`NotificationCenterModal`):** پایش لحظه‌ای نوتیفیکیشن‌های بلوبانک (عادی و حالت پُل)، ویپاد، بام بانک ملی، همراه بانک ملت و صندوق پیامک (`SMS_INBOX`)، بنر شناور بالای صفحه (`FloatingNotificationBanner`)، ثبت خودکار مشروط (`AUTO_REGISTERED`) یا صف بررسی ۱-کلیکی (`PENDING_USER_ACTION`) و فیلتر خودکار رمز پویا (`OTP`).
+            2. **🏦 انتخابگر بصری بانک‌ها با کارت پیش‌نمایش زنده (`BankVisualSelectorSheet`):** شیت بصری انتخاب بانک با لوگوی اختصاصی بانک‌های ایران، پیش‌نمایش زنده کارت بانکی و پیشنهاد سرشماره‌های دریافت‌شده.
+            3. **⚙️ تنظیمات پیشرفته شنونده نوتیفیکیشن و هشدارهای مالی (`SettingsScreen`):** مدیریت مجزای منابع نوتیفیکیشن، سقف هشدار تراکنش سنگین، مرز هشدار افت موجودی حساب و ساعات سکوت شبانه (`Quiet Hours`).
+            4. **🛡️ موتور ممیزی‌شده پردازش پیامک بانکی ایران (`30/30 PASS`):** اعتبارسنجی در سطح هر قالب (`Template-Level Verification`) و نسخه قالب (`tpl.version`)، مسدودسازی کامل ثبت پیش‌فرض `UNKNOWN` و سیاست صریح تطابق سرشماره فرستنده.
           files: |
-            release-assets/Personal-Life-OS-v1.5.0R-FinancePro-Debug.apk
-            release-assets/Personal-Life-OS-v1.5.0R-FinancePro-Release.apk
+            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
+            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
 
   if (url === '/health' || url === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.6.0R', versionCode: 6, testsPassing: '30/30' }));
+    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.6.0R', versionCode: 7, testsPassing: '30/30' }));
     return;
   }
 
@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
       appName: 'Personal Life OS',
       platform: 'Android Native / Web Hybrid',
       versionName: '1.6.0R',
-      versionCode: 6,
+      versionCode: 7,
       testsPassing: '30/30',
       apkReady: !!apkFile,
       apkSizeMb: apkSizeMb,
@@ -280,29 +280,32 @@ const server = http.createServer((req, res) => {
         </svg>
         دانلود مستقیم فایل نصبی APK (نسخه 1.6.0R)
       </a>
+      <a href="/preview" class="btn-download" style="margin-top: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);">
+        🖥️ اجرای زنده اپلیکیشن در مرورگر (Web Preview v1.6.0R)
+      </a>
       <div class="file-meta">
         <span>📦 حجم: ${apkSizeText}</span>
         <span>🏷️ کد نسخه: ۷ (versionCode = 7)</span>
-        <span>✅ ۲۹/۲۹ تست ممیزی پاس‌شده (۱۰۰٪)</span>
+        <span>✅ ۳۰/۳۰ تست ممیزی پاس‌شده (۱۰۰٪)</span>
       </div>
     </div>
 
     <div class="grid">
       <div class="grid-item">
-        <strong>🏦 اعتبارسنجی در سطح قالب (Template-Level)</strong>
-        <span>فعال‌سازی مستقل هر قالب بر اساس نسخه فعلی (tpl.version) و ابطال خودکار با تغییر الگو</span>
+        <strong>🔔 مرکز هوشمند نوتیفیکیشن و لاگ فیش‌ها</strong>
+        <span>شنونده نوتیفیکیشن بلوبانک (عادی و پل)، ویپاد، بام ملی و ملت با ثبت خودکار یا ۱-کلیکی</span>
       </div>
       <div class="grid-item">
-        <strong>🛡️ مسدودسازی کامل UNKNOWN</strong>
-        <span>جلوگیری قطعی از ثبت پیش‌فرض پیام‌های مبهم و الزام به تعیین نوع، بانک و واحد پول معتبر</span>
+        <strong>🏦 انتخابگر بصری بانک‌ها (الگوی میرزا)</strong>
+        <span>انتخاب سریع بانک با لوگوی اختصاصی، کارت پیش‌نمایش زنده و سرشماره‌های پیشنهادی</span>
       </div>
       <div class="grid-item">
-        <strong>📡 سیاست صریح فرستنده و ضدتکرار</strong>
-        <span>بررسی دقیق سرشماره (الزامی/اختیاری) و مسدودسازی پیامک‌های تکراری با کلید یکتا</span>
+        <strong>🛡️ اعتبارسنجی در سطح قالب و مسدودسازی UNKNOWN</strong>
+        <span>فعال‌سازی مستقل هر قالب بر اساس نسخه فعلی (tpl.version) و جلوگیری قطعی از ثبت پیش‌فرض</span>
       </div>
       <div class="grid-item">
         <strong>🚀 گیت‌هاب اکشن و ریلیز 1.6.0R</strong>
-        <span>پوشش کامل ۲۹ تست رگرسیون، بیلد و تایپ‌چک بدون خطا</span>
+        <span>پوشش کامل ۳۰ تست رگرسیون، بیلد و تایپ‌چک بدون خطا (کد نسخه ۷)</span>
       </div>
     </div>
 
