@@ -55,6 +55,25 @@ interface LifeOsDao {
     @Query("DELETE FROM expenses WHERE id = :expenseId")
     suspend fun deleteExpense(expenseId: String)
 
+    // Debts & Receivables
+    @Query("SELECT * FROM debts ORDER BY id DESC")
+    fun getAllDebts(): Flow<List<DebtEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebt(debt: DebtEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebts(debts: List<DebtEntity>)
+
+    @Update
+    suspend fun updateDebt(debt: DebtEntity)
+
+    @Query("DELETE FROM debts WHERE id = :debtId")
+    suspend fun deleteDebt(debtId: String)
+
+    @Query("DELETE FROM debts")
+    suspend fun clearDebts()
+
     // Health
     @Query("SELECT * FROM health_log LIMIT 1")
     fun getHealthLog(): Flow<HealthLogEntity?>
