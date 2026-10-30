@@ -49,6 +49,9 @@ interface LifeOsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpenses(expenses: List<ExpenseEntity>)
 
+    @Update
+    suspend fun updateExpense(expense: ExpenseEntity)
+
     @Query("SELECT * FROM expenses WHERE idempotencyKey = :key LIMIT 1")
     suspend fun getExpenseByIdempotencyKey(key: String): ExpenseEntity?
 

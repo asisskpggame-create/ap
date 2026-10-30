@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -29,6 +30,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -41,7 +43,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,11 +66,16 @@ fun SettingsScreen(
     onUpdateNotificationSettings: (NotificationSettingsState) -> Unit = {},
     onOpenNotificationCenter: () -> Unit = {},
     onOpenBankSelector: () -> Unit = {},
+    onExportPlainJson: () -> String = { "{}" },
+    onExportEncryptedAes: (String) -> String = { "" },
     onResetData: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
+    var backupPassphrase by remember { mutableStateOf("1234") }
+    var generatedBackupOutput by remember { mutableStateOf("") }
+    val clipboardManager = LocalClipboardManager.current
 
     LazyColumn(
         modifier = modifier
@@ -77,13 +87,13 @@ fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "تنظیمات، اعلان‌ها و پشتیبان‌گیری",
+                    text = "تنظیمات، اعلان‌ها و پشتیبان‌گیری رمزنگاری‌شده",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
                 Text(
-                    text = "مدیریت فیش‌خوان زنده بانکی، سرشماره‌ها، امنیت و مشخصات Personal Life OS نسخه 1.6.0R",
+                    text = "مدیریت فیش‌خوان زنده بانکی، بکاپ محلی AES-256-GCM، موتور یادآوری مشترک و مشخصات نسخه 1.6.0R",
                     fontSize = 12.sp,
                     color = TextMuted
                 )
@@ -143,8 +153,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("پوشش حریم خصوصی مبالغ در اعلان", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text("مخفی کردن مبلغ تراکنش روی صفحه قفل", fontSize = 11.sp, color = TextSecondary)
+                            Text("پوشش حریم خصوصی مبالغ (hideSensitiveContent)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("مخفی کردن مبلغ تراکنش و قسط در اعلان‌ها و داشبورد", fontSize = 11.sp, color = TextSecondary)
                         }
                         Switch(
                             checked = notificationSettings.maskSensitiveAmounts,
@@ -186,6 +196,7 @@ fun SettingsScreen(
             }
         }
 
+        // Encrypted Local Backup (AES-256-GCM) & Room Database Card
         item {
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -202,7 +213,7 @@ fun SettingsScreen(
                         Icon(Icons.Default.Storage, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "فضای ذخیره‌سازی محلی (Room Database)",
+                            text = "بکاپ رمزنگاری‌شده (AES-256-GCM) و دیتابیس Room",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -210,31 +221,38 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "اطلاعات وظایف، تراکنش‌ها، یادداشت‌های محرمانه و عادت‌های شما در پایگاه داده آفلاین دستگاه با امنیت بالا نگهداری می‌شوند.",
+                        text = "پشتیبانی از خروجی JSON استاندارد و رمزنگاری نظامی PBKDF2WithHmacSHA256 + AES/GCM/NoPadding برای حفاظت از تمام رکوردها.",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { showBackupDialog = true },
+                            onClick = {
+                                generatedBackupOutput = onExportPlainJson()
+                                showBackupDialog = true
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("export_backup_btn")
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("export_backup_btn")
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black)
+                            Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("پشتیبان‌گیری (JSON)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("بکاپ JSON / AES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
 
                         OutlinedButton(
                             onClick = { showResetConfirm = true },
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("reset_data_btn")
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("reset_data_btn")
                         ) {
-                            Icon(Icons.Default.RestartAlt, contentDescription = null, tint = RoseDanger)
+                            Icon(Icons.Default.RestartAlt, contentDescription = null, tint = RoseDanger, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("بازنشانی داده‌ها", color = RoseDanger, fontSize = 12.sp)
+                            Text("بازنشانی داده‌ها", color = RoseDanger, fontSize = 11.sp)
                         }
                     }
                 }
@@ -255,14 +273,14 @@ fun SettingsScreen(
                         Icon(Icons.Default.Security, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "امنیت و حریم خصوصی",
+                            text = "امنیت و حریم خصوصی (اصل کمترین دسترسی)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                     }
                     Text(
-                        text = "یادداشت‌های صندوق امن با رمز ۴ رقمی محافظت شده و متن پیامک‌های بانکی بدون نیاز به سرور واسط، مستقیماً روی گوشی پردازش می‌شوند.",
+                        text = "یادداشت‌های صندوق امن با رمز ۴ رقمی محافظت شده و متن پیامک‌های بانکی با اثرانگشت ضدتکرار SHA-256 مستقیماً روی دستگاه پردازش می‌شوند.",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
@@ -292,8 +310,7 @@ fun SettingsScreen(
                     }
                     Text(text = "نام نرم‌افزار: Personal Life OS", fontSize = 12.sp, color = TextSecondary)
                     Text(text = "نسخه: 1.6.0R (versionCode = 7)", fontSize = 12.sp, color = EmeraldAccent, fontWeight = FontWeight.Bold)
-                    Text(text = "فریم‌ورک: Jetpack Compose + Material Design 3 + Room", fontSize = 12.sp, color = TextSecondary)
-                    Text(text = "موتور هوشمند: فیش‌خوان زنده به سبک میرزا + موتور ممیزی‌شده پیامک بانکی", fontSize = 12.sp, color = CyanPrimary)
+                    Text(text = "معماری ۴ ستونه: مالی • اهداف و مسیر • داشبورد • هوش مصنوعی", fontSize = 12.sp, color = CyanPrimary)
                 }
             }
         }
@@ -327,9 +344,48 @@ fun SettingsScreen(
     if (showBackupDialog) {
         AlertDialog(
             onDismissRequest = { showBackupDialog = false },
-            title = { Text("پشتیبان‌گیری از اطلاعات (Backup)", fontWeight = FontWeight.Bold) },
+            title = { Text("پشتیبان‌گیری JSON و رمزنگاری AES-256-GCM", fontWeight = FontWeight.Bold) },
             text = {
-                Text("داده‌های شما آماده خروجی گرفتن هستند. ساختار JSON شامل وظایف، تراکنش‌های بانکی، یادداشت‌های محرمانه و گزارش سلامت می‌باشد.")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = backupPassphrase,
+                        onValueChange = { backupPassphrase = it },
+                        label = { Text("کلید رمزنگاری PBKDF2 / AES-GCM") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                generatedBackupOutput = onExportEncryptedAes(backupPassphrase)
+                                clipboardManager.setText(AnnotatedString(generatedBackupOutput))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تولید و کپی AES-GCM", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                generatedBackupOutput = onExportPlainJson()
+                                clipboardManager.setText(AnnotatedString(generatedBackupOutput))
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("کپی JSON خام", color = CyanPrimary, fontSize = 11.sp)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = generatedBackupOutput,
+                        onValueChange = {},
+                        readOnly = true,
+                        maxLines = 6,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 Button(

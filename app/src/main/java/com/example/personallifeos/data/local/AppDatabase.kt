@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
         HealthLogEntity::class,
         VaultNoteEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -58,7 +58,7 @@ abstract class AppDatabase : RoomDatabase() {
                         TaskEntity("1", "بررسی و تایید گزارش مالی شرکت", "WORK", "URGENT", false, "۱۴۰۵/۰۸/۰۶", "۱۴۰۵/۰۸/۰۱"),
                         TaskEntity("2", "ورزش هوازی و بدنسازی (۴۵ دقیقه)", "HEALTH", "HIGH", true, "۱۴۰۵/۰۸/۰۵", "۱۴۰۵/۰۸/۰۱"),
                         TaskEntity("3", "مطالعه کتاب معماری نرم‌افزار", "STUDY", "MEDIUM", false, "۱۴۰۵/۰۸/۰۸", "۱۴۰۵/۰۸/۰۲"),
-                        TaskEntity("4", "پرداخت قسط وام خرید تجهیزات", "FINANCE", "URGENT", false, "۱۴۰۵/۰۸/۰۷", "۱۴۰۵/۰۸/۰۳", "d1")
+                        TaskEntity("4", "پرداخت قسط ۱ وام تجهیزات مهندسی", "FINANCE", "URGENT", false, "۱۴۰۵/۰۸/۰۷", "۱۴۰۵/۰۸/۰۳", "d1")
                     )
                 )
 
@@ -71,20 +71,22 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 )
 
-                // Seed Expenses
+                // Seed Expenses, Incomes & Transfers
                 dao.insertExpenses(
                     listOf(
-                        ExpenseEntity("e1", "خرید از فروشگاه رفاه", 1250000, "خرید عمومی", "۱۴۰۵/۰۸/۰۵", true, "بانک ملت", "EXPENSE"),
-                        ExpenseEntity("e2", "کافه و میان‌وعده کاری", 350000, "غذا و رستوران", "۱۴۰۵/۰۸/۰۴", false, null, "EXPENSE"),
-                        ExpenseEntity("e3", "شارژ کارت مترو و اسنپ", 180000, "حمل و نقل", "۱۴۰۵/۰۸/۰۳", true, "بانک سامان", "EXPENSE")
+                        ExpenseEntity("e0", "واریز حقوق و پاداش ماهانه", 28500000, "حقوق و دستمزد", "۱۴۰۵/۰۸/۰۱", true, "بانک ملی ایران", "INCOME", "بانک ملی ایران"),
+                        ExpenseEntity("e1", "خرید از فروشگاه رفاه", 1250000, "سوپرمارکت و روزمره", "۱۴۰۵/۰۸/۰۵", true, "بانک ملت", "EXPENSE", "بانک ملت"),
+                        ExpenseEntity("e2", "کافه و میان‌وعده کاری", 350000, "کافه و دخانیات", "۱۴۰۵/۰۸/۰۴", false, null, "EXPENSE", "بلوبانک"),
+                        ExpenseEntity("e3", "شارژ کارت مترو و اسنپ", 180000, "حمل و نقل", "۱۴۰۵/۰۸/۰۳", true, "بانک سامان", "EXPENSE", "بانک سامان"),
+                        ExpenseEntity("e4", "انتقال به کارت پس‌انداز بلوبانک", 3000000, "انتقال داخلی", "۱۴۰۵/۰۸/۰۲", true, "بلوبانک", "TRANSFER", "بلوبانک")
                     )
                 )
 
                 // Seed Debts & Receivables
                 dao.insertDebts(
                     listOf(
-                        DebtEntity("d1", "قسط وام تجهیزات مهندسی", "DEBT", 5000000, 2000000, "۱۴۰۵/۰۸/۱۵", false, "بانک رسالت"),
-                        DebtEntity("d2", "طلب بابت مشاوره پروژه‌ای", "RECEIVABLE", 8500000, 0, "۱۴۰۵/۰۸/۲۰", false, "شرکت آوا پردازش")
+                        DebtEntity("d1", "وام تجهیزات مهندسی (۴ قسط)", "DEBT", 12000000, 3000000, "۱۴۰۵/۰۸/۱۵", false, "بانک رسالت"),
+                        DebtEntity("d2", "طلب بابت مشاوره معماری سیستم", "RECEIVABLE", 8500000, 2500000, "۱۴۰۵/۰۸/۲۰", false, "شرکت آوا پردازش")
                     )
                 )
 
@@ -98,7 +100,9 @@ abstract class AppDatabase : RoomDatabase() {
                         waterGlasses = 6,
                         exerciseMinutes = 45,
                         exerciseType = "بدنسازی و هوازی",
-                        caloriesBurned = 480
+                        caloriesBurned = 480,
+                        dailyCalorieIntake = 1850,
+                        lastScannedFoodSummary = "سینه مرغ گریل و سالاد کینوا (۴۲۰ کالری • ۳۸ گرم پروتئین)"
                     )
                 )
 

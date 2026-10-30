@@ -20,11 +20,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -42,25 +48,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.personallifeos.data.model.ChatMessage
+import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.CyanPrimary
+import com.example.personallifeos.ui.theme.EmeraldAccent
+import com.example.personallifeos.ui.theme.RoseDanger
 import com.example.personallifeos.ui.theme.SurfaceCard
 import com.example.personallifeos.ui.theme.SurfaceDark
 import com.example.personallifeos.ui.theme.TextMuted
 import com.example.personallifeos.ui.theme.TextPrimary
+import com.example.personallifeos.ui.theme.TextSecondary
 
 @Composable
 fun AssistantScreen(
     messages: List<ChatMessage>,
     isLoading: Boolean,
     onSendMessage: (String) -> Unit,
+    onConfirmDraft: (String) -> Unit = {},
+    onCancelDraft: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
 
     val suggestions = listOf(
-        "بررسی وضعیت بودجه و هزینه‌ها",
-        "وظایف فوری و مهم امروز من",
-        "پایش سلامت، آب و خواب شبانه"
+        "این ماه بیشترین هزینه‌ام برای چی بوده؟",
+        "تا آخر ماه چقدر پول قابل‌خرج دارم؟",
+        "۵۰۰ تومن سیگار خریدم",
+        "۱۲۰ تومن اسنپ دادم",
+        "۳ میلیون به علی قرض دادم",
+        "یادم بنداز فردا گزارش مالی رو ارسال کنم"
     )
 
     Column(
@@ -86,13 +101,13 @@ fun AssistantScreen(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "دستیار هوشمند جمینای (Gemini AI)",
+                    text = "دستیار هوشمند جمینای (اجرای کنترل‌شده + فهم محاوره‌ای)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
                 Text(
-                    text = "مشاور هوشمند شخصی برای برنامه‌ریزی و تصمیم‌گیری‌های مالی",
+                    text = "تحلیل ۳۰ روزه، تبدیل تومان محاوره‌ای و کارت پیش‌نمایش قبل از ثبت در دیتابیس",
                     fontSize = 11.sp,
                     color = TextMuted
                 )
@@ -137,7 +152,7 @@ fun AssistantScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.85f)
+                            .fillMaxWidth(0.88f)
                             .clip(
                                 RoundedCornerShape(
                                     topStart = 16.dp,
@@ -147,21 +162,79 @@ fun AssistantScreen(
                                 )
                             )
                             .background(if (isUser) Color(0xFF1E3A8A) else SurfaceCard)
-                            .border(0.5.dp, if (isUser) Color(0x333B82F6) else Color(0x3306B6D4), RoundedCornerShape(16.dp))
+                            .border(
+                                width = if (msg.requiresConfirmation) 1.5.dp else 0.5.dp,
+                                color = when {
+                                    msg.requiresConfirmation -> AmberWarning
+                                    msg.isClarification -> CyanPrimary
+                                    isUser -> Color(0x333B82F6)
+                                    else -> Color(0x3306B6D4)
+                                },
+                                shape = RoundedCornerShape(16.dp)
+                            )
                             .padding(12.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = if (isUser) "شما" else "جمینای AI",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isUser) Color(0xFF93C5FD) else CyanPrimary
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isUser) "شما" else "جمینای AI",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isUser) Color(0xFF93C5FD) else CyanPrimary
+                                )
+                                if (msg.requiresConfirmation) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Security, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("نیازمند تأیید کاربر", fontSize = 10.sp, color = AmberWarning, fontWeight = FontWeight.Bold)
+                                    }
+                                } else if (msg.isClarification) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.HelpOutline, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("پرسش رفع ابهام", fontSize = 10.sp, color = CyanPrimary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
                             Text(
                                 text = msg.text,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = TextPrimary
                             )
+
+                            // Controlled Execution Confirmation Buttons (Section 7.3 of Roadmap)
+                            if (msg.requiresConfirmation && msg.actionDraft != null && !msg.actionDraft.isExecuted && !msg.actionDraft.isCancelled) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 6.dp)
+                                ) {
+                                    Button(
+                                        onClick = { onConfirmDraft(msg.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("ai_confirm_draft_${msg.id}")
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("تأیید و ثبت نهایی", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onCancelDraft(msg.id) },
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.testTag("ai_cancel_draft_${msg.id}")
+                                    ) {
+                                        Text("لغو", color = RoseDanger, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
                             Text(
                                 text = msg.timestamp,
                                 fontSize = 10.sp,
@@ -181,7 +254,7 @@ fun AssistantScreen(
                         modifier = Modifier.padding(8.dp)
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = CyanPrimary, strokeWidth = 2.dp)
-                        Text(text = "در حال پردازش پاسخ توسط هوش مصنوعی...", fontSize = 11.sp, color = TextMuted)
+                        Text(text = "در حال تحلیل قصد تراکنش و داده‌های واقعی...", fontSize = 11.sp, color = TextMuted)
                     }
                 }
             }
@@ -197,7 +270,7 @@ fun AssistantScreen(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
-                placeholder = { Text("پیام خود را بنویسید...", fontSize = 13.sp, color = TextMuted) },
+                placeholder = { Text("مثلاً: ۵۰۰ تومن سیگار خریدم یا بیشترین هزینه‌ام چی بوده؟", fontSize = 12.sp, color = TextMuted) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("chat_input_field"),

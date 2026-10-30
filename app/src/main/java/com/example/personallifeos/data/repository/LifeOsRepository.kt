@@ -1,11 +1,13 @@
 package com.example.personallifeos.data.repository
 
+import com.example.personallifeos.data.local.DebtEntity
 import com.example.personallifeos.data.local.ExpenseEntity
 import com.example.personallifeos.data.local.HabitEntity
 import com.example.personallifeos.data.local.HealthLogEntity
 import com.example.personallifeos.data.local.LifeOsDao
 import com.example.personallifeos.data.local.TaskEntity
 import com.example.personallifeos.data.local.VaultNoteEntity
+import com.example.personallifeos.data.model.DebtItem
 import com.example.personallifeos.data.model.ExpenseItem
 import com.example.personallifeos.data.model.HabitItem
 import com.example.personallifeos.data.model.HealthLog
@@ -25,6 +27,10 @@ class LifeOsRepository(private val dao: LifeOsDao) {
     }
 
     val allExpenses: Flow<List<ExpenseItem>> = dao.getAllExpenses().map { list ->
+        list.map { it.toDomain() }
+    }
+
+    val allDebts: Flow<List<DebtItem>> = dao.getAllDebts().map { list ->
         list.map { it.toDomain() }
     }
 
@@ -58,12 +64,28 @@ class LifeOsRepository(private val dao: LifeOsDao) {
         dao.insertExpense(ExpenseEntity.fromDomain(expense))
     }
 
+    suspend fun updateExpense(expense: ExpenseItem) {
+        dao.updateExpense(ExpenseEntity.fromDomain(expense))
+    }
+
     suspend fun getExpenseByIdempotencyKey(key: String): ExpenseItem? {
         return dao.getExpenseByIdempotencyKey(key)?.toDomain()
     }
 
     suspend fun deleteExpense(expenseId: String) {
         dao.deleteExpense(expenseId)
+    }
+
+    suspend fun insertDebt(debt: DebtItem) {
+        dao.insertDebt(DebtEntity.fromDomain(debt))
+    }
+
+    suspend fun updateDebt(debt: DebtItem) {
+        dao.updateDebt(DebtEntity.fromDomain(debt))
+    }
+
+    suspend fun deleteDebt(debtId: String) {
+        dao.deleteDebt(debtId)
     }
 
     suspend fun updateHealthLog(log: HealthLog) {
@@ -82,6 +104,7 @@ class LifeOsRepository(private val dao: LifeOsDao) {
         dao.clearTasks()
         dao.clearHabits()
         dao.clearExpenses()
+        dao.clearDebts()
         dao.clearVaultNotes()
     }
 }

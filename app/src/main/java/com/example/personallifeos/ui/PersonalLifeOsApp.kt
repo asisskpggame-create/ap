@@ -79,20 +79,21 @@ import com.example.personallifeos.ui.viewmodel.MainViewModel
 import com.example.personallifeos.util.PersianUtils
 
 sealed class Screen(val route: String, val titleFa: String, val icon: ImageVector) {
-    data object Dashboard : Screen("dashboard", "داشبورد", Icons.Default.Dashboard)
-    data object Expenses : Screen("expenses", "مالی و مصارف", Icons.Default.Wallet)
+    data object Expenses : Screen("expenses", "مالی", Icons.Default.Wallet)
     data object Tasks : Screen("tasks", "اهداف و مسیر", Icons.Default.CheckCircle)
-    data object Assistant : Screen("assistant", "جمینای AI", Icons.Default.SmartToy)
-    data object Vault : Screen("vault", "صندوق امن", Icons.Default.Lock)
+    data object Dashboard : Screen("dashboard", "داشبورد", Icons.Default.Dashboard)
+    data object Assistant : Screen("assistant", "AI", Icons.Default.SmartToy)
     data object Health : Screen("health", "سلامت", Icons.Default.Favorite)
+    data object Vault : Screen("vault", "صندوق امن", Icons.Default.Lock)
     data object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
 }
 
-// 4-Pillar Core Navigation of Version 1.6.0R
+// Exact 4-Pillar Core Navigation Order from APP_ROADMAP_FA.md Section 2:
+// 1. مالی | 2. اهداف و مسیر | 3. داشبورد | 4. AI
 val navigationItems = listOf(
-    Screen.Dashboard,
     Screen.Expenses,
     Screen.Tasks,
+    Screen.Dashboard,
     Screen.Assistant
 )
 
@@ -113,6 +114,15 @@ fun PersonalLifeOsApp(
     val tasks by viewModel.tasks.collectAsState()
     val habits by viewModel.habits.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
+    val debts by viewModel.debts.collectAsState()
+    val quickPresets by viewModel.quickPresets.collectAsState()
+    val goals by viewModel.goals.collectAsState()
+    val categoryBudgets by viewModel.categoryBudgets.collectAsState()
+    val reminders by viewModel.reminders.collectAsState()
+    val dashboardVisibleCards by viewModel.dashboardVisibleCards.collectAsState()
+    val pomodoroRemainingSeconds by viewModel.pomodoroRemainingSeconds.collectAsState()
+    val isPomodoroRunning by viewModel.isPomodoroRunning.collectAsState()
+    val completedPomodoroSessions by viewModel.completedPomodoroSessions.collectAsState()
     val healthLog by viewModel.healthLog.collectAsState()
     val vaultNotes by viewModel.vaultNotes.collectAsState()
     val chatMessages by viewModel.messages.collectAsState()
@@ -172,10 +182,10 @@ fun PersonalLifeOsApp(
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .padding(start = 8.dp)
+                                        .padding(start = 6.dp)
                                         .clip(CircleShape)
                                         .background(Color(0x2606B6D4))
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        .padding(horizontal = 7.dp, vertical = 2.dp)
                                 ) {
                                     Text(
                                         text = "v1.6.0R",
@@ -221,6 +231,21 @@ fun PersonalLifeOsApp(
                                 }
                             }
 
+                            // Health & Calorie Module Quick Button
+                            IconButton(
+                                onClick = {
+                                    currentScreen = if (currentScreen == Screen.Health) Screen.Dashboard else Screen.Health
+                                },
+                                modifier = Modifier.testTag("topbar_health_btn")
+                            ) {
+                                Icon(
+                                    Icons.Default.Favorite,
+                                    contentDescription = "سلامت و کالری",
+                                    tint = if (currentScreen == Screen.Health) Color(0xFFEC4899) else TextSecondary
+                                )
+                            }
+
+                            // Encrypted Vault Quick Button
                             IconButton(
                                 onClick = {
                                     currentScreen = if (currentScreen == Screen.Vault) Screen.Dashboard else Screen.Vault
@@ -233,6 +258,8 @@ fun PersonalLifeOsApp(
                                     tint = if (currentScreen == Screen.Vault) CyanPrimary else TextSecondary
                                 )
                             }
+
+                            // Settings Quick Button
                             IconButton(
                                 onClick = {
                                     currentScreen = if (currentScreen == Screen.Settings) Screen.Dashboard else Screen.Settings
@@ -245,6 +272,8 @@ fun PersonalLifeOsApp(
                                     tint = if (currentScreen == Screen.Settings) CyanPrimary else TextSecondary
                                 )
                             }
+
+                            // Voice & SMS Quick Button
                             IconButton(
                                 onClick = { isVoiceModalOpen = true },
                                 modifier = Modifier.testTag("topbar_voice_btn")
@@ -316,6 +345,11 @@ fun PersonalLifeOsApp(
                                 tasks = tasks,
                                 habits = habits,
                                 expenses = expenses,
+                                debts = debts,
+                                goals = goals,
+                                reminders = reminders,
+                                visibleCards = dashboardVisibleCards,
+                                maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
                                 healthLog = healthLog,
                                 onNavigate = { route ->
                                     currentScreen = when (route) {
@@ -330,25 +364,63 @@ fun PersonalLifeOsApp(
                                 },
                                 onOpenVoiceModal = { isVoiceModalOpen = true },
                                 onToggleTask = { viewModel.toggleTask(it) },
-                                onToggleHabit = { viewModel.toggleHabit(it) }
+                                onToggleHabit = { viewModel.toggleHabit(it) },
+                                onSnoozeReminder = { viewModel.snoozeReminder(it) },
+                                onDismissReminder = { viewModel.dismissReminder(it) },
+                                onToggleCardVisibility = { viewModel.toggleDashboardCardVisibility(it) }
                             )
 
                             Screen.Tasks -> TasksScreen(
                                 tasks = tasks,
                                 habits = habits,
+                                goals = goals,
+                                debts = debts,
+                                pomodoroRemainingSeconds = pomodoroRemainingSeconds,
+                                isPomodoroRunning = isPomodoroRunning,
+                                completedPomodoroSessions = completedPomodoroSessions,
                                 onAddTask = { title, cat, prio, due -> viewModel.addTask(title, cat, prio, due) },
                                 onToggleTask = { viewModel.toggleTask(it) },
+                                onPostponeTask = { viewModel.postponeTaskToTomorrow(it) },
                                 onDeleteTask = { viewModel.deleteTask(it) },
+                                onPayLinkedDebtInstallment = { debt, amt -> viewModel.recordDebtInstallmentPayment(debt, amt) },
+                                onAddGoal = { title, desc, date, action, cat -> viewModel.addGoal(title, desc, date, action, cat) },
+                                onUpdateGoalProgress = { id, delta -> viewModel.updateGoalProgress(id, delta) },
+                                onDeleteGoal = { viewModel.deleteGoal(it) },
                                 onToggleHabit = { viewModel.toggleHabit(it) },
-                                onAddHabit = { viewModel.addHabit(it) }
+                                onAddHabit = { viewModel.addHabit(it) },
+                                onTogglePomodoro = { viewModel.togglePomodoroTimer() },
+                                onResetPomodoro = { viewModel.resetPomodoroTimer(it) }
                             )
 
                             Screen.Expenses -> ExpensesScreen(
                                 expenses = expenses,
+                                debts = debts,
+                                quickPresets = quickPresets,
+                                categoryBudgets = categoryBudgets,
                                 configuredBanks = configuredBanks,
                                 pendingReviewSms = pendingReviewSms,
-                                onAddExpense = { title, amount, cat, bank, isSms -> viewModel.addExpense(title, amount, cat, bank, isSms) },
+                                onAddExpense = { title, amount, cat, bank, isSms, txType, acc ->
+                                    viewModel.addExpense(
+                                        title = title,
+                                        amount = amount,
+                                        category = cat,
+                                        bankName = bank,
+                                        isSms = isSms,
+                                        type = txType,
+                                        accountName = acc
+                                    )
+                                },
+                                onUpdateExpense = { viewModel.updateExpenseItem(it) },
                                 onDeleteExpense = { viewModel.deleteExpense(it) },
+                                onTriggerQuickPreset = { viewModel.triggerQuickPreset(it) },
+                                onAddQuickPreset = { title, amt, cat, emoji -> viewModel.addQuickPreset(title, amt, cat, emoji) },
+                                onAddDebt = { title, person, amt, due, type, count ->
+                                    viewModel.addDebt(title, person, amt, due, type, count)
+                                },
+                                onRecordDebtPayment = { debt, amt -> viewModel.recordDebtInstallmentPayment(debt, amt) },
+                                onCreateDebtPlan = { debt, count -> viewModel.createDebtRepaymentPlan(debt, count) },
+                                onSettleDebt = { viewModel.settleDebtCompletely(it) },
+                                onDeleteDebt = { viewModel.deleteDebt(it) },
                                 onParseSms = { sms, sender -> viewModel.parseAndAddSms(sms, sender) },
                                 onConfirmReview = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
                                 onDismissReview = { viewModel.dismissPendingReview() },
@@ -358,7 +430,13 @@ fun PersonalLifeOsApp(
 
                             Screen.Health -> HealthScreen(
                                 healthLog = healthLog,
-                                onUpdateWater = { viewModel.updateWater(it) }
+                                onUpdateWater = { viewModel.updateWater(it) },
+                                onUpdateFullMetrics = { sleep, qual, exMin, exType, burned, intake ->
+                                    viewModel.updateFullHealthMetrics(sleep, qual, exMin, exType, burned, intake)
+                                },
+                                onRecordScannedFoodOrReceipt = { summary, cal, receiptAmt ->
+                                    viewModel.recordScannedFoodOrReceipt(summary, cal, receiptAmt)
+                                }
                             )
 
                             Screen.Vault -> VaultScreen(
@@ -370,7 +448,9 @@ fun PersonalLifeOsApp(
                             Screen.Assistant -> AssistantScreen(
                                 messages = chatMessages,
                                 isLoading = isChatLoading,
-                                onSendMessage = { viewModel.sendChatMessage(it) }
+                                onSendMessage = { viewModel.sendChatMessage(it) },
+                                onConfirmDraft = { viewModel.confirmAiDraft(it) },
+                                onCancelDraft = { viewModel.cancelAiDraft(it) }
                             )
 
                             Screen.Settings -> SettingsScreen(
@@ -378,6 +458,8 @@ fun PersonalLifeOsApp(
                                 onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
                                 onOpenNotificationCenter = { isNotificationCenterOpen = true },
                                 onOpenBankSelector = { isBankSelectorOpen = true },
+                                onExportPlainJson = { viewModel.exportBackupJson() },
+                                onExportEncryptedAes = { viewModel.exportEncryptedAesBackup(it) },
                                 onResetData = { viewModel.resetData() }
                             )
                         }
@@ -391,6 +473,9 @@ fun PersonalLifeOsApp(
             onDismiss = { isVoiceModalOpen = false },
             onAddExpenseFromSms = { smsText ->
                 viewModel.parseAndAddSms(smsText)
+            },
+            onAddColloquialExpense = { title, amt, cat, txType ->
+                viewModel.addExpense(title = title, amount = amt, category = cat, type = txType)
             }
         )
 

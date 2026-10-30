@@ -86,6 +86,7 @@ data class ExpenseEntity(
     val isSmsParsed: Boolean,
     val bankName: String?,
     val type: String = "EXPENSE",
+    val accountName: String? = "حساب پیش‌فرض",
     val idempotencyKey: String? = null
 ) {
     fun toDomain() = ExpenseItem(
@@ -96,6 +97,7 @@ data class ExpenseEntity(
         date = date,
         isSmsParsed = isSmsParsed,
         bankName = bankName,
+        accountName = accountName ?: bankName ?: "حساب پیش‌فرض",
         type = TransactionType.entries.find { it.name.equals(type, ignoreCase = true) } ?: TransactionType.EXPENSE,
         idempotencyKey = idempotencyKey
     )
@@ -110,6 +112,7 @@ data class ExpenseEntity(
             isSmsParsed = expense.isSmsParsed,
             bankName = expense.bankName,
             type = expense.type.name,
+            accountName = expense.accountName ?: expense.bankName ?: "حساب پیش‌فرض",
             idempotencyKey = expense.idempotencyKey
         )
     }
@@ -160,7 +163,9 @@ data class HealthLogEntity(
     val waterGlasses: Int,
     val exerciseMinutes: Int,
     val exerciseType: String,
-    val caloriesBurned: Int
+    val caloriesBurned: Int,
+    val dailyCalorieIntake: Int = 1850,
+    val lastScannedFoodSummary: String? = null
 ) {
     fun toDomain() = HealthLog(
         id = id,
@@ -170,7 +175,9 @@ data class HealthLogEntity(
         waterGlasses = waterGlasses,
         exerciseMinutes = exerciseMinutes,
         exerciseType = exerciseType,
-        caloriesBurned = caloriesBurned
+        caloriesBurned = caloriesBurned,
+        dailyCalorieIntake = dailyCalorieIntake,
+        lastScannedFoodSummary = lastScannedFoodSummary
     )
 
     companion object {
@@ -182,7 +189,9 @@ data class HealthLogEntity(
             waterGlasses = log.waterGlasses,
             exerciseMinutes = log.exerciseMinutes,
             exerciseType = log.exerciseType,
-            caloriesBurned = log.caloriesBurned
+            caloriesBurned = log.caloriesBurned,
+            dailyCalorieIntake = log.dailyCalorieIntake,
+            lastScannedFoodSummary = log.lastScannedFoodSummary
         )
     }
 }
