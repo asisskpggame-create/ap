@@ -41,7 +41,7 @@ class BankSmsReceiver : BroadcastReceiver() {
                     val sender = sms.originatingAddress ?: ""
                     val body = sms.messageBody ?: ""
 
-                    val parsed = IranianBankSmsEngine.parseSms(body, sender)
+                    val parsed = IranianBankSmsEngine.parse(body, sender)
                     if (parsed.isOtpOrServiceMessage || parsed.isFailedTransaction || parsed.amountToman <= 0) {
                         continue
                     }

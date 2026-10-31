@@ -1093,7 +1093,7 @@ fun ExpensesScreen(
                                         .background(CyanPrimary.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Sms, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(24.dp))
+                                    Icon(Icons.Default.Message, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(24.dp))
                                 }
                                 Column {
                                     Text(

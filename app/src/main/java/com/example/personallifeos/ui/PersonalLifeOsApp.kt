@@ -154,7 +154,7 @@ fun PersonalLifeOsApp(
                 0 -> currentScreen = Screen.Dashboard
                 1 -> currentScreen = Screen.Tasks
                 2 -> currentScreen = Screen.Expenses
-                3 -> currentScreen = Screen.Goals
+                3 -> currentScreen = Screen.Assistant
                 4 -> currentScreen = Screen.Settings
             }
             viewModel.clearNavigationTabRequest()
