@@ -28,7 +28,7 @@ const server = http.createServer((req, res) => {
 
   if (url === '/health' || url === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.5.0', versionCode: 6 }));
+    res.end(JSON.stringify({ status: 'ok', framework: 'android', appVersion: '1.7.0R', versionCode: 8 }));
     return;
   }
 
@@ -38,9 +38,9 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       appName: 'Personal Life OS',
-      platform: 'Android Native (Kotlin + Jetpack Compose + Room)',
-      versionName: '1.5.0',
-      versionCode: 6,
+      platform: 'Android Native (Kotlin + Jetpack Compose + Room v4)',
+      versionName: '1.7.0R',
+      versionCode: 8,
       pillars: ['DAILY_LOG', 'GOALS_AND_HABITS', 'HOME', 'AI_ASSISTANT'],
       debugApkReady: debugInfo.exists,
       debugApkSize: debugInfo.sizeMb,
@@ -62,7 +62,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/vnd.android.package-archive',
       'Content-Length': info.bytes,
-      'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.5.0-Debug.apk"'
+      'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.7.0R-TopicsPro-Debug.apk"'
     });
     fs.createReadStream(info.path).pipe(res);
     return;
@@ -78,7 +78,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/vnd.android.package-archive',
       'Content-Length': info.bytes,
-      'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.5.0-Release.apk"'
+      'Content-Disposition': 'attachment; filename="Personal-Life-OS-v1.7.0R-TopicsPro-Release.apk"'
     });
     fs.createReadStream(info.path).pipe(res);
     return;

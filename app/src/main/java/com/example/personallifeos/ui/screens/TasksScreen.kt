@@ -22,18 +22,30 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrackChanges
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,6 +67,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -72,9 +86,15 @@ import androidx.compose.ui.unit.sp
 import com.example.personallifeos.data.model.DebtItem
 import com.example.personallifeos.data.model.GoalItem
 import com.example.personallifeos.data.model.HabitItem
+import com.example.personallifeos.data.model.ReminderRepeatMode
 import com.example.personallifeos.data.model.TaskCategory
 import com.example.personallifeos.data.model.TaskItem
 import com.example.personallifeos.data.model.TaskPriority
+import com.example.personallifeos.data.model.TaskStatus
+import com.example.personallifeos.data.model.TopicDashboardStats
+import com.example.personallifeos.data.model.TopicItem
+import com.example.personallifeos.data.model.TopicPresetTemplate
+import com.example.personallifeos.ui.components.AppSvgIcons
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BorderCyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
@@ -94,14 +114,56 @@ fun TasksScreen(
     habits: List<HabitItem>,
     goals: List<GoalItem> = emptyList(),
     debts: List<DebtItem> = emptyList(),
+    topics: List<TopicItem> = emptyList(),
+    initialOpenTopicId: String? = null,
+    onConsumeDeepLinkTopic: () -> Unit = {},
     pomodoroRemainingSeconds: Int = 1500,
     isPomodoroRunning: Boolean = false,
     completedPomodoroSessions: Int = 3,
     onAddTask: (String, TaskCategory, TaskPriority, String) -> Unit,
+    onAddAdvancedTask: (
+        title: String,
+        category: TaskCategory,
+        priority: TaskPriority,
+        dueDate: String,
+        description: String,
+        topicId: String?,
+        isMajorMission: Boolean,
+        reminderDateTime: String,
+        reminderEpochMillis: Long,
+        reminderRepeatMode: ReminderRepeatMode,
+        subtaskTitles: List<String>
+    ) -> Unit = { title, cat, prio, due, _, _, _, _, _, _, _ ->
+        onAddTask(title, cat, prio, due)
+    },
     onToggleTask: (TaskItem) -> Unit,
+    onUpdateTaskStatus: (TaskItem, TaskStatus) -> Unit = { t, _ -> onToggleTask(t) },
+    onToggleMajorMission: (TaskItem) -> Unit = {},
+    onAddSubtask: (TaskItem, String) -> Unit = { _, _ -> },
+    onToggleSubtask: (TaskItem, String) -> Unit = { _, _ -> },
+    onMoveTaskToTopic: (TaskItem, String?) -> Unit = { _, _ -> },
+    onTriggerRealNotificationForTask: (TaskItem) -> Unit = {},
     onPostponeTask: (TaskItem) -> Unit = {},
     onDeleteTask: (String) -> Unit,
     onPayLinkedDebtInstallment: (DebtItem, Long) -> Unit = { _, _ -> },
+    onAddTopic: (
+        name: String,
+        description: String,
+        iconEmoji: String,
+        colorHex: Long,
+        startDate: String,
+        endDate: String,
+        priority: TaskPriority,
+        categoryTag: String,
+        reminderEnabled: Boolean,
+        reminderTime: String
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
+    onCreateTopicFromTemplate: (TopicPresetTemplate) -> Unit = {},
+    onToggleTopicArchive: (TopicItem) -> Unit = {},
+    onToggleTopicReminder: (TopicItem) -> Unit = {},
+    onDuplicateTopicAsTemplate: (TopicItem) -> Unit = {},
+    onUpdateTopicNote: (TopicItem, String) -> Unit = { _, _ -> },
+    onDeleteTopicConfirmed: (TopicItem, Boolean) -> Unit = { _, _ -> },
     onAddGoal: (String, String, String, String, TaskCategory) -> Unit = { _, _, _, _, _ -> },
     onUpdateGoalProgress: (String, Int) -> Unit = { _, _ -> },
     onDeleteGoal: (String) -> Unit = {},
@@ -114,17 +176,71 @@ fun TasksScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<TaskCategory?>(null) }
-    var showAddTaskDialog by remember { mutableStateOf(false) }
+    var taskScopeFilter by remember { mutableStateOf("ALL") } // ALL, INDEPENDENT, TOPIC, TODAY, TOMORROW, OVERDUE
+
+    // Chooser Sheet & Workspace Dialog states
+    var showChooserSheet by remember { mutableStateOf(false) }
+    var chooserInitialMode by remember { mutableIntStateOf(0) }
+    var chooserPreselectedTopicId by remember { mutableStateOf<String?>(null) }
+    var activeWorkspaceTopicId by remember { mutableStateOf<String?>(null) }
+    var topicPendingDelete by remember { mutableStateOf<TopicItem?>(null) }
+
+    // Topic Filter & Sort states
+    var topicArchiveFilter by remember { mutableStateOf("ACTIVE") } // ACTIVE, ARCHIVED, ALL
+    var topicSortMode by remember { mutableStateOf("PRIORITY") } // PRIORITY, PROGRESS, DATE
+
     var showAddHabitDialog by remember { mutableStateOf(false) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
     var selectedJalaliDay by remember { mutableIntStateOf(5) }
 
-    val filteredTasks = remember(tasks, searchQuery, selectedCategory) {
+    // Handle Deep-Link from Android System Reminder Notification
+    LaunchedEffect(initialOpenTopicId) {
+        if (!initialOpenTopicId.isNullOrBlank()) {
+            activeWorkspaceTopicId = initialOpenTopicId
+            onConsumeDeepLinkTopic()
+        }
+    }
+
+    val filteredTasks = remember(tasks, searchQuery, selectedCategory, taskScopeFilter) {
         tasks.filter { t ->
-            val matchesSearch = PersianUtils.normalizePersianText(t.title)
-                .contains(PersianUtils.normalizePersianText(searchQuery))
+            val normQ = PersianUtils.normalizePersianText(searchQuery)
+            val matchesSearch = normQ.isBlank() ||
+                PersianUtils.normalizePersianText(t.title).contains(normQ) ||
+                PersianUtils.normalizePersianText(t.description).contains(normQ)
             val matchesCategory = selectedCategory == null || t.category == selectedCategory
-            matchesSearch && matchesCategory
+            val matchesScope = when (taskScopeFilter) {
+                "INDEPENDENT" -> t.topicId == null
+                "TOPIC" -> t.topicId != null
+                "TODAY" -> t.dueDate == "۱۴۰۵/۰۸/۰۵"
+                "TOMORROW" -> t.dueDate == "۱۴۰۵/۰۸/۰۶"
+                "OVERDUE" -> !t.completed && t.status != TaskStatus.CANCELLED && t.dueDate < "۱۴۰۵/۰۸/۰۵"
+                else -> true
+            }
+            matchesSearch && matchesCategory && matchesScope
+        }
+    }
+
+    val filteredAndSortedTopics = remember(topics, tasks, searchQuery, topicArchiveFilter, topicSortMode) {
+        val normQ = PersianUtils.normalizePersianText(searchQuery)
+        val filtered = topics.filter { topic ->
+            val matchesArchive = when (topicArchiveFilter) {
+                "ACTIVE" -> !topic.isArchived
+                "ARCHIVED" -> topic.isArchived
+                else -> true
+            }
+            val topicTasks = tasks.filter { it.topicId == topic.id }
+            val matchesQuery = normQ.isBlank() ||
+                PersianUtils.normalizePersianText(topic.name).contains(normQ) ||
+                PersianUtils.normalizePersianText(topic.categoryTag).contains(normQ) ||
+                topicTasks.any { PersianUtils.normalizePersianText(it.title).contains(normQ) }
+            matchesArchive && matchesQuery
+        }
+        when (topicSortMode) {
+            "PROGRESS" -> filtered.sortedByDescending { topic ->
+                TopicDashboardStats.compute(topic.id, tasks).progressPercent
+            }
+            "DATE" -> filtered.sortedBy { it.startDate }
+            else -> filtered.sortedBy { it.priority.ordinal }
         }
     }
 
@@ -132,21 +248,27 @@ fun TasksScreen(
         modifier = modifier.testTag("tasks_screen"),
         containerColor = Color.Transparent,
         floatingActionButton = {
-            if (selectedTab in 0..2) {
-                FloatingActionButton(
-                    onClick = {
-                        when (selectedTab) {
-                            0 -> showAddTaskDialog = true
-                            1 -> showAddGoalDialog = true
-                            2 -> showAddHabitDialog = true
+            FloatingActionButton(
+                onClick = {
+                    when (selectedTab) {
+                        0, 1 -> {
+                            chooserInitialMode = 0
+                            chooserPreselectedTopicId = null
+                            showChooserSheet = true
                         }
-                    },
-                    containerColor = CyanPrimary,
-                    contentColor = Color.Black,
-                    modifier = Modifier.testTag("add_item_fab")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "افزودن")
-                }
+                        2 -> showAddGoalDialog = true
+                        3 -> showAddHabitDialog = true
+                        else -> {
+                            chooserInitialMode = 0
+                            showChooserSheet = true
+                        }
+                    }
+                },
+                containerColor = CyanPrimary,
+                contentColor = Color.Black,
+                modifier = Modifier.testTag("add_item_fab")
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "افزودن وظیفه یا تاپیک")
             }
         }
     ) { innerPadding ->
@@ -185,37 +307,61 @@ fun TasksScreen(
                     onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            text = "اهداف و پروژه‌ها (${PersianUtils.formatPersianNumber(goals.size.toLong())})",
+                            text = "تاپیک‌ها و مأموریت‌ها (${PersianUtils.formatPersianNumber(topics.count { !it.isArchived }.toLong())})",
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selectedTab == 1) CyanPrimary else TextSecondary,
+                            color = if (selectedTab == 1) EmeraldAccent else TextSecondary,
                             fontSize = 12.sp
                         )
                     },
-                    modifier = Modifier.testTag("tab_goals")
+                    modifier = Modifier.testTag("tab_topics")
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     text = {
                         Text(
-                            text = "عادت‌ها و تقویم شمسی (${PersianUtils.formatPersianNumber(habits.size.toLong())})",
+                            text = "اهداف بلندمدت (${PersianUtils.formatPersianNumber(goals.size.toLong())})",
                             fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
                             color = if (selectedTab == 2) CyanPrimary else TextSecondary,
                             fontSize = 12.sp
                         )
                     },
-                    modifier = Modifier.testTag("tab_habits")
+                    modifier = Modifier.testTag("tab_goals")
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                     text = {
                         Text(
-                            text = "پومودورو و تمرکز 🍅",
+                            text = "عادت‌ها و تقویم شمسی (${PersianUtils.formatPersianNumber(habits.size.toLong())})",
                             fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal,
                             color = if (selectedTab == 3) CyanPrimary else TextSecondary,
                             fontSize = 12.sp
                         )
+                    },
+                    modifier = Modifier.testTag("tab_habits")
+                )
+                Tab(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = if (selectedTab == 4) CyanPrimary else TextSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "پومودورو و تمرکز",
+                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 4) CyanPrimary else TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
                     },
                     modifier = Modifier.testTag("tab_pomodoro")
                 )
@@ -223,17 +369,17 @@ fun TasksScreen(
 
             when (selectedTab) {
                 // =============================================================
-                // TAB 0: کارها و برنامه امروز (Tasks + Linked Debt Installments)
+                // TAB 0: کارها، مأموریت‌ها و برنامه امروز (Independent + Topic Tasks)
                 // =============================================================
                 0 -> {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("جستجو در وظایف و اقساط متصل...", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text("جستجو در وظایف، تاپیک‌ها و اقساط...", color = TextMuted, fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("task_search_field"),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -245,14 +391,99 @@ fun TasksScreen(
                         singleLine = true
                     )
 
+                    // Topics Quick Strip inside Tasks Tab with SVG Vector Icons
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0x2610B981))
+                                    .border(1.dp, EmeraldAccent, RoundedCornerShape(12.dp))
+                                    .clickable { selectedTab = 1 }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                                    .testTag("open_topics_center_chip")
+                            ) {
+                                Icon(
+                                    Icons.Default.FolderSpecial,
+                                    contentDescription = null,
+                                    tint = EmeraldAccent,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "مرکز تاپیک‌ها (${PersianUtils.formatPersianNumber(topics.count { !it.isArchived }.toLong())})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = EmeraldAccent
+                                )
+                            }
+                        }
+                        items(topics.filter { !it.isArchived }, key = { it.id }) { topic ->
+                            val stats = TopicDashboardStats.compute(topic.id, tasks)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(SurfaceCard)
+                                    .border(0.8.dp, Color(topic.colorHex), RoundedCornerShape(12.dp))
+                                    .clickable { activeWorkspaceTopicId = topic.id }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                                    .testTag("quick_topic_chip_${topic.id}")
+                            ) {
+                                AppSvgIcons.TopicSvgIcon(
+                                    iconKey = topic.iconEmoji,
+                                    tint = Color(topic.colorHex),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "${topic.name} (${PersianUtils.formatPersianNumber(stats.progressPercent.toLong())}٪)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+                    }
+
+                    // Scope & Deadline Filter Chips (Independent, Topic, Today, Tomorrow, Overdue)
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        items(
+                            listOf(
+                                "ALL" to "همه (${PersianUtils.formatPersianNumber(tasks.size.toLong())})",
+                                "INDEPENDENT" to "مستقل (${PersianUtils.formatPersianNumber(tasks.count { it.topicId == null }.toLong())})",
+                                "TOPIC" to "متصل به تاپیک (${PersianUtils.formatPersianNumber(tasks.count { it.topicId != null }.toLong())})",
+                                "TODAY" to "امروز",
+                                "TOMORROW" to "فردا",
+                                "OVERDUE" to "عقب‌افتاده (${PersianUtils.formatPersianNumber(tasks.count { !it.completed && it.dueDate < "۱۴۰۵/۰۸/۰۵" }.toLong())})"
+                            )
+                        ) { (key, label) ->
+                            CategoryChip(
+                                title = label,
+                                selected = taskScopeFilter == key,
+                                onClick = { taskScopeFilter = key }
+                            )
+                        }
+                    }
+
+                    // Category Filter Row
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(bottom = 6.dp)
                     ) {
                         item {
                             CategoryChip(
-                                title = "همه",
+                                title = "همه دسته‌ها",
                                 selected = selectedCategory == null,
                                 onClick = { selectedCategory = null }
                             )
@@ -273,10 +504,14 @@ fun TasksScreen(
                     ) {
                         items(filteredTasks, key = { it.id }) { task ->
                             val linkedDebt = debts.find { it.id == task.linkedDebtId }
+                            val parentTopic = topics.find { it.id == task.topicId }
                             TaskRowItem(
                                 task = task,
+                                parentTopic = parentTopic,
                                 linkedDebt = linkedDebt,
                                 onToggle = { onToggleTask(task) },
+                                onOpenParentTopic = { topic -> activeWorkspaceTopicId = topic.id },
+                                onTriggerNotification = { onTriggerRealNotificationForTask(task) },
                                 onPostpone = { onPostponeTask(task) },
                                 onPayInstallment = { debt ->
                                     val instAmount = maxOf(100_000L, debt.remainingAmount / 4)
@@ -289,9 +524,323 @@ fun TasksScreen(
                 }
 
                 // =============================================================
-                // TAB 1: اهداف بلندمدت و پروژه‌ها (Goals & Next Action)
+                // TAB 1: مرکز مدیریت تاپیک‌ها (Topics & Mission Management Center)
                 // =============================================================
                 1 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Search across Topics & Tasks
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("جستجو در نام تاپیک‌ها، برچسب‌ها یا مأموریت‌ها...", color = TextMuted, fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = EmeraldAccent) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("topic_search_field"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = SurfaceCard,
+                                unfocusedContainerColor = SurfaceCard,
+                                focusedBorderColor = EmeraldAccent,
+                                unfocusedBorderColor = Color(0x26FFFFFF)
+                            ),
+                            singleLine = true
+                        )
+
+                        // Filter (Active / Archived / All) + Sort (Priority / Progress / Date) + Quick Add Topic Button
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                CategoryChip(
+                                    title = "فعال (${PersianUtils.formatPersianNumber(topics.count { !it.isArchived }.toLong())})",
+                                    selected = topicArchiveFilter == "ACTIVE",
+                                    onClick = { topicArchiveFilter = "ACTIVE" }
+                                )
+                            }
+                            item {
+                                CategoryChip(
+                                    title = "آرشیوشده (${PersianUtils.formatPersianNumber(topics.count { it.isArchived }.toLong())})",
+                                    selected = topicArchiveFilter == "ARCHIVED",
+                                    onClick = { topicArchiveFilter = "ARCHIVED" }
+                                )
+                            }
+                            item {
+                                CategoryChip(
+                                    title = "همه تاپیک‌ها",
+                                    selected = topicArchiveFilter == "ALL",
+                                    onClick = { topicArchiveFilter = "ALL" }
+                                )
+                            }
+                            item {
+                                val sortLabel = when (topicSortMode) {
+                                    "PROGRESS" -> "مرتب‌سازی: پیشرفت"
+                                    "DATE" -> "مرتب‌سازی: تاریخ"
+                                    else -> "مرتب‌سازی: اولویت"
+                                }
+                                CategoryChip(
+                                    title = sortLabel,
+                                    selected = true,
+                                    onClick = {
+                                        topicSortMode = when (topicSortMode) {
+                                            "PRIORITY" -> "PROGRESS"
+                                            "PROGRESS" -> "DATE"
+                                            else -> "PRIORITY"
+                                        }
+                                    }
+                                )
+                            }
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(EmeraldAccent)
+                                        .clickable {
+                                            chooserInitialMode = 2
+                                            showChooserSheet = true
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                                        .testTag("create_topic_direct_btn")
+                                ) {
+                                    Text(
+                                        text = "+ تاپیک یا قالب جدید",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                        }
+
+                        // Weekly & Overall Topics Progress Summary Banner
+                        val totalTopicTasks = tasks.count { it.topicId != null && it.status != TaskStatus.CANCELLED }
+                        val completedTopicTasks = tasks.count { it.topicId != null && (it.completed || it.status == TaskStatus.COMPLETED) }
+                        val overallTopicProgress = if (totalTopicTasks > 0) (completedTopicTasks * 100) / totalTopicTasks else 0
+
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "آمار کل پیشرفت مأموریت‌های تاپیک‌ها (هفتگی / ماهانه)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "${PersianUtils.formatPersianNumber(completedTopicTasks.toLong())} مأموریت تکمیل‌شده از ${PersianUtils.formatPersianNumber(totalTopicTasks.toLong())} مأموریت ثبت‌شده",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                                Text(
+                                    text = "${PersianUtils.formatPersianNumber(overallTopicProgress.toLong())}٪",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = EmeraldAccent
+                                )
+                            }
+                        }
+
+                        // Topics List with SVG Vector Icons
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(filteredAndSortedTopics, key = { it.id }) { topic ->
+                                val stats = TopicDashboardStats.compute(topic.id, tasks)
+                                val brandColor = Color(topic.colorHex)
+
+                                Card(
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, brandColor.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                                        .clickable { activeWorkspaceTopicId = topic.id }
+                                        .testTag("topic_card_${topic.id}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(brandColor.copy(alpha = 0.14f), SurfaceCard)
+                                                )
+                                            )
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(46.dp)
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(brandColor.copy(alpha = 0.22f))
+                                                        .border(1.dp, brandColor, RoundedCornerShape(14.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    AppSvgIcons.TopicSvgIcon(
+                                                        iconKey = topic.iconEmoji,
+                                                        tint = brandColor,
+                                                        contentDescription = topic.name,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                }
+                                                Column {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = topic.name,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            fontSize = 15.sp,
+                                                            color = TextPrimary
+                                                        )
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(6.dp))
+                                                                .background(brandColor.copy(alpha = 0.2f))
+                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = topic.priority.titleFa,
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = brandColor
+                                                            )
+                                                        }
+                                                    }
+                                                    Text(
+                                                        text = topic.description,
+                                                        fontSize = 11.sp,
+                                                        color = TextSecondary
+                                                    )
+                                                }
+                                            }
+
+                                            // Quick Actions on Topic Card
+                                            Row {
+                                                IconButton(
+                                                    onClick = { onDuplicateTopicAsTemplate(topic) },
+                                                    modifier = Modifier.size(30.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ContentCopy,
+                                                        contentDescription = "کپی تاپیک به‌عنوان الگو",
+                                                        tint = CyanPrimary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { onToggleTopicArchive(topic) },
+                                                    modifier = Modifier.size(30.dp)
+                                                ) {
+                                                    Icon(
+                                                        if (topic.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
+                                                        contentDescription = "آرشیو / بازیابی",
+                                                        tint = AmberWarning,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { topicPendingDelete = topic },
+                                                    modifier = Modifier.size(30.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = "حذف تاپیک",
+                                                        tint = RoseDanger,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Progress Row & Real Progress Bar
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "وظایف: ${PersianUtils.formatPersianNumber(stats.completedTasks.toLong())} تکمیل از ${PersianUtils.formatPersianNumber(stats.totalTasks.toLong())} • باقی‌مانده: ${PersianUtils.formatPersianNumber(stats.remainingTasks.toLong())}" +
+                                                    (if (stats.overdueTasks > 0) " • ${PersianUtils.formatPersianNumber(stats.overdueTasks.toLong())} عقب‌افتاده" else ""),
+                                                fontSize = 11.sp,
+                                                color = if (stats.overdueTasks > 0) RoseDanger else TextSecondary
+                                            )
+                                            Text(
+                                                text = "${PersianUtils.formatPersianNumber(stats.progressPercent.toLong())}٪",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = brandColor
+                                            )
+                                        }
+
+                                        LinearProgressIndicator(
+                                            progress = { stats.progressPercent / 100f },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
+                                            color = brandColor,
+                                            trackColor = SurfaceDark
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Schedule, contentDescription = null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "نزدیک‌ترین مهلت: ${stats.nearestDeadline ?: (topic.endDate ?: "ندارد")}",
+                                                    fontSize = 10.sp,
+                                                    color = TextMuted
+                                                )
+                                            }
+                                            Text(
+                                                text = "ورود به داشبورد تاپیک ←",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = brandColor
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // TAB 2: اهداف بلندمدت و پروژه‌ها (Goals & Next Action)
+                // =============================================================
+                2 -> {
                     LazyColumn(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -348,15 +897,18 @@ fun TasksScreen(
                                         trackColor = SurfaceDark
                                     )
 
-                                    Box(
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(SurfaceDark)
                                             .padding(10.dp)
                                     ) {
+                                        Icon(Icons.Default.TrackChanges, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "🎯 اقدام بعدی: ${goal.nextAction}",
+                                            text = "اقدام بعدی: ${goal.nextAction}",
                                             fontSize = 11.sp,
                                             color = CyanPrimary,
                                             fontWeight = FontWeight.Bold
@@ -387,15 +939,14 @@ fun TasksScreen(
                 }
 
                 // =============================================================
-                // TAB 2: عادت‌ها و تقویم تعاملی شمسی با نقشه حرارتی (Jalali Heatmap)
+                // TAB 3: عادت‌ها و تقویم تعاملی شمسی با نقشه حرارتی (Jalali Heatmap)
                 // =============================================================
-                2 -> {
+                3 -> {
                     LazyColumn(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        // Interactive 30-Day Jalali Calendar Heatmap Card (v1.2.0 Super-App Feature)
                         item {
                             Card(
                                 shape = RoundedCornerShape(20.dp),
@@ -410,18 +961,17 @@ fun TasksScreen(
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     Text(
-                                        text = "تقویم تعاملی شمسی و نقشه حرارتی استمرار (آبان ۱۴۰۵)",
+                                        text = "تقویم تعاملی شمسی و نمای تقویمی مأموریت‌ها (آبان ۱۴۰۵)",
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary,
                                         fontSize = 14.sp
                                     )
                                     Text(
-                                        text = "شدت رنگ هر روز نشان‌دهنده امتیاز تکمیل عادت‌ها و کارهای آن روز است. برای مشاهده جزئیات، روز را لمس کنید:",
+                                        text = "شدت رنگ هر روز نشان‌دهنده امتیاز تکمیل عادت‌ها و مأموریت‌های آن روز است. برای مشاهده مأموریت‌های هر روز، روی آن لمس کنید:",
                                         fontSize = 11.sp,
                                         color = TextSecondary
                                     )
 
-                                    // 5 rows of 6 days = 30 days of Aban
                                     for (row in 0 until 5) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -461,12 +1011,19 @@ fun TasksScreen(
                                         }
                                     }
 
-                                    Text(
-                                        text = "📅 وضعیت ${PersianUtils.formatPersianNumber(selectedJalaliDay.toLong())} آبان ۱۴۰۵: امتیاز استمرار بالا • ${PersianUtils.formatPersianNumber(habits.count { it.completedToday }.toLong())} عادت فعال ثبت‌شده",
-                                        fontSize = 11.sp,
-                                        color = CyanPrimary,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    val formattedDay = String.format(Locale.US, "%02d", selectedJalaliDay)
+                                    val selectedDateFa = PersianUtils.formatPersianNumber("1405/08/$formattedDay")
+                                    val dayTasksCount = tasks.count { it.dueDate == selectedDateFa }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "وضعیت ${PersianUtils.formatPersianNumber(selectedJalaliDay.toLong())} آبان ۱۴۰۵: ${PersianUtils.formatPersianNumber(dayTasksCount.toLong())} مأموریت زمان‌بندی‌شده • ${PersianUtils.formatPersianNumber(habits.count { it.completedToday }.toLong())} عادت فعال",
+                                            fontSize = 11.sp,
+                                            color = CyanPrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -504,11 +1061,15 @@ fun TasksScreen(
                                                 fontWeight = FontWeight.Medium,
                                                 color = TextPrimary
                                             )
-                                            Text(
-                                                text = "استمرار (Streak): ${PersianUtils.formatPersianNumber(habit.streak.toLong())} روز پیاپی 🔥",
-                                                fontSize = 12.sp,
-                                                color = EmeraldAccent
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "استمرار (Streak): ${PersianUtils.formatPersianNumber(habit.streak.toLong())} روز پیاپی",
+                                                    fontSize = 12.sp,
+                                                    color = EmeraldAccent
+                                                )
+                                            }
                                         }
                                     }
 
@@ -520,7 +1081,7 @@ fun TasksScreen(
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Text(
-                                            text = if (habit.completedToday) "انجام شد ✓" else "ثبت برای امروز",
+                                            text = if (habit.completedToday) "انجام شد" else "ثبت برای امروز",
                                             color = if (habit.completedToday) Color.Black else TextPrimary,
                                             fontSize = 12.sp
                                         )
@@ -532,9 +1093,9 @@ fun TasksScreen(
                 }
 
                 // =============================================================
-                // TAB 3: تایمر تمرکز و پومودورو (Pomodoro Focus Timer)
+                // TAB 4: تایمر تمرکز و پومودورو (Pomodoro Focus Timer)
                 // =============================================================
-                3 -> {
+                4 -> {
                     val mins = pomodoroRemainingSeconds / 60
                     val secs = pomodoroRemainingSeconds % 60
                     val formattedTime = String.format(Locale.US, "%02d:%02d", mins, secs)
@@ -585,7 +1146,7 @@ fun TasksScreen(
                                     )
 
                                     Text(
-                                        text = "جلسات تکمیل‌شده امروز: ${PersianUtils.formatPersianNumber(completedPomodoroSessions.toLong())} پومودورو 🍅",
+                                        text = "جلسات تکمیل‌شده امروز: ${PersianUtils.formatPersianNumber(completedPomodoroSessions.toLong())} پومودورو",
                                         fontSize = 12.sp,
                                         color = AmberWarning,
                                         fontWeight = FontWeight.Bold
@@ -638,73 +1199,93 @@ fun TasksScreen(
         }
     }
 
-    // Add Task Dialog
-    if (showAddTaskDialog) {
-        var taskTitle by remember { mutableStateOf("") }
-        var taskCategory by remember { mutableStateOf(TaskCategory.WORK) }
-        var taskPriority by remember { mutableStateOf(TaskPriority.MEDIUM) }
-        var taskDueDate by remember { mutableStateOf("۱۴۰۵/۰۸/۱۰") }
+    // 1. Modern Add Button Bottom-Sheet Chooser (New Task vs New Topic)
+    AddTaskOrTopicChooserSheet(
+        isOpen = showChooserSheet,
+        topics = topics,
+        initialSelectedTopicId = chooserPreselectedTopicId,
+        initialMode = chooserInitialMode,
+        onDismiss = {
+            showChooserSheet = false
+            chooserPreselectedTopicId = null
+        },
+        onCreateTask = { title, cat, prio, due, desc, topId, isMajor, remTime, remEpoch, repMode, subtasks ->
+            onAddAdvancedTask(title, cat, prio, due, desc, topId, isMajor, remTime, remEpoch, repMode, subtasks)
+        },
+        onCreateTopic = { name, desc, icon, color, start, end, prio, tag, remEn, remTime ->
+            onAddTopic(name, desc, icon, color, start, end, prio, tag, remEn, remTime)
+        },
+        onCreateTopicFromTemplate = { tpl ->
+            onCreateTopicFromTemplate(tpl)
+        }
+    )
 
+    // 2. Dedicated Topic Workspace & Mini-Dashboard Dialog
+    val activeTopic = topics.find { it.id == activeWorkspaceTopicId }
+    if (activeTopic != null) {
+        val topicTasks = tasks.filter { it.topicId == activeTopic.id }
+        TopicWorkspaceDialog(
+            topic = activeTopic,
+            allTopics = topics,
+            topicTasks = topicTasks,
+            onDismiss = { activeWorkspaceTopicId = null },
+            onOpenNewTaskForTopic = { topId ->
+                chooserPreselectedTopicId = topId
+                chooserInitialMode = 1
+                showChooserSheet = true
+            },
+            onUpdateTaskStatus = onUpdateTaskStatus,
+            onToggleMajorMission = onToggleMajorMission,
+            onAddSubtask = onAddSubtask,
+            onToggleSubtask = onToggleSubtask,
+            onMoveTaskToTopic = onMoveTaskToTopic,
+            onTriggerRealNotificationForTask = onTriggerRealNotificationForTask,
+            onDeleteTask = onDeleteTask,
+            onToggleTopicReminder = onToggleTopicReminder,
+            onToggleTopicArchive = onToggleTopicArchive,
+            onDuplicateTopicAsTemplate = onDuplicateTopicAsTemplate,
+            onUpdateTopicNote = onUpdateTopicNote,
+            onDeleteTopicConfirmed = onDeleteTopicConfirmed
+        )
+    }
+
+    // Topic Delete Confirmation from Topics Center
+    topicPendingDelete?.let { delTopic ->
+        val count = tasks.count { it.topicId == delTopic.id }
         AlertDialog(
-            onDismissRequest = { showAddTaskDialog = false },
-            title = { Text("افزودن وظیفه جدید", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { topicPendingDelete = null },
+            title = { Text("تأیید حذف تاپیک «${delTopic.name}»", fontWeight = FontWeight.Bold, color = RoseDanger) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = taskTitle,
-                        onValueChange = { taskTitle = it },
-                        label = { Text("عنوان وظیفه") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("new_task_title_input"),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = taskDueDate,
-                        onValueChange = { taskDueDate = it },
-                        label = { Text("موعد انجام (تاریخ)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Text("اولویت:", fontSize = 12.sp, color = TextMuted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TaskPriority.entries.forEach { p ->
-                            Button(
-                                onClick = { taskPriority = p },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (taskPriority == p) CyanPrimary else SurfaceCard
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = p.titleFa,
-                                    fontSize = 11.sp,
-                                    color = if (taskPriority == p) Color.Black else TextPrimary
-                                )
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = "آیا از حذف این تاپیک اطمینان دارید؟ (${PersianUtils.formatPersianNumber(count.toLong())} وظیفه وابسته)",
+                    fontSize = 12.sp,
+                    color = TextPrimary
+                )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (taskTitle.isNotBlank()) {
-                            onAddTask(taskTitle, taskCategory, taskPriority, taskDueDate)
-                            showAddTaskDialog = false
-                        }
+                        onDeleteTopicConfirmed(delTopic, false)
+                        topicPendingDelete = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
-                    modifier = Modifier.testTag("confirm_add_task_btn")
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)
                 ) {
-                    Text("ثبت وظیفه", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("حذف تاپیک (حفظ وظایف به‌صورت مستقل)", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddTaskDialog = false }) {
-                    Text("انصراف", color = TextSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(
+                        onClick = {
+                            onDeleteTopicConfirmed(delTopic, true)
+                            topicPendingDelete = null
+                        }
+                    ) {
+                        Text("حذف کامل با وظایف", color = RoseDanger, fontSize = 11.sp)
+                    }
+                    TextButton(onClick = { topicPendingDelete = null }) {
+                        Text("انصراف", color = TextSecondary, fontSize = 11.sp)
+                    }
                 }
             },
             containerColor = SurfaceDark
@@ -794,8 +1375,11 @@ fun TasksScreen(
 @Composable
 fun TaskRowItem(
     task: TaskItem,
+    parentTopic: TopicItem? = null,
     linkedDebt: DebtItem? = null,
     onToggle: () -> Unit,
+    onOpenParentTopic: (TopicItem) -> Unit = {},
+    onTriggerNotification: () -> Unit = {},
     onPostpone: () -> Unit = {},
     onPayInstallment: (DebtItem) -> Unit = {},
     onDelete: () -> Unit
@@ -824,8 +1408,76 @@ fun TaskRowItem(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { onToggle() }
+                        .clickable {
+                            if (parentTopic != null) onOpenParentTopic(parentTopic) else onToggle()
+                        }
                 ) {
+                    // Topic SVG Badge vs Independent SVG Badge Row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    ) {
+                        if (parentTopic != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(parentTopic.colorHex).copy(alpha = 0.2f))
+                                    .clickable { onOpenParentTopic(parentTopic) }
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                AppSvgIcons.TopicSvgIcon(
+                                    iconKey = parentTopic.iconEmoji,
+                                    tint = Color(parentTopic.colorHex),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = parentTopic.name,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(parentTopic.colorHex)
+                                )
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0x1FFFFFFF))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.PushPin, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "وظیفه مستقل",
+                                    fontSize = 10.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        if (task.isMajorMission) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("اصلی", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = AmberWarning)
+                            }
+                        }
+
+                        Text(
+                            text = "• ${task.status.titleFa}",
+                            fontSize = 10.sp,
+                            color = when (task.status) {
+                                TaskStatus.COMPLETED -> EmeraldAccent
+                                TaskStatus.IN_PROGRESS -> CyanPrimary
+                                TaskStatus.CANCELLED -> RoseDanger
+                                TaskStatus.TODO -> TextMuted
+                            }
+                        )
+                    }
+
                     Text(
                         text = task.title,
                         style = MaterialTheme.typography.bodyLarge,
@@ -853,21 +1505,41 @@ fun TaskRowItem(
                         Text("•", color = TextMuted, fontSize = 11.sp)
                         Text(
                             text = "موعد: ${task.dueDate}",
-                            color = TextMuted,
+                            color = if (!task.completed && task.dueDate < "۱۴۰۵/۰۸/۰۵") RoseDanger else TextMuted,
                             fontSize = 11.sp
                         )
+                        if (task.subtasks.isNotEmpty()) {
+                            val doneSub = task.subtasks.count { it.isCompleted }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Checklist, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "${PersianUtils.formatPersianNumber(doneSub.toLong())}/${PersianUtils.formatPersianNumber(task.subtasks.size.toLong())}",
+                                    color = CyanPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         if (task.linkedDebtId != null) {
                             Text("•", color = TextMuted, fontSize = 11.sp)
-                            Text(
-                                text = "🔗 متصل به بدهی",
-                                color = AmberWarning,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Link, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "متصل به بدهی",
+                                    color = AmberWarning,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
 
+                IconButton(onClick = onTriggerNotification, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.NotificationsActive, contentDescription = "ارسال اعلان یادآوری", tint = EmeraldAccent, modifier = Modifier.size(18.dp))
+                }
                 IconButton(onClick = onPostpone, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Schedule, contentDescription = "جابه‌جایی به فردا", tint = CyanPrimary, modifier = Modifier.size(18.dp))
                 }
@@ -904,7 +1576,9 @@ fun TaskRowItem(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("ثبت پرداخت واقعی قسط 💳", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.CreditCard, contentDescription = null, tint = Color.Black, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ثبت پرداخت واقعی قسط", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

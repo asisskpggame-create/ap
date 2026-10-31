@@ -34,6 +34,94 @@ object IranianBankSmsEngine {
     // In-memory processed idempotency keys (in addition to Room persistence)
     private val processedIdempotencyKeys = mutableSetOf<String>()
 
+    // Realistic SMS Inbox Sender History (used by the SMS Sender Picker button in Mirza Bank Selector)
+    private val defaultInboxSenders = listOf(
+        ReceivedSmsSenderItem(
+            senderNumber = "98300017",
+            bankTitleFa = "بانک ملی ایران (سداد)",
+            lastMessagePreview = "بانک ملی ایران • واریز: ۱,۲۵۰,۰۰۰ ریال به ۰۱*****۱۲۳۴",
+            receivedTimeFa = "امروز ۱۱:۳۵",
+            suggestedBank = BankType.MELLI
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "982000",
+            bankTitleFa = "بلو بانک (سامان)",
+            lastMessagePreview = "بلو • برداشت پول: ۹۰۰,۰۰۰ ریال از حساب شما پرید.",
+            receivedTimeFa = "امروز ۱۰:۴۵",
+            suggestedBank = BankType.BLUBANK
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "30009601",
+            bankTitleFa = "بلوبانک حالت پل (سامانه پل)",
+            lastMessagePreview = "بلو • انتقال پل: مبلغ ۱,۵۰۰,۰۰۰ ریال به علیرضا یوسفی",
+            receivedTimeFa = "دیروز ۱۹:۲۰",
+            suggestedBank = BankType.BLUBANK_POL
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98200064",
+            bankTitleFa = "بانک گردشگری",
+            lastMessagePreview = "بانک گردشگری • واریز: ۲,۲۰۰,۰۰۰ ریال به حساب ۱۱۰*****۶۵۴",
+            receivedTimeFa = "دیروز ۲۱:۱۵",
+            suggestedBank = BankType.GARDESHGARI
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98300060",
+            bankTitleFa = "بانک صادرات ایران (سپهر)",
+            lastMessagePreview = "300325283197 • 1,698,500+ • مانده: 32,317,981",
+            receivedTimeFa = "۲ روز پیش",
+            suggestedBank = BankType.SADERAT
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98200033",
+            bankTitleFa = "بانک ملت (بهسازان)",
+            lastMessagePreview = "بانک ملت • برداشت از ۶۱۰۴۳۳******۱۲۳۴ مبلغ ۵۰۰,۰۰۰ ریال",
+            receivedTimeFa = "۲ روز پیش",
+            suggestedBank = BankType.MELLAT
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98200070",
+            bankTitleFa = "بانک تجارت",
+            lastMessagePreview = "*بانک تجارت* • برداشت: ۷۲۰,۰۰۰ ریال از طریق شتاب",
+            receivedTimeFa = "۳ روز پیش",
+            suggestedBank = BankType.TEJARAT
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98200077",
+            bankTitleFa = "بانک کشاورزی (مهرگستر)",
+            lastMessagePreview = "بانک کشاورزی • برداشت از ۶۰۳۷۷۰******۱۲۳۴ مبلغ ۱,۵۰۰,۰۰۰ ریال",
+            receivedTimeFa = "۴ روز پیش",
+            suggestedBank = BankType.KESHAVARZI
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "9820000",
+            bankTitleFa = "بانک سامان",
+            lastMessagePreview = "بانک سامان • خرید: ۳۴۰,۰۰۰ ریال از کارت ۶۲۱۹۸۶",
+            receivedTimeFa = "هفته گذشته",
+            suggestedBank = BankType.SAMAN
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "982000500",
+            bankTitleFa = "بانک پاسارگاد / ویپاد",
+            lastMessagePreview = "بانک پاسارگاد • واریز مبلغ ۳,۰۰۰,۰۰۰ ریال به سپرده",
+            receivedTimeFa = "هفته گذشته",
+            suggestedBank = BankType.PASARGAD
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98300007",
+            bankTitleFa = "بانک رفاه کارگران",
+            lastMessagePreview = "رفاه حساب 62****13 برداشت 1,960,000R بمانده 1,231,509R",
+            receivedTimeFa = "هفته گذشته",
+            suggestedBank = BankType.REFAH
+        ),
+        ReceivedSmsSenderItem(
+            senderNumber = "98300014",
+            bankTitleFa = "بانک مسکن",
+            lastMessagePreview = "بانک مسکن • برداشت مبلغ ۴۵۰,۰۰۰ ریال از کارت",
+            receivedTimeFa = "ماه گذشته",
+            suggestedBank = BankType.MASKAN
+        )
+    )
+
     init {
         resetDefaultState()
     }
@@ -97,20 +185,44 @@ object IranianBankSmsEngine {
         return verifiedTemplates.contains(getTemplateKey(bank, templateId, version))
     }
 
+    fun allTemplateIdsForBank(bank: BankType): List<String> = when (bank) {
+        BankType.MELLI -> listOf("MELLI_STD", "MELLI_TRANSFER")
+        BankType.MELLAT -> listOf("MELLAT_WITHDRAW", "MELLAT_DEPOSIT")
+        BankType.SADERAT -> listOf("SADERAT_ALGEBRAIC")
+        BankType.TEJARAT -> listOf("TEJARAT_STD")
+        BankType.SEPAH, BankType.KOSAR -> listOf("SEPAH_STD")
+        BankType.BLUBANK -> listOf("BLUBANK_COLLOQUIAL")
+        BankType.BLUBANK_POL -> listOf("BLUBANK_POL_STD")
+        BankType.VEPOD -> listOf("VEPOD_STD")
+        BankType.REFAH -> listOf("REFAH_COMPACT")
+        BankType.GARDESHGARI -> listOf("GARDESHGARI_STD")
+        BankType.KESHAVARZI -> listOf("KESHAVARZI_STD")
+        BankType.SAMAN -> listOf("SAMAN_STD")
+        BankType.PASARGAD -> listOf("PASARGAD_STD")
+        BankType.MASKAN -> listOf("MASKAN_STD")
+        else -> listOf("GENERIC_ANCHORED")
+    }
+
+    /**
+     * Registers or updates a bank with a specific SMS sender number.
+     * When registered by the user in the Mirza Bank Selector, requireSenderMatch = true
+     * locks the bank to ONLY read SMS messages from this exact senderNumber.
+     */
     fun configureBankSenderPolicy(
         bank: BankType,
         senderNumber: String,
-        requireSenderMatch: Boolean,
+        requireSenderMatch: Boolean = true,
         verifyDefaultTemplate: Boolean = true
     ) {
         val current = bankConfigs[bank]
-        val defaultTid = defaultTemplateIdForBank(bank)
-        val ver = getTemplateVersion(defaultTid)
         val updatedKeys = (current?.verifiedTemplateKeys ?: emptySet()).toMutableSet()
         if (verifyDefaultTemplate) {
-            val key = getTemplateKey(bank, defaultTid, ver)
-            updatedKeys.add(key)
-            verifiedTemplates.add(key)
+            allTemplateIdsForBank(bank).forEach { tid ->
+                val ver = getTemplateVersion(tid)
+                val key = getTemplateKey(bank, tid, ver)
+                updatedKeys.add(key)
+                verifiedTemplates.add(key)
+            }
         }
         bankConfigs[bank] = BankUserConfig(
             bank = bank,
@@ -120,16 +232,38 @@ object IranianBankSmsEngine {
         )
     }
 
+    fun removeConfiguredBank(bank: BankType) {
+        bankConfigs.remove(bank)
+    }
+
     fun getConfiguredBanks(): List<BankUserConfig> {
         if (bankConfigs.isEmpty()) {
             return listOf(
-                BankUserConfig(BankType.MELLI, "98300017", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLI, "MELLI_STD", 1))),
-                BankUserConfig(BankType.BLUBANK, "982000", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.BLUBANK, "BLUBANK_COLLOQUIAL", 1))),
-                BankUserConfig(BankType.MELLAT, "98200033", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLAT, "MELLAT_WITHDRAW", 1))),
-                BankUserConfig(BankType.SADERAT, "98300060", requireSenderMatch = false, verifiedTemplateKeys = setOf(getTemplateKey(BankType.SADERAT, "SADERAT_ALGEBRAIC", 1)))
+                BankUserConfig(BankType.MELLI, "98300017", requireSenderMatch = true, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLI, "MELLI_STD", 1))),
+                BankUserConfig(BankType.BLUBANK, "982000", requireSenderMatch = true, verifiedTemplateKeys = setOf(getTemplateKey(BankType.BLUBANK, "BLUBANK_COLLOQUIAL", 1))),
+                BankUserConfig(BankType.MELLAT, "98200033", requireSenderMatch = true, verifiedTemplateKeys = setOf(getTemplateKey(BankType.MELLAT, "MELLAT_WITHDRAW", 1))),
+                BankUserConfig(BankType.SADERAT, "98300060", requireSenderMatch = true, verifiedTemplateKeys = setOf(getTemplateKey(BankType.SADERAT, "SADERAT_ALGEBRAIC", 1)))
             )
         }
         return bankConfigs.values.toList()
+    }
+
+    /**
+     * Returns the list of received SMS senders from live notifications + realistic SMS inbox history
+     * so the user can pick their bank's SMS number directly from the inbox list button.
+     */
+    fun getReceivedSmsInboxSenders(liveNotifications: List<BankNotificationItem> = emptyList()): List<ReceivedSmsSenderItem> {
+        val fromLive = liveNotifications.map { notif ->
+            ReceivedSmsSenderItem(
+                senderNumber = normalizeDigits(notif.sender).trim(),
+                bankTitleFa = if (notif.parsedResult.bank != BankType.UNKNOWN) notif.parsedResult.bank.faName else "پیامک دریافتی",
+                lastMessagePreview = notif.rawText.replace("\n", " • ").take(75),
+                receivedTimeFa = notif.receivedAt,
+                suggestedBank = notif.parsedResult.bank
+            )
+        }
+        val combined = (fromLive + defaultInboxSenders)
+        return combined.distinctBy { it.senderNumber.lowercase() }
     }
 
     fun defaultTemplateIdForBank(bank: BankType): String = when (bank) {
@@ -196,7 +330,8 @@ object IranianBankSmsEngine {
     }
 
     /**
-     * Parses an Iranian Bank SMS text into a structured BankSmsParsedResult with full audit checks.
+     * Parses an Iranian Bank SMS text into a structured BankSmsParsedResult with full audit checks
+     * and strict user-configured sender matching.
      */
     fun parse(rawSms: String, senderAddress: String? = null): BankSmsParsedResult {
         val cleanText = normalizeDigits(rawSms).trim()
@@ -205,7 +340,7 @@ object IranianBankSmsEngine {
         if (isOtpOrServiceSms(cleanText)) {
             val hash = calculateHash("OTP_" + cleanText.take(50))
             return BankSmsParsedResult(
-                bank = detectBank(cleanText),
+                bank = detectBank(cleanText, cleanSender),
                 direction = SmsTransactionDirection.UNKNOWN,
                 amountRial = 0L,
                 amountToman = 0L,
@@ -222,7 +357,7 @@ object IranianBankSmsEngine {
         if (isFailedTransactionSms(cleanText)) {
             val hash = calculateHash("FAILED_" + cleanText.take(50))
             return BankSmsParsedResult(
-                bank = detectBank(cleanText),
+                bank = detectBank(cleanText, cleanSender),
                 direction = SmsTransactionDirection.UNKNOWN,
                 amountRial = 0L,
                 amountToman = 0L,
@@ -237,7 +372,7 @@ object IranianBankSmsEngine {
             )
         }
 
-        val bank = detectBank(cleanText)
+        val bank = detectBank(cleanText, cleanSender)
         val direction = detectDirection(cleanText)
         val amountExtraction = extractAmountWithCurrency(cleanText)
         val amountRial = amountExtraction.first
@@ -256,7 +391,7 @@ object IranianBankSmsEngine {
         val templateVersion = getTemplateVersion(templateId)
         val templateVerified = isTemplateVerified(bank, templateId, templateVersion)
 
-        // Check sender policy (Audit Fix #3)
+        // Check strict sender policy (Audit Fix #3 + Mirza strict sender lock)
         val senderCheck = evaluateSenderPolicy(bank, cleanSender)
 
         val hashPayload = "${bank.name}_${direction.name}_${amountRial}_${trackingCode ?: dateTime ?: cleanText.take(40)}"
@@ -372,34 +507,69 @@ object IranianBankSmsEngine {
         return null
     }
 
+    private fun isSenderMatchingConfigured(actualSender: String, configuredSender: String): Boolean {
+        val cleanActual = normalizeDigits(actualSender).trim().lowercase().removePrefix("+")
+        val cleanConfigured = normalizeDigits(configuredSender).trim().lowercase().removePrefix("+")
+        if (cleanActual.isBlank() || cleanConfigured.isBlank()) return false
+        if (cleanActual == cleanConfigured) return true
+        // Support Iran country code prefix (+98 / 98) equivalence for bank shortcodes (e.g. 98300017 <-> 300017)
+        val actualWithout98 = cleanActual.removePrefix("98")
+        val configuredWithout98 = cleanConfigured.removePrefix("98")
+        return actualWithout98.isNotEmpty() && actualWithout98 == configuredWithout98
+    }
+
     private fun evaluateSenderPolicy(bank: BankType, cleanSender: String?): Pair<Boolean, String?> {
+        // 1. Check if this bank has a user-assigned sender number
         val customConfig = bankConfigs[bank]
         if (customConfig != null) {
-            val expected = normalizeDigits(customConfig.senderNumber).lowercase()
+            val expected = customConfig.senderNumber
             if (customConfig.requireSenderMatch) {
                 if (cleanSender.isNullOrBlank()) {
-                    return Pair(false, "ارسال سرشماره برای ${bank.faName} الزامی است اما سرشماره‌ای دریافت نشد")
+                    return Pair(
+                        false,
+                        "سرشماره پیامک برای ${bank.faName} الزامی است (فقط سرشماره $expected مجاز است)"
+                    )
                 }
-                val normalizedActual = cleanSender.lowercase()
-                if (!normalizedActual.contains(expected) && !expected.contains(normalizedActual)) {
-                    return Pair(false, "سرشماره ($cleanSender) با سرشماره ثبت‌شده (${customConfig.senderNumber}) همخوانی ندارد")
+                if (!isSenderMatchingConfigured(cleanSender, expected)) {
+                    return Pair(
+                        false,
+                        "مسدود شد: ${bank.faName} فقط پیامک‌های سرشماره ($expected) را می‌خواند اما این پیام از ($cleanSender) ارسال شده است"
+                    )
                 }
             } else if (!cleanSender.isNullOrBlank() && expected.isNotBlank()) {
-                val normalizedActual = cleanSender.lowercase()
-                if (!normalizedActual.contains(expected) && !expected.contains(normalizedActual)) {
-                    return Pair(false, "سرشماره فرستنده ($cleanSender) با سرشماره انتخابی بانک مطابقت ندارد")
+                if (!isSenderMatchingConfigured(cleanSender, expected)) {
+                    return Pair(
+                        false,
+                        "سرشماره فرستنده ($cleanSender) با سرشماره انتخابی بانک ($expected) مطابقت ندارد"
+                    )
                 }
             }
             return Pair(true, null)
         }
 
-        // Default sender policy when user hasn't customized this bank yet:
-        // Sender is optional unless provided and explicitly conflicting with known bank senders.
+        // 2. Check if the sender number was explicitly locked to a DIFFERENT bank by the user
+        if (!cleanSender.isNullOrBlank()) {
+            val lockedToOtherBank = bankConfigs.values.firstOrNull { cfg ->
+                cfg.bank != bank && isSenderMatchingConfigured(cleanSender, cfg.senderNumber)
+            }
+            if (lockedToOtherBank != null && bank != BankType.UNKNOWN) {
+                val isBluVariant = (bank == BankType.BLUBANK || bank == BankType.BLUBANK_POL) &&
+                    (lockedToOtherBank.bank == BankType.BLUBANK || lockedToOtherBank.bank == BankType.BLUBANK_POL)
+                if (!isBluVariant) {
+                    return Pair(
+                        false,
+                        "سرشماره ($cleanSender) اختصاصاً برای «${lockedToOtherBank.bank.faName}» ثبت شده و برای «${bank.faName}» مجاز نیست"
+                    )
+                }
+            }
+        }
+
+        // 3. Default sender policy when user hasn't customized this bank yet:
         if (!cleanSender.isNullOrBlank() && bank != BankType.UNKNOWN && bank.defaultSenders.isNotEmpty()) {
-            val actualLower = cleanSender.lowercase()
             val matchesDefault = bank.defaultSenders.any { def ->
-                val d = def.lowercase()
-                actualLower.contains(d) || d.contains(actualLower)
+                isSenderMatchingConfigured(cleanSender, def) ||
+                    cleanSender.lowercase().contains(def.lowercase()) ||
+                    def.lowercase().contains(cleanSender.lowercase())
             }
             if (!matchesDefault) {
                 return Pair(false, "سرشماره فرستنده ($cleanSender) متعلق به ${bank.faName} نیست")
@@ -428,10 +598,25 @@ object IranianBankSmsEngine {
         }
     }
 
-    fun detectBank(text: String): BankType {
+    /**
+     * Detects the bank from SMS text and (when text does not name a bank) falls back to the
+     * user's configured sender number mapping so messages from a bound sender are always attributed
+     * to that bank.
+     */
+    fun detectBank(text: String, cleanSender: String? = null): BankType {
         if (text.contains("رفاه") || (text.contains("بمانده") && text.contains("R"))) return BankType.REFAH
         if (text.contains("انتقال پل") || (text.contains("بلو") && text.contains("پل"))) return BankType.BLUBANK_POL
-        if (text.contains("بلوبانک") || text.contains("از حساب شما پرید") || (text.startsWith("بلو") && text.lines().size > 1)) return BankType.BLUBANK
+        if (text.contains("بلوبانک") || text.contains("از حساب شما پرید") || text.contains("به حساب شما نشست") || (text.startsWith("بلو") && text.lines().size > 1)) {
+            // If user specifically configured BLUBANK_POL with this sender, respect it when Pol is used
+            if (!cleanSender.isNullOrBlank()) {
+                val polConfig = bankConfigs[BankType.BLUBANK_POL]
+                val bluConfig = bankConfigs[BankType.BLUBANK]
+                if (polConfig != null && isSenderMatchingConfigured(cleanSender, polConfig.senderNumber) && bluConfig == null) {
+                    return BankType.BLUBANK_POL
+                }
+            }
+            return BankType.BLUBANK
+        }
         if (text.contains("ویپاد") || text.contains("wepod") || text.contains("311.8000")) return BankType.VEPOD
         if (text.contains("پاسارگاد")) return BankType.PASARGAD
 
@@ -467,12 +652,23 @@ object IranianBankSmsEngine {
         if (text.contains("سرمایه") || text.contains("639607")) return BankType.SARMAYE
         if (text.contains("خاورمیانه") || text.contains("شناسه پیگیری:")) return BankType.KHAVARMIANEH
 
+        // If SMS text did not explicitly contain the bank name, resolve via user-configured sender number
+        if (!cleanSender.isNullOrBlank()) {
+            val matchedConfig = bankConfigs.values.firstOrNull { cfg ->
+                isSenderMatchingConfigured(cleanSender, cfg.senderNumber)
+            }
+            if (matchedConfig != null) {
+                return matchedConfig.bank
+            }
+        }
+
         return BankType.UNKNOWN
     }
 
     /**
      * Audit Fix #1:
      * NEVER defaults to WITHDRAWAL when direction is ambiguous. Returns UNKNOWN instead.
+     * Accurately distinguishes deposit (ورودی / واریز) vs withdrawal (خروجی / برداشت).
      */
     fun detectDirection(text: String): SmsTransactionDirection {
         val saderatMatch = Regex("([0-9,]+)([+-])").find(text)
@@ -481,12 +677,42 @@ object IranianBankSmsEngine {
             return if (sign == "+") SmsTransactionDirection.DEPOSIT else SmsTransactionDirection.WITHDRAWAL
         }
 
-        if (text.contains("انتقال پل") || text.contains("سامانه پل")) return SmsTransactionDirection.TRANSFER_POL
-        if (text.contains("انتقال پایا") || text.contains("پایا")) return SmsTransactionDirection.TRANSFER_PAYA
-        if (text.contains("انتقال به کارت") || text.contains("انتقال کارت") || text.contains("کارت به کارت") || text.contains("انتقال وجه")) return SmsTransactionDirection.TRANSFER_CARD
+        if (text.contains("انتقال پل") || text.contains("سامانه پل")) {
+            if (text.contains("واریز") || text.contains("به حساب شما نشست")) {
+                return SmsTransactionDirection.DEPOSIT
+            }
+            return SmsTransactionDirection.TRANSFER_POL
+        }
+        if (text.contains("انتقال پایا") || text.contains("پایا")) {
+            if (text.contains("واریز پایا") || text.contains("واریز به")) {
+                return SmsTransactionDirection.DEPOSIT
+            }
+            return SmsTransactionDirection.TRANSFER_PAYA
+        }
+        if (text.contains("انتقال به کارت") || text.contains("انتقال کارت") || text.contains("کارت به کارت") || text.contains("انتقال وجه")) {
+            return SmsTransactionDirection.TRANSFER_CARD
+        }
 
-        val hasDeposit = text.contains("واریز") || text.contains("واریزمبلغ") || text.contains("افزایش") || text.contains("بستانکار") || text.contains("نشست") || text.contains("واریز مبلغ")
-        val hasWithdraw = text.contains("برداشت") || text.contains("برداشت پول") || text.contains("پرید") || text.contains("کسر") || text.contains("بدهکار") || text.contains("خرید") || text.contains("خريد") || text.contains("پایانه")
+        val hasDeposit = text.contains("واریز") ||
+            text.contains("واریزمبلغ") ||
+            text.contains("افزایش موجودی") ||
+            text.contains("افزایش") ||
+            text.contains("بستانکار") ||
+            text.contains("نشست") ||
+            text.contains("واریز مبلغ") ||
+            text.contains("واریز سود") ||
+            text.contains("مبلغ واریزی")
+
+        val hasWithdraw = text.contains("برداشت") ||
+            text.contains("برداشت پول") ||
+            text.contains("پرید") ||
+            text.contains("کسر") ||
+            text.contains("بدهکار") ||
+            text.contains("خرید") ||
+            text.contains("خريد") ||
+            text.contains("پایانه") ||
+            text.contains("پرداخت قبض") ||
+            text.contains("مبلغ برداشتی")
 
         if (hasDeposit && !hasWithdraw) {
             return SmsTransactionDirection.DEPOSIT
@@ -496,6 +722,21 @@ object IranianBankSmsEngine {
                 return SmsTransactionDirection.PURCHASE
             }
             return SmsTransactionDirection.WITHDRAWAL
+        }
+
+        // If both keywords appear (e.g. "واریز به حساب ... کسر کارمزد" or "برداشت بابت واریز"),
+        // check which explicit header verb appears first in the SMS:
+        if (hasDeposit && hasWithdraw) {
+            val depositIdx = listOf("واریز", "بستانکار", "نشست")
+                .map { text.indexOf(it) }
+                .filter { it >= 0 }
+                .minOrNull() ?: Int.MAX_VALUE
+            val withdrawIdx = listOf("برداشت", "بدهکار", "پرید", "خرید", "خريد")
+                .map { text.indexOf(it) }
+                .filter { it >= 0 }
+                .minOrNull() ?: Int.MAX_VALUE
+            if (depositIdx < withdrawIdx) return SmsTransactionDirection.DEPOSIT
+            if (withdrawIdx < depositIdx) return SmsTransactionDirection.WITHDRAWAL
         }
 
         return SmsTransactionDirection.UNKNOWN
@@ -522,8 +763,8 @@ object IranianBankSmsEngine {
             return Triple(rawNum, rawNum / 10, DetectedCurrencyUnit.RIAL)
         }
 
-        // 3. BluBank informal: 900,000 ریال از حساب شما پرید
-        val bluRegex = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?\\s*از حساب شما پرید")
+        // 3. BluBank informal: 900,000 ریال از حساب شما پرید / به حساب شما نشست
+        val bluRegex = Regex("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(ریال|تومان)?\\s*(?:از حساب شما پرید|به حساب شما نشست)")
         val bluMatch = bluRegex.find(text)
         if (bluMatch != null) {
             val rawNum = bluMatch.groupValues[1].replace(",", "").toLongOrNull() ?: 0L

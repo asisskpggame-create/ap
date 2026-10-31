@@ -1,7 +1,7 @@
 {
   "name": "personal-life-os",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.7.0R",
   "type": "module",
   "scripts": {
     "dev": "node android_release_server.cjs",

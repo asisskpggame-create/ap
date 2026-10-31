@@ -16,12 +16,18 @@ import com.example.personallifeos.data.model.HealthLog
 import com.example.personallifeos.data.model.QuickPreset
 import com.example.personallifeos.data.model.ReminderEntityType
 import com.example.personallifeos.data.model.ReminderItem
+import com.example.personallifeos.data.model.ReminderRepeatMode
+import com.example.personallifeos.data.model.SubtaskItem
 import com.example.personallifeos.data.model.TaskCategory
 import com.example.personallifeos.data.model.TaskItem
 import com.example.personallifeos.data.model.TaskPriority
+import com.example.personallifeos.data.model.TaskStatus
+import com.example.personallifeos.data.model.TopicItem
+import com.example.personallifeos.data.model.TopicPresetTemplate
 import com.example.personallifeos.data.model.TransactionType
 import com.example.personallifeos.data.model.VaultNote
 import com.example.personallifeos.data.repository.LifeOsRepository
+import com.example.personallifeos.notification.SmartReminderManager
 import com.example.personallifeos.sms.BankNotificationItem
 import com.example.personallifeos.sms.BankSmsParsedResult
 import com.example.personallifeos.sms.BankType
@@ -49,10 +55,23 @@ import java.util.Locale
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val appContext = application.applicationContext
     private val database = AppDatabase.getInstance(application)
     private val repository = LifeOsRepository(database.lifeOsDao())
 
     val tasks: StateFlow<List<TaskItem>> = repository.allTasks.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val topics: StateFlow<List<TopicItem>> = repository.allTopics.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val reminders: StateFlow<List<ReminderItem>> = repository.allReminders.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
@@ -82,6 +101,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         emptyList()
     )
 
+    // Deep-link states when user taps an Android system reminder notification
+    private val _deepLinkTopicId = MutableStateFlow<String?>(null)
+    val deepLinkTopicId: StateFlow<String?> = _deepLinkTopicId.asStateFlow()
+
+    private val _deepLinkTaskId = MutableStateFlow<String?>(null)
+    val deepLinkTaskId: StateFlow<String?> = _deepLinkTaskId.asStateFlow()
+
+    fun handleNotificationDeepLink(topicId: String?, taskId: String?) {
+        _deepLinkTopicId.value = topicId?.takeIf { it.isNotBlank() }
+        _deepLinkTaskId.value = taskId?.takeIf { it.isNotBlank() }
+    }
+
+    fun clearDeepLink() {
+        _deepLinkTopicId.value = null
+        _deepLinkTaskId.value = null
+    }
+
+    fun clearDeepLinkTarget() = clearDeepLink()
+
     private val _defaultHealth = HealthLog(
         id = "hl1",
         date = PersianUtils.getPersianDateString(),
@@ -101,11 +139,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 1-Tap Quick Expense Presets
     private val _quickPresets = MutableStateFlow(
         listOf(
-            QuickPreset("qp1", "قهوه و کافه", 120_000L, "کافه و دخانیات", "☕"),
-            QuickPreset("qp2", "اسنپ / تپسی", 145_000L, "حمل و نقل", "🚕"),
-            QuickPreset("qp3", "نان و سوپرمارکت", 280_000L, "سوپرمارکت و روزمره", "🍞"),
-            QuickPreset("qp4", "ناهار کاری", 390_000L, "غذا و رستوران", "🍽️"),
-            QuickPreset("qp5", "بنزین و خودرو", 150_000L, "حمل و نقل", "⛽")
+            QuickPreset("qp1", "قهوه و کافه", 120_000L, "کافه و دخانیات", "SVG_COFFEE"),
+            QuickPreset("qp2", "اسنپ / تپسی", 145_000L, "حمل و نقل", "SVG_TAXI"),
+            QuickPreset("qp3", "نان و سوپرمارکت", 280_000L, "سوپرمارکت و روزمره", "SVG_SHOP"),
+            QuickPreset("qp4", "ناهار کاری", 390_000L, "غذا و رستوران", "SVG_FOOD"),
+            QuickPreset("qp5", "بنزین و خودرو", 150_000L, "حمل و نقل", "SVG_GAS")
         )
     )
     val quickPresets: StateFlow<List<QuickPreset>> = _quickPresets.asStateFlow()
@@ -157,35 +195,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val categoryBudgets: StateFlow<List<CategoryBudget>> = _categoryBudgets.asStateFlow()
 
-    // Unified Reminder Engine (Section 8 of Roadmap)
-    private val _reminders = MutableStateFlow(
-        listOf(
-            ReminderItem(
-                id = "rem_debt_d1",
-                entityType = ReminderEntityType.DEBT,
-                entityId = "d1",
-                title = "سررسید قسط وام تجهیزات مهندسی (بانک رسالت)",
-                triggerTime = "۱۴۰۵/۰۸/۰۷ • ساعت ۰۹:۰۰",
-                sensitiveAmountToman = 3_000_000L
-            ),
-            ReminderItem(
-                id = "rem_task_1",
-                entityType = ReminderEntityType.TASK,
-                entityId = "1",
-                title = "بررسی و تایید گزارش مالی شرکت",
-                triggerTime = "۱۴۰۵/۰۸/۰۶ • ساعت ۱۱:۳۰"
-            ),
-            ReminderItem(
-                id = "rem_daily_exp",
-                entityType = ReminderEntityType.DAILY_EXPENSE,
-                entityId = "daily_log",
-                title = "یادآور شبانه ثبت مخارج و بررسی پیامک‌های بانکی",
-                triggerTime = "هر شب • ساعت ۲۱:۳۰"
-            )
-        )
-    )
-    val reminders: StateFlow<List<ReminderItem>> = _reminders.asStateFlow()
-
     // Customizable Dashboard Cards (Section 6 of Roadmap)
     private val _dashboardVisibleCards = MutableStateFlow(
         setOf("FINANCE", "REMINDERS", "GOALS_TASKS", "HEALTH", "HABITS_TRENDS")
@@ -220,6 +229,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val activeFloatingBanner: StateFlow<BankNotificationItem?> = _activeFloatingBanner.asStateFlow()
 
     init {
+        SmartReminderManager.ensureNotificationChannel(appContext)
         viewModelScope.launch {
             repository.healthLog.collect { log ->
                 if (log != null) {
@@ -248,7 +258,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ChatMessage(
                 id = "m1",
                 sender = "gemini",
-                text = "سلام! من دستیار هوشمند Personal Life OS نسخه 1.6.0R هستم. می‌توانید هزینه‌ها و درآمدهای محاوره‌ای (مثلاً «۵۰۰ تومن سیگار خریدم»)، بدهی و اقساط، یا پرسش‌های تحلیلی ۳۰ روز اخیر را با من مطرح کنید. تمام عملیات حساس پیش از ثبت، کارت تأییدیه نمایش می‌دهند.",
+                text = "سلام! من دستیار هوشمند Personal Life OS نسخه 1.7.0R هستم. سیستم جدید مدیریت تاپیک‌ها، مأموریت‌ها و یادآوری هوشمند به همراه موتور فیش‌خوان اختصاصی فعال است.",
                 timestamp = "۱۰:۰۰"
             )
         )
@@ -259,7 +269,176 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
 
     // =========================================================================
-    // Tasks, Goals, Habits & Pomodoro CRUD
+    // Topics & Mission Management System (New in v1.7.0R)
+    // =========================================================================
+
+    fun addTopic(
+        title: String,
+        description: String,
+        iconEmoji: String = "SVG_TARGET",
+        colorHex: Long = 0xFF06B6D4,
+        startDate: String = PersianUtils.getPersianDateString(),
+        endDate: String? = null,
+        priority: TaskPriority = TaskPriority.HIGH,
+        tagOrCategory: String = "عمومی",
+        reminderEnabled: Boolean = true,
+        reminderTime: String? = null,
+        isActive: Boolean = true,
+        topicNote: String = ""
+    ) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            val newId = "top_${System.currentTimeMillis()}"
+            val topic = TopicItem(
+                id = newId,
+                title = title.trim(),
+                description = description.trim().ifBlank { "فضای موضوعی مستقل برای مدیریت مأموریت‌ها و وظایف" },
+                iconEmoji = iconEmoji.ifBlank { "SVG_TARGET" },
+                colorHex = colorHex,
+                startDate = startDate.ifBlank { PersianUtils.getPersianDateString() },
+                endDate = endDate?.takeIf { it.isNotBlank() },
+                priority = priority,
+                tagOrCategory = tagOrCategory.ifBlank { "عمومی" },
+                isActive = isActive,
+                isArchived = false,
+                reminderEnabled = reminderEnabled,
+                reminderTime = reminderTime?.takeIf { it.isNotBlank() },
+                topicNote = topicNote,
+                createdAt = PersianUtils.getPersianDateString()
+            )
+            repository.insertTopic(topic)
+            if (reminderEnabled && !reminderTime.isNullOrBlank()) {
+                upsertEntityReminder(
+                    entityType = ReminderEntityType.TOPIC,
+                    entityId = newId,
+                    title = "مرور تاپیک: ${topic.title}",
+                    triggerTime = reminderTime,
+                    topicId = newId,
+                    topicTitle = topic.title,
+                    repeatMode = ReminderRepeatMode.DAILY
+                )
+            }
+        }
+    }
+
+    fun createTopicFromPresetTemplate(template: TopicPresetTemplate) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val topicId = "top_tpl_$now"
+            val topic = TopicItem(
+                id = topicId,
+                title = template.title,
+                description = template.description,
+                iconEmoji = template.iconEmoji,
+                colorHex = template.colorHex,
+                startDate = PersianUtils.getPersianDateString(),
+                endDate = "۱۴۰۵/۱۰/۳۰",
+                priority = template.priority,
+                tagOrCategory = template.tagOrCategory,
+                isActive = true,
+                isArchived = false,
+                reminderEnabled = true,
+                reminderTime = "هر روز • ساعت ۱۰:۰۰",
+                topicNote = "ساخته‌شده از قالب آماده «${template.title}»",
+                createdAt = PersianUtils.getPersianDateString()
+            )
+            repository.insertTopic(topic)
+            val seededTasks = template.defaultMissions.mapIndexed { idx, missionTitle ->
+                TaskItem(
+                    id = "task_${now}_$idx",
+                    title = missionTitle,
+                    category = TaskCategory.WORK,
+                    priority = if (idx == 0) TaskPriority.URGENT else template.priority,
+                    completed = false,
+                    dueDate = "۱۴۰۵/۰۸/۱۰",
+                    createdAt = PersianUtils.getPersianDateString(),
+                    topicId = topicId,
+                    status = TaskStatus.TODO,
+                    isMajorMission = (idx == 0),
+                    activityLog = listOf("ایجاد شده از قالب آماده تاپیک «${template.title}»")
+                )
+            }
+            repository.insertTasks(seededTasks)
+        }
+    }
+
+    fun duplicateTopicAsTemplate(sourceTopic: TopicItem) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val newTopicId = "top_copy_$now"
+            val copiedTopic = sourceTopic.copy(
+                id = newTopicId,
+                title = "${sourceTopic.title} (الگو)",
+                isArchived = false,
+                isActive = true,
+                createdAt = PersianUtils.getPersianDateString()
+            )
+            repository.insertTopic(copiedTopic)
+
+            val sourceTasks = tasks.value.filter { it.topicId == sourceTopic.id }
+            val copiedTasks = sourceTasks.mapIndexed { idx, t ->
+                t.copy(
+                    id = "task_copy_${now}_$idx",
+                    topicId = newTopicId,
+                    completed = false,
+                    status = TaskStatus.TODO,
+                    completedAt = null,
+                    subtasks = t.subtasks.map { it.copy(completed = false) },
+                    activityLog = listOf("کپی‌شده از تاپیک «${sourceTopic.title}»")
+                )
+            }
+            if (copiedTasks.isNotEmpty()) {
+                repository.insertTasks(copiedTasks)
+            }
+        }
+    }
+
+    fun updateTopic(updated: TopicItem) {
+        viewModelScope.launch {
+            repository.updateTopic(updated)
+            if (!updated.reminderEnabled) {
+                cancelEntityReminder(ReminderEntityType.TOPIC, updated.id)
+            } else if (!updated.reminderTime.isNullOrBlank()) {
+                upsertEntityReminder(
+                    entityType = ReminderEntityType.TOPIC,
+                    entityId = updated.id,
+                    title = "مرور تاپیک: ${updated.iconEmoji} ${updated.title}",
+                    triggerTime = updated.reminderTime,
+                    topicId = updated.id,
+                    topicTitle = "${updated.iconEmoji} ${updated.title}",
+                    repeatMode = ReminderRepeatMode.DAILY
+                )
+            }
+        }
+    }
+
+    fun toggleTopicArchive(topic: TopicItem) {
+        val nowArchived = !topic.isArchived
+        updateTopic(topic.copy(isArchived = nowArchived, isActive = !nowArchived))
+    }
+
+    fun toggleTopicReminder(topic: TopicItem) {
+        updateTopic(topic.copy(reminderEnabled = !topic.reminderEnabled))
+    }
+
+    fun updateTopicNote(topic: TopicItem, newNote: String) {
+        updateTopic(topic.copy(topicNote = newNote))
+    }
+
+    fun deleteTopic(topicId: String, deleteChildTasks: Boolean = false) {
+        viewModelScope.launch {
+            if (deleteChildTasks) {
+                tasks.value.filter { it.topicId == topicId }.forEach { t ->
+                    cancelEntityReminder(ReminderEntityType.TASK, t.id)
+                }
+            }
+            cancelEntityReminder(ReminderEntityType.TOPIC, topicId)
+            repository.deleteTopic(topicId, deleteChildTasks)
+        }
+    }
+
+    // =========================================================================
+    // Tasks, Missions, Subtasks, Goals, Habits & Pomodoro CRUD
     // =========================================================================
 
     fun addTask(
@@ -267,40 +446,181 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         category: TaskCategory,
         priority: TaskPriority,
         dueDate: String,
-        linkedDebtId: String? = null
+        linkedDebtId: String? = null,
+        topicId: String? = null,
+        description: String = "",
+        reminderTime: String? = null,
+        reminderDateTime: String? = null,
+        reminderEpochMillis: Long? = null,
+        repeatMode: ReminderRepeatMode = ReminderRepeatMode.ONCE,
+        reminderRepeatMode: ReminderRepeatMode = repeatMode,
+        reminderBeforeMinutes: Int = 0,
+        isMajorMission: Boolean = false,
+        initialSubtasks: List<String> = emptyList(),
+        subtaskTitles: List<String> = initialSubtasks
     ) {
+        if (title.isBlank()) return
         viewModelScope.launch {
+            // Prevent duplicate identical active task inside the same topic/scope
+            val duplicateExists = tasks.value.any {
+                !it.completed &&
+                    it.topicId == topicId &&
+                    it.title.trim().equals(title.trim(), ignoreCase = true) &&
+                    it.dueDate == dueDate
+            }
+            if (duplicateExists) return@launch
+
             val newId = System.currentTimeMillis().toString()
+            val subtasksList = subtaskTitles
+                .filter { it.isNotBlank() }
+                .mapIndexed { idx, s -> SubtaskItem("sub_${newId}_$idx", s.trim(), false) }
+
+            val chosenReminderTime = reminderDateTime?.takeIf { it.isNotBlank() } ?: reminderTime?.takeIf { it.isNotBlank() }
+            val finalReminderTime = chosenReminderTime ?: "$dueDate • ساعت ۱۰:۰۰"
+            val parentTopic = topics.value.find { it.id == topicId }
+
             val newTask = TaskItem(
                 id = newId,
-                title = title,
+                title = title.trim(),
                 category = category,
                 priority = priority,
                 completed = false,
                 dueDate = dueDate,
                 createdAt = PersianUtils.getPersianDateString(),
-                linkedDebtId = linkedDebtId
+                linkedDebtId = linkedDebtId,
+                topicId = topicId,
+                description = description.trim(),
+                status = TaskStatus.TODO,
+                subtasks = subtasksList,
+                reminderTime = finalReminderTime,
+                reminderEpochMillis = System.currentTimeMillis() + 3600_000L,
+                reminderRepeatMode = repeatMode,
+                reminderBeforeMinutes = reminderBeforeMinutes,
+                isMajorMission = isMajorMission,
+                activityLog = listOf(
+                    "ایجاد وظیفه در ${PersianUtils.getPersianDateString()}" +
+                        if (parentTopic != null) " (تاپیک: ${parentTopic.title})" else " (مستقل)"
+                )
             )
             repository.insertTask(newTask)
-            upsertEntityReminder(ReminderEntityType.TASK, newId, title, "$dueDate • ساعت ۱۰:۰۰")
+
+            if (parentTopic == null || parentTopic.reminderEnabled) {
+                upsertEntityReminder(
+                    entityType = ReminderEntityType.TASK,
+                    entityId = newId,
+                    title = title.trim(),
+                    triggerTime = finalReminderTime,
+                    topicId = topicId,
+                    topicTitle = parentTopic?.let { "${it.iconEmoji} ${it.title}" },
+                    repeatMode = repeatMode
+                )
+            }
         }
     }
 
     fun toggleTask(task: TaskItem) {
+        val nextStatus = if (task.completed || task.status == TaskStatus.COMPLETED) {
+            TaskStatus.TODO
+        } else {
+            TaskStatus.COMPLETED
+        }
+        updateTaskStatus(task, nextStatus)
+    }
+
+    fun updateTaskStatus(task: TaskItem, newStatus: TaskStatus) {
         viewModelScope.launch {
-            val updated = task.copy(completed = !task.completed)
+            val isDone = newStatus == TaskStatus.COMPLETED
+            val timeStamp = PersianUtils.getPersianDateString()
+            val updatedLog = (task.activityLog + "تغییر وضعیت به «${newStatus.titleFa}» در $timeStamp").takeLast(12)
+            val updated = task.copy(
+                completed = isDone,
+                status = newStatus,
+                completedAt = if (isDone) timeStamp else null,
+                activityLog = updatedLog
+            )
             repository.updateTask(updated)
-            if (updated.completed) {
+            if (isDone || newStatus == TaskStatus.CANCELLED) {
                 cancelEntityReminder(ReminderEntityType.TASK, task.id)
+            } else {
+                val parentTopic = topics.value.find { it.id == task.topicId }
+                upsertEntityReminder(
+                    entityType = ReminderEntityType.TASK,
+                    entityId = task.id,
+                    title = task.title,
+                    triggerTime = task.reminderTime ?: "${task.dueDate} • ساعت ۱۰:۰۰",
+                    topicId = task.topicId,
+                    topicTitle = parentTopic?.let { "${it.iconEmoji} ${it.title}" },
+                    repeatMode = task.reminderRepeatMode
+                )
             }
         }
+    }
+
+    fun updateTaskDetails(updatedTask: TaskItem) {
+        viewModelScope.launch {
+            repository.updateTask(updatedTask)
+            if (updatedTask.completed || updatedTask.status == TaskStatus.COMPLETED || updatedTask.status == TaskStatus.CANCELLED) {
+                cancelEntityReminder(ReminderEntityType.TASK, updatedTask.id)
+            } else {
+                val parentTopic = topics.value.find { it.id == updatedTask.topicId }
+                upsertEntityReminder(
+                    entityType = ReminderEntityType.TASK,
+                    entityId = updatedTask.id,
+                    title = updatedTask.title,
+                    triggerTime = updatedTask.reminderTime ?: "${updatedTask.dueDate} • ساعت ۱۰:۰۰",
+                    topicId = updatedTask.topicId,
+                    topicTitle = parentTopic?.let { "${it.iconEmoji} ${it.title}" },
+                    repeatMode = updatedTask.reminderRepeatMode
+                )
+            }
+        }
+    }
+
+    fun addSubtaskToTask(task: TaskItem, subtaskTitle: String) {
+        if (subtaskTitle.isBlank()) return
+        val newSub = SubtaskItem(
+            id = "sub_${System.currentTimeMillis()}",
+            title = subtaskTitle.trim(),
+            completed = false
+        )
+        val updatedSubs = task.subtasks + newSub
+        val updatedLog = (task.activityLog + "افزودن زیرمجموعه: «${newSub.title}»").takeLast(12)
+        updateTaskDetails(task.copy(subtasks = updatedSubs, activityLog = updatedLog))
+    }
+
+    fun toggleSubtaskInTask(task: TaskItem, subtaskId: String) {
+        val updatedSubs = task.subtasks.map { sub ->
+            if (sub.id == subtaskId) sub.copy(completed = !sub.completed) else sub
+        }
+        updateTaskDetails(task.copy(subtasks = updatedSubs))
+    }
+
+    fun moveTaskToTopic(task: TaskItem, targetTopicId: String?) {
+        val targetTopic = topics.value.find { it.id == targetTopicId }
+        val destLabel = targetTopic?.title ?: "وظایف مستقل"
+        val updatedLog = (task.activityLog + "انتقال به: «$destLabel»").takeLast(12)
+        updateTaskDetails(task.copy(topicId = targetTopicId, activityLog = updatedLog))
+    }
+
+    fun toggleTaskMajorMission(task: TaskItem) {
+        updateTaskDetails(task.copy(isMajorMission = !task.isMajorMission))
     }
 
     fun postponeTaskToTomorrow(task: TaskItem) {
         viewModelScope.launch {
             val newDate = "۱۴۰۵/۰۸/۰۶ (فردا)"
-            repository.updateTask(task.copy(dueDate = newDate))
-            upsertEntityReminder(ReminderEntityType.TASK, task.id, task.title, "$newDate • ساعت ۱۰:۰۰")
+            val updatedLog = (task.activityLog + "تعویق مهلت انجام به فردا ($newDate)").takeLast(12)
+            repository.updateTask(task.copy(dueDate = newDate, activityLog = updatedLog))
+            val parentTopic = topics.value.find { it.id == task.topicId }
+            upsertEntityReminder(
+                entityType = ReminderEntityType.TASK,
+                entityId = task.id,
+                title = task.title,
+                triggerTime = "$newDate • ساعت ۱۰:۰۰",
+                topicId = task.topicId,
+                topicTitle = parentTopic?.let { "${it.iconEmoji} ${it.title}" },
+                repeatMode = task.reminderRepeatMode
+            )
         }
     }
 
@@ -309,6 +629,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.deleteTask(taskId)
             cancelEntityReminder(ReminderEntityType.TASK, taskId)
         }
+    }
+
+    fun triggerImmediateTestReminderNotification(task: TaskItem) {
+        val parentTopic = topics.value.find { it.id == task.topicId }
+        triggerImmediateTestReminderNotification(
+            taskOrTopicTitle = task.title,
+            topicTitle = parentTopic?.title,
+            triggerTime = task.reminderTime ?: "${task.dueDate} • ساعت ۱۰:۰۰",
+            topicId = task.topicId,
+            taskId = task.id
+        )
+    }
+
+    fun triggerImmediateTestReminderNotification(
+        taskOrTopicTitle: String,
+        topicTitle: String?,
+        triggerTime: String,
+        topicId: String?,
+        taskId: String
+    ) {
+        SmartReminderManager.showReminderSystemNotification(
+            context = appContext,
+            reminderId = "rem_TASK_$taskId",
+            entityId = taskId,
+            entityType = "TASK",
+            title = taskOrTopicTitle,
+            triggerTime = triggerTime,
+            topicId = topicId,
+            topicTitle = topicTitle,
+            snoozeMinutes = 15
+        )
     }
 
     fun addGoal(title: String, description: String, targetDate: String, nextAction: String, category: TaskCategory) {
@@ -443,7 +794,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun addQuickPreset(title: String, amount: Long, category: String, emoji: String = "⚡") {
+    fun addQuickPreset(title: String, amount: Long, category: String, emoji: String = "SVG_BOLT") {
         val newPreset = QuickPreset(
             id = "qp_${System.currentTimeMillis()}",
             title = title,
@@ -507,10 +858,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Phase 2 Roadmap rule:
-     * Creates installment tasks in "اهداف و مسیر" linked via `linkedDebtId` without creating duplicate debt records.
-     */
     fun createDebtRepaymentPlan(debt: DebtItem, installmentsCount: Int = 4) {
         val count = installmentsCount.coerceIn(1, 24)
         val perInstallment = maxOf(1L, debt.remainingAmount / count)
@@ -532,12 +879,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Records a partial or full installment payment on a Debt/Receivable:
-     * - Deducts accurately from remainingAmount
-     * - Prevents duplicate recording via idempotencyKey
-     * - When remainingAmount reaches 0, marks debt settled, completes all linked tasks, and cancels future reminders.
-     */
     fun recordDebtInstallmentPayment(debt: DebtItem, paymentAmount: Long) {
         if (paymentAmount <= 0L || debt.isSettled) return
         viewModelScope.launch {
@@ -549,7 +890,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.updateDebt(updatedDebt)
 
-            // Record corresponding transaction once with deterministic idempotencyKey
             val txKey = "debt_pay_${debt.id}_${newPaid}"
             val txType = if (debt.type == DebtType.DEBT) TransactionType.EXPENSE else TransactionType.INCOME
             addExpense(
@@ -565,7 +905,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (nowSettled) {
                 cancelEntityReminder(ReminderEntityType.DEBT, debt.id)
                 tasks.value.filter { it.linkedDebtId == debt.id && !it.completed }.forEach { linkedTask ->
-                    repository.updateTask(linkedTask.copy(completed = true))
+                    repository.updateTask(linkedTask.copy(completed = true, status = TaskStatus.COMPLETED))
                 }
             }
         }
@@ -583,7 +923,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // =========================================================================
-    // Unified Reminder Engine & Dashboard Customization (Section 6 & 8)
+    // Unified Persistent Reminder Engine & Android AlarmManager (Section 5 & 8)
     // =========================================================================
 
     fun upsertEntityReminder(
@@ -591,41 +931,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         entityId: String,
         title: String,
         triggerTime: String,
-        sensitiveAmount: Long? = null
+        sensitiveAmount: Long? = null,
+        topicId: String? = null,
+        topicTitle: String? = null,
+        repeatMode: ReminderRepeatMode = ReminderRepeatMode.ONCE,
+        snoozeIntervalMinutes: Int = 60
     ) {
-        val uniqueId = "rem_${entityType.name}_$entityId"
-        val updatedItem = ReminderItem(
-            id = uniqueId,
-            entityType = entityType,
-            entityId = entityId,
-            title = title,
-            triggerTime = triggerTime,
-            isSnoozed = false,
-            isCompleted = false,
-            sensitiveAmountToman = sensitiveAmount
-        )
-        val filtered = _reminders.value.filterNot { it.id == uniqueId }
-        _reminders.value = listOf(updatedItem) + filtered
+        viewModelScope.launch {
+            val uniqueId = "rem_${entityType.name}_$entityId"
+            val updatedItem = ReminderItem(
+                id = uniqueId,
+                entityType = entityType,
+                entityId = entityId,
+                title = title,
+                triggerTime = triggerTime,
+                isSnoozed = false,
+                isCompleted = false,
+                sensitiveAmountToman = sensitiveAmount,
+                topicId = topicId,
+                topicTitle = topicTitle,
+                repeatMode = repeatMode,
+                snoozeIntervalMinutes = snoozeIntervalMinutes,
+                triggerEpochMillis = System.currentTimeMillis() + 3600_000L,
+                isEnabled = true
+            )
+            repository.upsertReminder(updatedItem)
+            SmartReminderManager.scheduleReminderAlarm(appContext, updatedItem)
+        }
     }
 
-    fun snoozeReminder(reminderId: String) {
-        _reminders.value = _reminders.value.map { rem ->
-            if (rem.id == reminderId) {
-                rem.copy(
-                    isSnoozed = true,
-                    triggerTime = "تعویق‌شده (+۱ ساعت دیگر)"
-                )
-            } else rem
+    fun snoozeReminder(reminderId: String, customMinutes: Int = 60) {
+        viewModelScope.launch {
+            val existing = reminders.value.find { it.id == reminderId } ?: return@launch
+            val mins = customMinutes.coerceAtLeast(5)
+            val label = if (mins >= 60 && mins % 60 == 0) {
+                "+${PersianUtils.formatPersianNumber((mins / 60).toLong())} ساعت دیگر"
+            } else {
+                "+${PersianUtils.formatPersianNumber(mins.toLong())} دقیقه دیگر"
+            }
+            val updated = existing.copy(
+                isSnoozed = true,
+                snoozeIntervalMinutes = mins,
+                triggerTime = "تعویق‌شده ($label)",
+                triggerEpochMillis = System.currentTimeMillis() + mins * 60_000L
+            )
+            repository.upsertReminder(updated)
+            SmartReminderManager.scheduleReminderAlarm(appContext, updated)
         }
     }
 
     fun cancelEntityReminder(entityType: ReminderEntityType, entityId: String) {
-        val uniqueId = "rem_${entityType.name}_$entityId"
-        _reminders.value = _reminders.value.filterNot { it.id == uniqueId || it.entityId == entityId }
+        viewModelScope.launch {
+            val uniqueId = "rem_${entityType.name}_$entityId"
+            SmartReminderManager.cancelReminderAlarm(appContext, uniqueId)
+            repository.deleteReminderByEntity(entityType.name, entityId)
+        }
     }
 
     fun dismissReminder(reminderId: String) {
-        _reminders.value = _reminders.value.filterNot { it.id == reminderId }
+        viewModelScope.launch {
+            SmartReminderManager.cancelReminderAlarm(appContext, reminderId)
+            repository.deleteReminder(reminderId)
+        }
     }
 
     fun toggleDashboardCardVisibility(cardKey: String) {
@@ -925,17 +1292,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .groupBy { it.category }
                         .maxByOrNull { e -> e.value.sumOf { it.amount } }
                     val pendingTasksCount = tasks.value.count { !it.completed }
+                    val activeTopicsCount = topics.value.count { it.isActive && !it.isArchived }
                     val debtRem = PersianUtils.aggregateTotalDebtsRemainingToman(debts.value)
 
                     val analysisText = buildString {
-                        appendLine("📊 گزارش تحلیلی واقعی (بازه ۳۰ روز اخیر و ۷ روز اخیر):")
+                        appendLine("گزارش تحلیلی واقعی (بازه ۳۰ روز اخیر و ۷ روز اخیر):")
                         appendLine("• مجموع درآمد: ${PersianUtils.formatToman(totalInc)}")
                         appendLine("• مجموع هزینه خالص (بدون انتقال داخلی): ${PersianUtils.formatToman(totalExp)}")
                         if (topCat != null) {
                             appendLine("• بیشترین دسته هزینه: «${topCat.key}» (${PersianUtils.formatToman(topCat.value.sumOf { it.amount })})")
                         }
                         appendLine("• مبلغ قابل‌خرج تا پایان ماه (Safe-to-Spend): ${PersianUtils.formatToman(safe.safeToSpendToman)}")
-                        appendLine("• بدهی‌های باز: ${PersianUtils.formatToman(debtRem)} | کارهای باقیمانده: ${PersianUtils.formatPersianNumber(pendingTasksCount.toLong())} مورد")
+                        appendLine("• بدهی‌های باز: ${PersianUtils.formatToman(debtRem)} | تاپیک‌های فعال: ${PersianUtils.formatPersianNumber(activeTopicsCount.toLong())} | کارهای باقیمانده: ${PersianUtils.formatPersianNumber(pendingTasksCount.toLong())} مورد")
                     }.trim()
 
                     ChatMessage(
@@ -950,7 +1318,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ChatMessage(
                         id = (System.currentTimeMillis() + 1).toString(),
                         sender = "gemini",
-                        text = "❓ پرسش تکمیلی (مدیریت ابهام): ${intent.clarificationQuestionFa ?: "لطفاً مبلغ یا جزئیات بیشتر را مشخص کنید تا پیش‌نویس ثبت آماده شود."}",
+                        text = "پرسش تکمیلی (مدیریت ابهام): ${intent.clarificationQuestionFa ?: "لطفاً مبلغ یا جزئیات بیشتر را مشخص کنید تا پیش‌نویس ثبت آماده شود."}",
                         timestamp = timeStr,
                         isClarification = true
                     )
@@ -968,7 +1336,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ChatMessage(
                         id = (System.currentTimeMillis() + 1).toString(),
                         sender = "gemini",
-                        text = "🛡️ پیش‌نویس آماده شد: «${intent.intentType.titleFa}» با عنوان «${draft.title}»$amtText در دسته «${draft.category}».\nطبق قانون ایمنی، لطفاً برای ثبت نهایی در دیتابیس تأیید فرمایید:",
+                        text = "پیش‌نویس آماده شد: «${intent.intentType.titleFa}» با عنوان «${draft.title}»$amtText در دسته «${draft.category}».\nطبق قانون ایمنی، لطفاً برای ثبت نهایی در دیتابیس تأیید فرمایید:",
                         timestamp = timeStr,
                         requiresConfirmation = true,
                         actionDraft = draft
@@ -1000,7 +1368,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     requiresConfirmation = false,
                     actionDraft = draft.copy(isExecuted = true),
-                    text = it.text + "\n\n✅ تأیید شد و با موفقیت در دیتابیس ثبت گردید."
+                    text = it.text + "\n\nتأیید شد و با موفقیت در دیتابیس ثبت گردید."
                 )
             } else it
         }
@@ -1014,7 +1382,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     requiresConfirmation = false,
                     actionDraft = draft.copy(isCancelled = true),
-                    text = it.text + "\n\n❌ عملیات به درخواست شما لغو شد."
+                    text = it.text + "\n\nعملیات به درخواست شما لغو شد."
                 )
             } else it
         }
@@ -1026,8 +1394,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportBackupJson(): String {
         val root = JSONObject()
-        root.put("version", "1.6.0R")
+        root.put("version", "1.7.0R")
         root.put("exportedAt", PersianUtils.getPersianDateString())
+
+        val topicsArr = JSONArray()
+        topics.value.forEach { top ->
+            topicsArr.put(JSONObject().apply {
+                put("id", top.id)
+                put("title", top.title)
+                put("description", top.description)
+                put("iconEmoji", top.iconEmoji)
+                put("colorHex", top.colorHex)
+                put("priority", top.priority.name)
+                put("tagOrCategory", top.tagOrCategory)
+                put("isActive", top.isActive)
+                put("isArchived", top.isArchived)
+                put("topicNote", top.topicNote)
+            })
+        }
+        root.put("topics", topicsArr)
 
         val tasksArr = JSONArray()
         tasks.value.forEach { t ->
@@ -1037,7 +1422,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 put("category", t.category.name)
                 put("priority", t.priority.name)
                 put("completed", t.completed)
+                put("status", t.status.name)
                 put("dueDate", t.dueDate)
+                put("topicId", t.topicId ?: "")
                 put("linkedDebtId", t.linkedDebtId ?: "")
             })
         }

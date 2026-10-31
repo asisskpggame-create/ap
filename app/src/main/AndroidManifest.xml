@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -16,6 +18,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.PersonalLifeOS"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -23,6 +26,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".notification.ReminderBroadcastReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="com.example.personallifeos.ACTION_TRIGGER_REMINDER" />
+                <action android:name="com.example.personallifeos.ACTION_SNOOZE_REMINDER" />
+                <action android:name="com.example.personallifeos.ACTION_COMPLETE_TASK_FROM_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

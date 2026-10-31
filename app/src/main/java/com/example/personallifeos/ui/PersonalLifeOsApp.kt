@@ -39,6 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,6 +113,7 @@ fun PersonalLifeOsApp(
     val isTablet = configuration.screenWidthDp >= 720
 
     val tasks by viewModel.tasks.collectAsState()
+    val topics by viewModel.topics.collectAsState()
     val habits by viewModel.habits.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val debts by viewModel.debts.collectAsState()
@@ -119,6 +121,8 @@ fun PersonalLifeOsApp(
     val goals by viewModel.goals.collectAsState()
     val categoryBudgets by viewModel.categoryBudgets.collectAsState()
     val reminders by viewModel.reminders.collectAsState()
+    val deepLinkTopicId by viewModel.deepLinkTopicId.collectAsState()
+    val deepLinkTaskId by viewModel.deepLinkTaskId.collectAsState()
     val dashboardVisibleCards by viewModel.dashboardVisibleCards.collectAsState()
     val pomodoroRemainingSeconds by viewModel.pomodoroRemainingSeconds.collectAsState()
     val isPomodoroRunning by viewModel.isPomodoroRunning.collectAsState()
@@ -134,6 +138,13 @@ fun PersonalLifeOsApp(
     val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
 
     val unreadCount = bankNotifications.count { !it.isRead }
+
+    // Navigate directly to «اهداف و مسیر» when an Android system reminder notification is tapped
+    LaunchedEffect(deepLinkTopicId, deepLinkTaskId) {
+        if (!deepLinkTopicId.isNullOrBlank() || !deepLinkTaskId.isNullOrBlank()) {
+            currentScreen = Screen.Tasks
+        }
+    }
 
     BackHandler(enabled = currentScreen != Screen.Dashboard) {
         currentScreen = Screen.Dashboard
@@ -188,7 +199,7 @@ fun PersonalLifeOsApp(
                                         .padding(horizontal = 7.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "v1.6.0R",
+                                        text = "v1.7.0R",
                                         fontSize = 10.sp,
                                         color = CyanPrimary,
                                         fontWeight = FontWeight.Bold
@@ -347,6 +358,7 @@ fun PersonalLifeOsApp(
                                 expenses = expenses,
                                 debts = debts,
                                 goals = goals,
+                                topics = topics,
                                 reminders = reminders,
                                 visibleCards = dashboardVisibleCards,
                                 maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
@@ -362,10 +374,14 @@ fun PersonalLifeOsApp(
                                         else -> Screen.Dashboard
                                     }
                                 },
+                                onOpenTopicFromDashboard = { topicId ->
+                                    viewModel.handleNotificationDeepLink(topicId, null)
+                                    currentScreen = Screen.Tasks
+                                },
                                 onOpenVoiceModal = { isVoiceModalOpen = true },
                                 onToggleTask = { viewModel.toggleTask(it) },
                                 onToggleHabit = { viewModel.toggleHabit(it) },
-                                onSnoozeReminder = { viewModel.snoozeReminder(it) },
+                                onSnoozeReminder = { remId, mins -> viewModel.snoozeReminder(remId, mins) },
                                 onDismissReminder = { viewModel.dismissReminder(it) },
                                 onToggleCardVisibility = { viewModel.toggleDashboardCardVisibility(it) }
                             )
@@ -375,14 +391,57 @@ fun PersonalLifeOsApp(
                                 habits = habits,
                                 goals = goals,
                                 debts = debts,
+                                topics = topics,
+                                initialOpenTopicId = deepLinkTopicId,
+                                onConsumeDeepLinkTopic = { viewModel.clearDeepLinkTarget() },
                                 pomodoroRemainingSeconds = pomodoroRemainingSeconds,
                                 isPomodoroRunning = isPomodoroRunning,
                                 completedPomodoroSessions = completedPomodoroSessions,
                                 onAddTask = { title, cat, prio, due -> viewModel.addTask(title, cat, prio, due) },
+                                onAddAdvancedTask = { title, cat, prio, due, desc, topId, isMajor, remTime, _, repMode, subtasks ->
+                                    viewModel.addTask(
+                                        title = title,
+                                        category = cat,
+                                        priority = prio,
+                                        dueDate = due,
+                                        description = desc,
+                                        topicId = topId,
+                                        isMajorMission = isMajor,
+                                        reminderTime = remTime,
+                                        repeatMode = repMode,
+                                        initialSubtasks = subtasks
+                                    )
+                                },
                                 onToggleTask = { viewModel.toggleTask(it) },
+                                onUpdateTaskStatus = { task, status -> viewModel.updateTaskStatus(task, status) },
+                                onToggleMajorMission = { viewModel.toggleTaskMajorMission(it) },
+                                onAddSubtask = { task, subTitle -> viewModel.addSubtaskToTask(task, subTitle) },
+                                onToggleSubtask = { task, subId -> viewModel.toggleSubtaskInTask(task, subId) },
+                                onMoveTaskToTopic = { task, newTopId -> viewModel.moveTaskToTopic(task, newTopId) },
+                                onTriggerRealNotificationForTask = { viewModel.triggerImmediateTestReminderNotification(it) },
                                 onPostponeTask = { viewModel.postponeTaskToTomorrow(it) },
                                 onDeleteTask = { viewModel.deleteTask(it) },
                                 onPayLinkedDebtInstallment = { debt, amt -> viewModel.recordDebtInstallmentPayment(debt, amt) },
+                                onAddTopic = { name, desc, icon, color, start, end, prio, tag, remEn, remTime ->
+                                    viewModel.addTopic(
+                                        title = name,
+                                        description = desc,
+                                        iconEmoji = icon,
+                                        colorHex = color,
+                                        startDate = start,
+                                        endDate = end,
+                                        priority = prio,
+                                        tagOrCategory = tag,
+                                        reminderEnabled = remEn,
+                                        reminderTime = remTime
+                                    )
+                                },
+                                onCreateTopicFromTemplate = { viewModel.createTopicFromPresetTemplate(it) },
+                                onToggleTopicArchive = { viewModel.toggleTopicArchive(it) },
+                                onToggleTopicReminder = { viewModel.toggleTopicReminder(it) },
+                                onDuplicateTopicAsTemplate = { viewModel.duplicateTopicAsTemplate(it) },
+                                onUpdateTopicNote = { topic, note -> viewModel.updateTopicNote(topic, note) },
+                                onDeleteTopicConfirmed = { topic, deleteTasks -> viewModel.deleteTopic(topic.id, deleteTasks) },
                                 onAddGoal = { title, desc, date, action, cat -> viewModel.addGoal(title, desc, date, action, cat) },
                                 onUpdateGoalProgress = { id, delta -> viewModel.updateGoalProgress(id, delta) },
                                 onDeleteGoal = { viewModel.deleteGoal(it) },
@@ -481,6 +540,7 @@ fun PersonalLifeOsApp(
 
         BankVisualSelectorDialog(
             isOpen = isBankSelectorOpen,
+            liveNotifications = bankNotifications,
             onDismiss = { isBankSelectorOpen = false },
             onSaveBankConfig = { bank, sender, reqMatch ->
                 viewModel.saveBankConfig(bank, sender, reqMatch)

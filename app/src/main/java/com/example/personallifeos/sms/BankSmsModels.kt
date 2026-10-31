@@ -7,9 +7,9 @@ enum class BankType(
     val defaultSenders: List<String> = emptyList(),
     val requireSenderMatchByDefault: Boolean = false
 ) {
-    MELLI("بانک ملی ایران", "ملی", 0xFF0F3D6E, listOf("986000", "98300017", "6000"), false),
-    BLUBANK("بلوبانک", "بلو بانک", 0xFF2563EB, listOf("982000", "BLUBANK", "30009601"), false),
-    BLUBANK_POL("بلوبانک (حالت پل)", "بلوبانک حالت پل", 0xFF3B82F6, listOf("982000", "BLUBANK", "30009601"), false),
+    MELLI("بانک ملی ایران", "ملی", 0xFF0F3D6E, listOf("98300017", "986000", "6000"), false),
+    BLUBANK("بلو بانک", "بلو بانک", 0xFF2563EB, listOf("982000", "BLUBANK", "30009601"), false),
+    BLUBANK_POL("بلوبانک حالت پل", "بلوبانک حالت پل", 0xFF3B82F6, listOf("30009601", "982000", "BLUBANK"), false),
     GARDESHGARI("بانک گردشگری", "گردشگری", 0xFFDC2626, listOf("98200064", "200064"), false),
     SADERAT("بانک صادرات ایران", "صادرات", 0xFF1E3A8A, listOf("98300060", "300060"), false),
     MELLAT("بانک ملت", "ملت", 0xFFE11D48, listOf("98200033", "200033"), false),
@@ -87,6 +87,18 @@ data class BankUserConfig(
     val senderNumber: String,
     val requireSenderMatch: Boolean = true,
     val verifiedTemplateKeys: Set<String> = emptySet() // Format: "${templateId}@v${version}"
+)
+
+/**
+ * Represents a detected SMS sender from the user's SMS inbox / notification history
+ * so the user can pick the exact sender number for a bank from a list or enter it manually.
+ */
+data class ReceivedSmsSenderItem(
+    val senderNumber: String,
+    val bankTitleFa: String,
+    val lastMessagePreview: String,
+    val receivedTimeFa: String,
+    val suggestedBank: BankType
 )
 
 data class BankNotificationItem(

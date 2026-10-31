@@ -205,4 +205,104 @@ class BankSmsEngineAuditTest {
         assertEquals(DetectedIntentType.RECEIVABLE, intent.intentType)
         assertEquals(300_000L, intent.amountToman)
     }
+
+    @Test
+    fun `regression 9 - Mirza sender-locked bank only accepts SMS from its assigned sender number and resolves nameless SMS by sender`() {
+        IranianBankSmsEngine.configureBankSenderPolicy(
+            bank = BankType.MELLI,
+            senderNumber = "98300017",
+            requireSenderMatch = true
+        )
+
+        // 1. Nameless SMS coming from the exact assigned sender (98300017) is recognized as Bank Melli and auto-accepted
+        val namelessDepositFromMelliSender = """
+            واریز: ۲,۵۰۰,۰۰۰ ریال
+            مانده: ۱۸,۰۰۰,۰۰۰ ریال
+            پیگیری: ۵۵۴۴۳۳
+        """.trimIndent()
+        val validResult = IranianBankSmsEngine.parse(namelessDepositFromMelliSender, senderAddress = "98300017")
+        assertEquals(BankType.MELLI, validResult.bank)
+        assertEquals(SmsTransactionDirection.DEPOSIT, validResult.direction)
+        assertEquals(250_000L, validResult.amountToman)
+        assertTrue(validResult.isSenderMatched)
+        assertEquals(SmsVerificationStatus.AUTO_ACCEPTED, validResult.verificationStatus)
+
+        // 2. SMS claiming to be Bank Melli but coming from another bank or personal number is strictly blocked from auto-accept
+        val spoofedSenderSms = """
+            بانک ملی ایران
+            برداشت: ۹۰۰,۰۰۰ ریال
+            مانده: ۱۷,۱۰۰,۰۰۰ ریال
+        """.trimIndent()
+        val blockedResult = IranianBankSmsEngine.parse(spoofedSenderSms, senderAddress = "9850009999")
+        assertFalse(blockedResult.isSenderMatched)
+        assertEquals(SmsVerificationStatus.NEEDS_REVIEW, blockedResult.verificationStatus)
+    }
+
+    @Test
+    fun `regression 10 - TopicDashboardStats computes exact 60 percent progress when 6 of 10 tasks are completed and tracks overdue and nearest deadline`() {
+        val topicId = "topic_uni"
+        val tasks = (1..10).map { idx ->
+            val isDone = idx <= 6
+            com.example.personallifeos.data.model.TaskItem(
+                id = "t_$idx",
+                title = "مأموریت $idx",
+                completed = isDone,
+                status = if (isDone) com.example.personallifeos.data.model.TaskStatus.COMPLETED else com.example.personallifeos.data.model.TaskStatus.TODO,
+                priority = if (idx == 7) com.example.personallifeos.data.model.TaskPriority.URGENT else com.example.personallifeos.data.model.TaskPriority.MEDIUM,
+                category = com.example.personallifeos.data.model.TaskCategory.GROWTH,
+                dueDate = if (idx == 7) "۱۴۰۵/۰۸/۰۲" else "۱۴۰۵/۰۸/۱۰",
+                topicId = topicId,
+                isMajorMission = (idx == 8)
+            )
+        }
+
+        val stats = com.example.personallifeos.data.model.TopicDashboardStats.compute(
+            topicId = topicId,
+            allTasks = tasks,
+            todayJalali = "۱۴۰۵/۰۸/۰۵"
+        )
+
+        assertEquals(10, stats.totalTasks)
+        assertEquals(6, stats.completedTasks)
+        assertEquals(4, stats.remainingTasks)
+        assertEquals(60, stats.progressPercent)
+        assertEquals(1, stats.overdueTasks)
+        assertEquals(2, stats.urgentOrMajorTasks) // idx 7 (URGENT) and idx 8 (isMajorMission)
+        assertEquals("۱۴۰۵/۰۸/۰۲", stats.nearestDeadline)
+    }
+
+    @Test
+    fun `regression 11 - TaskEntity preserves subtasks, status, topicId, and activity log across Room serialization`() {
+        val original = com.example.personallifeos.data.model.TaskItem(
+            id = "mission_1",
+            title = "تدوین راف‌کات",
+            completed = false,
+            status = com.example.personallifeos.data.model.TaskStatus.IN_PROGRESS,
+            priority = com.example.personallifeos.data.model.TaskPriority.HIGH,
+            category = com.example.personallifeos.data.model.TaskCategory.WORK,
+            dueDate = "۱۴۰۵/۰۸/۰۹",
+            description = "پروژه مستند",
+            topicId = "topic_film",
+            isMajorMission = true,
+            subtasks = listOf(
+                com.example.personallifeos.data.model.SubtaskItem("s1", "انتخاب موسیقی", true),
+                com.example.personallifeos.data.model.SubtaskItem("s2", "اصلاح رنگ", false)
+            ),
+            activityLog = listOf("۱۴۰۵/۰۸/۰۵: شروع تدوین")
+        )
+
+        val entity = com.example.personallifeos.data.local.TaskEntity.fromModel(original)
+        val restored = entity.toModel()
+
+        assertEquals(original.id, restored.id)
+        assertEquals(original.topicId, restored.topicId)
+        assertEquals(com.example.personallifeos.data.model.TaskStatus.IN_PROGRESS, restored.status)
+        assertTrue(restored.isMajorMission)
+        assertEquals(2, restored.subtasks.size)
+        assertEquals("انتخاب موسیقی", restored.subtasks[0].title)
+        assertTrue(restored.subtasks[0].isCompleted)
+        assertEquals("اصلاح رنگ", restored.subtasks[1].title)
+        assertFalse(restored.subtasks[1].isCompleted)
+        assertEquals(1, restored.activityLog.size)
+    }
 }

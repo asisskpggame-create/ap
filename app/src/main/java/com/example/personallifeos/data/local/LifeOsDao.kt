@@ -14,6 +14,9 @@ interface LifeOsDao {
     @Query("SELECT * FROM tasks ORDER BY createdAt DESC")
     fun getAllTasks(): Flow<List<TaskEntity>>
 
+    @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
+    suspend fun getTaskById(taskId: String): TaskEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity)
 
@@ -25,6 +28,62 @@ interface LifeOsDao {
 
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)
+
+    @Query("DELETE FROM tasks WHERE topicId = :topicId")
+    suspend fun deleteTasksByTopicId(topicId: String)
+
+    @Query("UPDATE tasks SET topicId = NULL WHERE topicId = :topicId")
+    suspend fun detachTasksFromTopic(topicId: String)
+
+    // Topics
+    @Query("SELECT * FROM topics ORDER BY createdAt DESC")
+    fun getAllTopics(): Flow<List<TopicEntity>>
+
+    @Query("SELECT * FROM topics WHERE id = :topicId LIMIT 1")
+    suspend fun getTopicById(topicId: String): TopicEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTopic(topic: TopicEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTopics(topics: List<TopicEntity>)
+
+    @Update
+    suspend fun updateTopic(topic: TopicEntity)
+
+    @Query("DELETE FROM topics WHERE id = :topicId")
+    suspend fun deleteTopic(topicId: String)
+
+    @Query("DELETE FROM topics")
+    suspend fun clearTopics()
+
+    // Reminders (Unified Persistent Reminder Engine)
+    @Query("SELECT * FROM reminders ORDER BY id DESC")
+    fun getAllReminders(): Flow<List<ReminderEntity>>
+
+    @Query("SELECT * FROM reminders WHERE isCompleted = 0 AND isEnabled = 1")
+    suspend fun getActiveRemindersList(): List<ReminderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReminder(reminder: ReminderEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReminders(reminders: List<ReminderEntity>)
+
+    @Update
+    suspend fun updateReminder(reminder: ReminderEntity)
+
+    @Query("DELETE FROM reminders WHERE id = :reminderId")
+    suspend fun deleteReminder(reminderId: String)
+
+    @Query("DELETE FROM reminders WHERE entityType = :entityType AND entityId = :entityId")
+    suspend fun deleteReminderByEntity(entityType: String, entityId: String)
+
+    @Query("DELETE FROM reminders WHERE topicId = :topicId")
+    suspend fun deleteRemindersByTopic(topicId: String)
+
+    @Query("DELETE FROM reminders")
+    suspend fun clearReminders()
 
     // Habits
     @Query("SELECT * FROM habits")

@@ -139,46 +139,50 @@ jobs:
         run: |
           ./gradlew assembleDebug assembleRelease --stacktrace || gradle assembleDebug assembleRelease --stacktrace
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
-          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/Personal-Life-OS-v1.7.0R-TopicsAndMissions-Debug.apk
+          cp app/build/outputs/apk/release/app-release.apk release-assets/Personal-Life-OS-v1.7.0R-TopicsAndMissions-Release.apk
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Personal-Life-OS-v1.6.0R-APKs
+          name: Personal-Life-OS-v1.7.0R-APKs
           path: release-assets/*.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.0R-${{ github.run_number }}
-          name: "Personal Life OS v1.6.0R (Mirza Visual Bank Selector + Smart Notification Center + Audited SMS Engine)"
+          tag_name: v1.7.0R-${{ github.run_number }}
+          name: "Personal Life OS v1.7.0R (Topics & Mission Management + Smart Android Alarms + SVG Vector Icons)"
           body: |
-            ## 💎 Personal Life OS v1.6.0R — Smart Notification & Mirza Bank Engine Edition (`versionCode = 7`)
+            ## Personal Life OS v1.7.0R — Topics & Mission Management System + SVG Vector Edition (`versionCode = 8`)
 
-            سیستم‌عامل جامع مدیریت مالی، فیش‌خوان زنده بانکی، اهداف و مسیر، داشبورد وضعیت و دستیار هوشمند فارسی.
-
-            ---
-
-            ### 📥 راهنمای دانلود و نصب فایل‌های APK (نسخه `1.6.0R` - `versionCode = 7`)
-            - ⭐ **`Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ قابل نصب و آپدیت مستقیم روی نسخه‌های قبلی بدون پاک شدن داده‌ها.
-            - 📦 **`Personal-Life-OS-v1.6.0R-FinancePro-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده نیتیو اندروید (Jetpack Compose + Material 3 + Room).
+            سیستم‌عامل جامع مدیریت زندگی شخصی، تاپیک‌ها و مأموریت‌ها، یادآوری هوشمند اندروید، فیش‌خوان زنده بانکی (میرزا) و دستیار هوشمند فارسی.
 
             ---
 
-            ### 🆕 قابلیت‌های نسخه `v1.6.0R` (`versionCode = 7`)
-            1. **🏦 شیت گرافیکی «افزودن بانک جدید» به سبک میرزا (`BankVisualSelectorSheet`):** پیش‌نمایش زنده کارت بانکی سورمه‌ای با تراشه طلایی، انتخاب سریع از میان ۱۲ بانک و نئوبانک ایرانی (ملی، بلوبانک، بلوبانک حالت پل، گردشگری، صادرات، ملت، تجارت، کشاورزی، سامان، پاسارگاد، رفاه، مسکن)، ثبت سرشماره اختصاصی و انتخابگر سرشماره‌های دریافت‌شده.
-            2. **🔔 مرکز اعلان هوشمند و فیش‌خوان زنده (`NotificationCenterSheet` + `FloatingReceiptNotificationBanner`):** بنر شناور بالای صفحه هنگام دریافت فیش بانکی، شبیه‌ساز ۱-لمسی دریافت زنده پیامک، تأیید یا رد سریع تراکنش‌های مبهم (`NEEDS_REVIEW`) و پوشش حریم خصوصی مبالغ (`Privacy Mask`).
-            3. **🛡️ ممیزی کامل موتور پیامک بانکی (`IranianBankSmsEngine`):**
-               - جلوگیری قطعی از ثبت خودکار پیامک‌های با نوع نامشخص (`UNKNOWN` هرگز به‌طور پیش‌فرض هزینه نمی‌شود).
-               - اعتبارسنجی در سطح قالب و نسخه (`templateId@vVersion`)؛ تغییر نسخه قالب تأیید قبلی را باطل می‌کند.
-               - سیاست صریح تطابق سرشماره فرستنده (`requireSenderMatch`) و مسدودسازی پیامک‌های تکراری (`idempotencyKey`).
+            ### راهنمای دانلود و نصب فایل‌های APK (نسخه `1.7.0R` - `versionCode = 8`)
+            - **`Personal-Life-OS-v1.7.0R-TopicsAndMissions-Debug.apk` (پیشنهادی):** امضا شده با کلید اصلی پروژه؛ قابل نصب و آپدیت مستقیم روی نسخه‌های قبلی بدون پاک شدن داده‌ها (مهاجرت غیرمخرب دیتابیس Room به نسخه ۴).
+            - **`Personal-Life-OS-v1.7.0R-TopicsAndMissions-Release.apk`:** نسخه ریلیز بهینه‌سازی‌شده نیتیو اندروید (Jetpack Compose + Material 3 + Room v4).
+
+            ---
+
+            ### قابلیت‌های جدید نسخه `v1.7.0R` (`versionCode = 8`)
+            1. **سیستم حرفه‌ای مدیریت تاپیک‌ها، پروژه‌ها و مأموریت‌ها (`Topics & Mission Management System`):**
+               - پنجره انتخاب مدرن هنگام لمس دکمه افزودن در بخش «اهداف و مسیر»: انتخاب بین **ایجاد وظیفه مستقل (New Task)** یا **ایجاد تاپیک جدید (New Topic)**.
+               - ساخت تاپیک با نام، هدف، آیکون اختصاصی SVG، رنگ اختصاصی، تاریخ شروع و پایان، اولویت، برچسب، یادداشت اختصاصی و قالب‌های آماده (دانشگاه، پروژه‌های فیلم‌برداری، کسب‌وکار، زندگی شخصی، مطالعه، اهداف بلندمدت) و قابلیت کپی از الگوی تاپیک.
+               - فضای کاری و داشبورد اختصاصی هر تاپیک (`TopicWorkspaceDialog`) با محاسبه واقعی درصد پیشرفت (مثلاً ۶ از ۱۰ وظیفه = ۶۰٪)، شمارش وظایف تکمیل‌شده، در حال انجام، عقب‌افتاده و نزدیک‌ترین مهلت.
+               - مدیریت کامل وظایف داخل هر تاپیک: وضعیت‌های چهارگانه (`TODO`, `IN_PROGRESS`, `DONE`, `CANCELLED`)، چک‌لیست و زیرمجموعه‌ها (`Subtasks`)، تعیین مأموریت اصلی (`Major Mission`)، انتقال وظیفه بین تاپیک‌ها و ثبت تاریخچه فعالیت‌ها (`Activity Log`).
+            2. **موتور یادآوری هوشمند اندروید (`SmartReminderManager` + `ReminderBroadcastReceiver`):**
+               - زمان‌بندی واقعی با `AlarmManager` و `NotificationChannel` اندروید حتی در زمان بسته بودن اپلیکیشن.
+               - پشتیبانی از تکرار (`ONCE`, `DAILY`, `WEEKLY`, `MONTHLY`)، یادآوری قبل از موعد، تعویق اعلان (`Snooze`) مستقیم از داخل نوتیفیکیشن، باز شدن مستقیم وظیفه با لمس اعلان و لغو خودکار یادآوری پس از تکمیل یا حذف وظیفه.
+            3. **جایگزینی کامل اموجی‌ها با آیکون‌های برداری (`SVG / Vector Drawables`):**
+               - طراحی آیکون‌های برداری XML اندروید (`ic_svg_topic_*.xml`) و سیستم یکپارچه `AppSvgIcons` در سراسر رابط کاربری.
+            4. **حفظ کامل قابلیت‌های نسخه `v1.6.0R`:** شیت گرافیکی انتخاب بانک و سرشماره اختصاصی به سبک میرزا، مرکز اعلان هوشمند و موتور ممیزی‌شده پیامک بانکی ایران.
           files: |
-            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Debug.apk
-            release-assets/Personal-Life-OS-v1.6.0R-FinancePro-Release.apk
+            release-assets/Personal-Life-OS-v1.7.0R-TopicsAndMissions-Debug.apk
+            release-assets/Personal-Life-OS-v1.7.0R-TopicsAndMissions-Release.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

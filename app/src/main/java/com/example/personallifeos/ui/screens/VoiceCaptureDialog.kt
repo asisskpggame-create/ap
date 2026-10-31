@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -172,7 +173,7 @@ fun VoiceCaptureDialog(
                     Icon(Icons.Default.Mic, contentDescription = null, tint = if (isListening) AmberWarning else CyanPrimary)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isListening) "در حال شنیدن گفتار فارسی..." else "🎙️ شروع تشخیص گفتار فارسی (SpeechRecognizer)",
+                        text = if (isListening) "در حال شنیدن گفتار فارسی..." else "شروع تشخیص گفتار فارسی (SpeechRecognizer)",
                         color = if (isListening) AmberWarning else CyanPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -203,15 +204,18 @@ fun VoiceCaptureDialog(
                 )
 
                 colloquialPreview?.let { cp ->
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(Color(0x2610B981))
-                            .padding(8.dp)
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(16.dp))
                         Text(
-                            text = "💡 تشخیص محاوره‌ای: «${cp.extractedTitle}» • معادل: ${cp.formattedPreview} (${cp.suggestedCategory})",
+                            text = "تشخیص محاوره‌ای: «${cp.extractedTitle}» • معادل: ${cp.formattedPreview} (${cp.suggestedCategory})",
                             fontSize = 11.sp,
                             color = EmeraldAccent,
                             fontWeight = FontWeight.Bold

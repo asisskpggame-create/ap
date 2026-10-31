@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,13 +13,15 @@ import kotlinx.coroutines.launch
 @Database(
     entities = [
         TaskEntity::class,
+        TopicEntity::class,
+        ReminderEntity::class,
         HabitEntity::class,
         ExpenseEntity::class,
         DebtEntity::class,
         HealthLogEntity::class,
         VaultNoteEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +32,95 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        /**
+         * Non-destructive migration from v3 -> v4:
+         * Preserves all existing tasks, expenses, debts, habits, health logs, and vault notes,
+         * while adding the new Topics & Mission Management columns and tables.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN topicId TEXT")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'TODO'")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN subtasksSerialized TEXT NOT NULL DEFAULT ''")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderTime TEXT")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderEpochMillis INTEGER")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderRepeatMode TEXT NOT NULL DEFAULT 'ONCE'")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderBeforeMinutes INTEGER NOT NULL DEFAULT 0")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN isMajorMission INTEGER NOT NULL DEFAULT 0")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN completedAt TEXT")
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN activityLogSerialized TEXT NOT NULL DEFAULT ''")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `topics` (
+                        `id` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `iconEmoji` TEXT NOT NULL,
+                        `colorHex` INTEGER NOT NULL,
+                        `startDate` TEXT NOT NULL,
+                        `endDate` TEXT,
+                        `priority` TEXT NOT NULL,
+                        `tagOrCategory` TEXT NOT NULL,
+                        `isActive` INTEGER NOT NULL,
+                        `isArchived` INTEGER NOT NULL,
+                        `reminderEnabled` INTEGER NOT NULL,
+                        `reminderTime` TEXT,
+                        `topicNote` TEXT NOT NULL,
+                        `createdAt` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `reminders` (
+                        `id` TEXT NOT NULL,
+                        `entityType` TEXT NOT NULL,
+                        `entityId` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `triggerTime` TEXT NOT NULL,
+                        `isSnoozed` INTEGER NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        `sensitiveAmountToman` INTEGER,
+                        `topicId` TEXT,
+                        `topicTitle` TEXT,
+                        `repeatMode` TEXT NOT NULL,
+                        `snoozeIntervalMinutes` INTEGER NOT NULL,
+                        `triggerEpochMillis` INTEGER,
+                        `isEnabled` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_2_4 = object : Migration(2, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                safeExec(db, "ALTER TABLE tasks ADD COLUMN linkedDebtId TEXT")
+                safeExec(db, "ALTER TABLE expenses ADD COLUMN accountName TEXT DEFAULT 'حساب پیش‌فرض'")
+                safeExec(db, "ALTER TABLE expenses ADD COLUMN idempotencyKey TEXT")
+                MIGRATION_3_4.migrate(db)
+            }
+        }
+
+        val MIGRATION_1_4 = object : Migration(1, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_4.migrate(db)
+            }
+        }
+
+        private fun safeExec(db: SupportSQLiteDatabase, sql: String) {
+            try {
+                db.execSQL(sql)
+            } catch (_: Exception) {
+                // Column or table already exists
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -36,6 +128,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "personal_life_os.db"
                 )
+                    .addMigrations(MIGRATION_3_4, MIGRATION_2_4, MIGRATION_1_4)
                     .addCallback(DatabaseSeedCallback())
                     .fallbackToDestructiveMigration()
                     .build()
@@ -52,13 +145,186 @@ abstract class AppDatabase : RoomDatabase() {
                 val database = INSTANCE ?: return@launch
                 val dao = database.lifeOsDao()
 
-                // Seed Tasks (with linked debt)
+                // Seed Topics (Topics & Mission Management System)
+                dao.insertTopics(
+                    listOf(
+                        TopicEntity(
+                            id = "top_uni",
+                            title = "دانشگاه و پایان‌نامه ارشد",
+                            description = "مدیریت پروژه‌های درسی، مقالات پژوهشی و جلسات استاد راهنما",
+                            iconEmoji = "SVG_UNIVERSITY",
+                            colorHex = 0xFF06B6D4,
+                            startDate = "۱۴۰۵/۰۷/۰۱",
+                            endDate = "۱۴۰۵/۱۱/۳۰",
+                            priority = "URGENT",
+                            tagOrCategory = "تحصیلی و دانشگاه",
+                            isActive = true,
+                            isArchived = false,
+                            reminderEnabled = true,
+                            reminderTime = "هر روز • ساعت ۱۰:۰۰",
+                            topicNote = "تمرکز اصلی این ترم روی فصل ۳ پایان‌نامه و شبیه‌سازی الگوریتم‌هاست.",
+                            createdAt = "۱۴۰۵/۰۸/۰۱"
+                        ),
+                        TopicEntity(
+                            id = "top_film",
+                            title = "پروژه‌های فیلم‌برداری و مستند",
+                            description = "پیش‌تولید، آفیش تجهیزات، فیلم‌برداری میدانی و تدوین نهایی",
+                            iconEmoji = "SVG_CINEMA",
+                            colorHex = 0xFFF59E0B,
+                            startDate = "۱۴۰۵/۰۸/۰۱",
+                            endDate = "۱۴۰۵/۰۹/۱۵",
+                            priority = "HIGH",
+                            tagOrCategory = "تولید و رسانه",
+                            isActive = true,
+                            isArchived = false,
+                            reminderEnabled = true,
+                            reminderTime = "هر روز • ساعت ۱۶:۰۰",
+                            topicNote = "لیست لنزهای پرایم و میکروفون‌های یقه برای آفیش پنجشنبه چک شود.",
+                            createdAt = "۱۴۰۵/۰۸/۰۲"
+                        ),
+                        TopicEntity(
+                            id = "top_biz",
+                            title = "کار و توسعه محصول نرم‌افزاری",
+                            description = "مدیریت اسپرینت‌ها، بررسی کد، جلسات فنی و انتشار نسخه‌ها",
+                            iconEmoji = "SVG_BUSINESS",
+                            colorHex = 0xFF10B981,
+                            startDate = "۱۴۰۵/۰۸/۰۱",
+                            endDate = null,
+                            priority = "HIGH",
+                            tagOrCategory = "شغلی و کسب‌وکار",
+                            isActive = true,
+                            isArchived = false,
+                            reminderEnabled = true,
+                            reminderTime = "هر روز • ساعت ۰۹:۰۰",
+                            topicNote = "اولویت این هفته پایداری کامل دیتابیس و موتور اعلان‌هاست.",
+                            createdAt = "۱۴۰۵/۰۸/۰۳"
+                        )
+                    )
+                )
+
+                // Seed Tasks (Both Independent Tasks & Topic-linked Missions with Subtasks)
                 dao.insertTasks(
                     listOf(
-                        TaskEntity("1", "بررسی و تایید گزارش مالی شرکت", "WORK", "URGENT", false, "۱۴۰۵/۰۸/۰۶", "۱۴۰۵/۰۸/۰۱"),
-                        TaskEntity("2", "ورزش هوازی و بدنسازی (۴۵ دقیقه)", "HEALTH", "HIGH", true, "۱۴۰۵/۰۸/۰۵", "۱۴۰۵/۰۸/۰۱"),
-                        TaskEntity("3", "مطالعه کتاب معماری نرم‌افزار", "STUDY", "MEDIUM", false, "۱۴۰۵/۰۸/۰۸", "۱۴۰۵/۰۸/۰۲"),
-                        TaskEntity("4", "پرداخت قسط ۱ وام تجهیزات مهندسی", "FINANCE", "URGENT", false, "۱۴۰۵/۰۸/۰۷", "۱۴۰۵/۰۸/۰۳", "d1")
+                        TaskEntity(
+                            id = "1",
+                            title = "بررسی و تایید گزارش مالی شرکت",
+                            category = "WORK",
+                            priority = "URGENT",
+                            completed = false,
+                            dueDate = "۱۴۰۵/۰۸/۰۶",
+                            createdAt = "۱۴۰۵/۰۸/۰۱",
+                            topicId = "top_biz",
+                            description = "ممیزی کامل صورت‌حساب‌ها و تطبیق با تراز آزمایشی",
+                            status = "IN_PROGRESS",
+                            subtasksSerialized = "s1::بررسی فاکتورهای مهرماه::true;;s2::تایید نهایی جدول بودجه::false",
+                            reminderTime = "۱۴۰۵/۰۸/۰۶ • ساعت ۱۱:۳۰",
+                            isMajorMission = true,
+                            activityLogSerialized = "ایجاد مأموریت در تاپیک کار و توسعه||تغییر وضعیت به در حال انجام"
+                        ),
+                        TaskEntity(
+                            id = "2",
+                            title = "ورزش هوازی و بدنسازی (۴۵ دقیقه)",
+                            category = "HEALTH",
+                            priority = "HIGH",
+                            completed = true,
+                            dueDate = "۱۴۰۵/۰۸/۰۵",
+                            createdAt = "۱۴۰۵/۰۸/۰۱",
+                            topicId = null, // Independent task
+                            description = "تمرین هوازی صبحگاهی و حرکات کششی",
+                            status = "COMPLETED",
+                            completedAt = "۱۴۰۵/۰۸/۰۵ • ساعت ۰۸:۳۰"
+                        ),
+                        TaskEntity(
+                            id = "3",
+                            title = "نگارش فصل سوم پایان‌نامه و استخراج نمودارها",
+                            category = "STUDY",
+                            priority = "URGENT",
+                            completed = false,
+                            dueDate = "۱۴۰۵/۰۸/۰۸",
+                            createdAt = "۱۴۰۵/۰۸/۰۲",
+                            topicId = "top_uni",
+                            description = "تکمیل بخش روش‌پژوهش و جدول مقایسه نتایج",
+                            status = "IN_PROGRESS",
+                            subtasksSerialized = "u1::گردآوری داده‌های آزمایش::true;;u2::رسم نمودارهای مقایسه::true;;u3::نگارش متن تحلیل::false",
+                            reminderTime = "۱۴۰۵/۰۸/۰۸ • ساعت ۱۰:۰۰",
+                            isMajorMission = true
+                        ),
+                        TaskEntity(
+                            id = "4",
+                            title = "پرداخت قسط ۱ وام تجهیزات مهندسی",
+                            category = "FINANCE",
+                            priority = "URGENT",
+                            completed = false,
+                            dueDate = "۱۴۰۵/۰۸/۰۷",
+                            createdAt = "۱۴۰۵/۰۸/۰۳",
+                            linkedDebtId = "d1",
+                            topicId = null, // Independent linked debt task
+                            status = "TODO"
+                        ),
+                        TaskEntity(
+                            id = "5",
+                            title = "تدوین راف‌کات مستند صنعتی و اصلاح رنگ",
+                            category = "WORK",
+                            priority = "HIGH",
+                            completed = false,
+                            dueDate = "۱۴۰۵/۰۸/۰۹",
+                            createdAt = "۱۴۰۵/۰۸/۰۳",
+                            topicId = "top_film",
+                            description = "سینک صدا و تصویر، انتخاب موسیقی متن و خروجی تست",
+                            status = "TODO",
+                            subtasksSerialized = "f1::سینک پلان‌های دوربین A و B::true;;f2::اصلاح رنگ و نور (Color Grading)::false",
+                            reminderTime = "۱۴۰۵/۰۸/۰۹ • ساعت ۱۶:۰۰",
+                            isMajorMission = true
+                        ),
+                        TaskEntity(
+                            id = "6",
+                            title = "تایید لوکیشن و چک‌لیست تجهیزات نورپردازی",
+                            category = "WORK",
+                            priority = "MEDIUM",
+                            completed = true,
+                            dueDate = "۱۴۰۵/۰۸/۰۴",
+                            createdAt = "۱۴۰۵/۰۸/۰۲",
+                            topicId = "top_film",
+                            description = "بازدید لوکیشن فیلم‌برداری و تست باتری‌ها",
+                            status = "COMPLETED",
+                            completedAt = "۱۴۰۵/۰۸/۰۴ • ساعت ۱۹:۱۵"
+                        )
+                    )
+                )
+
+                // Seed Persistent Reminders
+                dao.insertReminders(
+                    listOf(
+                        ReminderEntity(
+                            id = "rem_TASK_1",
+                            entityType = "TASK",
+                            entityId = "1",
+                            title = "بررسی و تایید گزارش مالی شرکت",
+                            triggerTime = "۱۴۰۵/۰۸/۰۶ • ساعت ۱۱:۳۰",
+                            topicId = "top_biz",
+                            topicTitle = "کار و توسعه محصول نرم‌افزاری",
+                            repeatMode = "ONCE",
+                            snoozeIntervalMinutes = 30
+                        ),
+                        ReminderEntity(
+                            id = "rem_TASK_3",
+                            entityType = "TASK",
+                            entityId = "3",
+                            title = "نگارش فصل سوم پایان‌نامه و استخراج نمودارها",
+                            triggerTime = "۱۴۰۵/۰۸/۰۸ • ساعت ۱۰:۰۰",
+                            topicId = "top_uni",
+                            topicTitle = "دانشگاه و پایان‌نامه ارشد",
+                            repeatMode = "DAILY",
+                            snoozeIntervalMinutes = 60
+                        ),
+                        ReminderEntity(
+                            id = "rem_DEBT_d1",
+                            entityType = "DEBT",
+                            entityId = "d1",
+                            title = "سررسید قسط وام تجهیزات مهندسی (بانک رسالت)",
+                            triggerTime = "۱۴۰۵/۰۸/۰۷ • ساعت ۰۹:۰۰",
+                            sensitiveAmountToman = 3_000_000L
+                        )
                     )
                 )
 

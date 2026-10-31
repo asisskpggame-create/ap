@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -80,6 +81,7 @@ import com.example.personallifeos.sms.BankUserConfig
 import com.example.personallifeos.sms.DetectedCurrencyUnit
 import com.example.personallifeos.sms.IranianBankSmsEngine
 import com.example.personallifeos.sms.SmsTransactionDirection
+import com.example.personallifeos.ui.components.AppSvgIcons
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BorderCyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
@@ -428,7 +430,12 @@ fun ExpensesScreen(
                                             .testTag("quick_preset_${preset.id}")
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(preset.iconEmoji, fontSize = 14.sp)
+                                            Icon(
+                                                imageVector = AppSvgIcons.resolveQuickPresetVector(preset.iconEmoji, preset.category),
+                                                contentDescription = preset.title,
+                                                tint = CyanPrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Column {
                                                 Text(preset.title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
@@ -888,7 +895,10 @@ fun ExpensesScreen(
                                     }
                                 }
                             } else {
-                                Text("✅ این مورد به طور کامل تسویه شده و یادآوری‌های آینده آن لغو گردیده است.", fontSize = 11.sp, color = EmeraldAccent)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(14.dp))
+                                    Text("این مورد به طور کامل تسویه شده و یادآوری‌های آینده آن لغو گردیده است.", fontSize = 11.sp, color = EmeraldAccent)
+                                }
                             }
                         }
                     }
@@ -1034,7 +1044,10 @@ fun ExpensesScreen(
                                 Text("تولید و کپی خروجی CSV در کلیپ‌بورد", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                             csvExportPreview?.let {
-                                Text("✅ گزارش CSV در حافظه کلیپ‌بورد کپی شد!", fontSize = 12.sp, color = EmeraldAccent)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(14.dp))
+                                    Text("گزارش CSV در حافظه کلیپ‌بورد کپی شد!", fontSize = 12.sp, color = EmeraldAccent)
+                                }
                             }
                         }
                     }
@@ -1054,17 +1067,19 @@ fun ExpensesScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "بانک‌ها و سرشماره‌های فعال (${PersianUtils.formatPersianNumber(configuredBanks.size.toLong())})",
+                                    text = "بانک‌ها و سرشماره‌های اختصاصی (${PersianUtils.formatPersianNumber(configuredBanks.size.toLong())})",
                                     color = TextPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "+ مدیریت / افزودن بانک جدید",
-                                    color = CyanPrimary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clickable { onOpenBankSelector() }
+                                    text = "+ افزودن بانک جدید (میرزا)",
+                                    color = EmeraldAccent,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier
+                                        .clickable { onOpenBankSelector() }
+                                        .testTag("open_mirza_bank_selector_btn")
                                 )
                             }
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1074,16 +1089,26 @@ fun ExpensesScreen(
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(
                                                 Brush.linearGradient(
-                                                    listOf(Color(0xFF0A2540), Color(0xFF153E6B))
+                                                    listOf(Color(0xFF071E3D), Color(0xFF0E3762))
                                                 )
                                             )
-                                            .border(1.dp, CyanPrimary.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                                            .border(1.dp, CyanPrimary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
                                             .clickable { senderInput = cfg.senderNumber }
                                             .padding(horizontal = 14.dp, vertical = 10.dp)
                                     ) {
                                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text(cfg.bank.faName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            Text("سرشماره: ${cfg.senderNumber}", color = Color(0xFF93C5FD), fontSize = 11.sp)
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                if (cfg.requireSenderMatch) {
+                                                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF86EFAC), modifier = Modifier.size(12.dp))
+                                                }
+                                                Text(
+                                                    text = if (cfg.requireSenderMatch) "فقط سرشماره: ${cfg.senderNumber}" else "سرشماره: ${cfg.senderNumber}",
+                                                    color = Color(0xFF86EFAC),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1118,13 +1143,13 @@ fun ExpensesScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "اسکنر هوشمند پیامک بانکی (موتور ممیزی‌شده ۱۸+ بانک)",
+                                        text = "فیش‌خوان هوشمند با قفل سرشماره اختصاصی",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
                                     )
                                     Text(
-                                        text = "پشتیبانی از اعتبارسنجی سطح قالب، سرشماره مشترک 982000 و فیلتر OTP:",
+                                        text = "هر بانک فقط پیامک‌های ارسالی از سرشماره ثبت‌شده خودش را می‌خواند تا خطای ورودی/خروجی رخ ندهد:",
                                         fontSize = 11.sp,
                                         color = TextMuted
                                     )
@@ -1132,7 +1157,7 @@ fun ExpensesScreen(
                             }
 
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("الگوهای شبکه بانکی (تست با ۱ لمس):", fontSize = 11.sp, color = TextMuted)
+                                Text("الگوهای شبکه بانکی (تست با ۱ لمس به همراه سرشماره بانک):", fontSize = 11.sp, color = TextMuted)
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     items(IranianBankSmsEngine.SAMPLE_SMS_TEMPLATES.keys.toList()) { bankName ->
                                         val sampleText = IranianBankSmsEngine.SAMPLE_SMS_TEMPLATES[bankName] ?: ""
@@ -1144,6 +1169,11 @@ fun ExpensesScreen(
                                                 .border(0.5.dp, if (isSelected) CyanPrimary else Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                                 .clickable {
                                                     smsInput = sampleText
+                                                    val detectedBank = IranianBankSmsEngine.detectBank(IranianBankSmsEngine.normalizeDigits(sampleText))
+                                                    val matchedCfg = configuredBanks.firstOrNull { it.bank == detectedBank }
+                                                    senderInput = matchedCfg?.senderNumber
+                                                        ?: detectedBank.defaultSenders.firstOrNull()
+                                                        ?: ""
                                                     smsFeedback = null
                                                 }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1159,18 +1189,30 @@ fun ExpensesScreen(
                                 }
                             }
 
-                            OutlinedTextField(
-                                value = senderInput,
-                                onValueChange = { senderInput = it },
-                                placeholder = {
-                                    Text("سرشماره فرستنده (اختیاری - مثلاً 98300017 یا 982000)", color = TextMuted, fontSize = 12.sp)
-                                },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("sms_sender_field"),
-                                shape = RoundedCornerShape(12.dp)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = senderInput,
+                                    onValueChange = { senderInput = it },
+                                    placeholder = {
+                                        Text("سرشماره فرستنده (مثلاً 98300017)", color = TextMuted, fontSize = 12.sp)
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("sms_sender_field"),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                OutlinedButton(
+                                    onClick = { senderInput = "+989120000000" },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("تست شماره متفرقه", color = AmberWarning, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
 
                             OutlinedTextField(
                                 value = smsInput,
@@ -1326,7 +1368,7 @@ fun ExpensesScreen(
     if (showAddPresetDialog) {
         var pTitle by remember { mutableStateOf("") }
         var pAmount by remember { mutableStateOf("") }
-        var pEmoji by remember { mutableStateOf("⚡") }
+        var pEmoji by remember { mutableStateOf("SVG_COFFEE") }
         AlertDialog(
             onDismissRequest = { showAddPresetDialog = false },
             title = { Text("افزودن دکمه ثبت سریع ۱-لمسی", fontWeight = FontWeight.Bold) },
@@ -1334,7 +1376,28 @@ fun ExpensesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = pTitle, onValueChange = { pTitle = it }, label = { Text("عنوان (مثلاً: قهوه صبح)") }, singleLine = true)
                     OutlinedTextField(value = pAmount, onValueChange = { pAmount = it.filter { ch -> ch.isDigit() } }, label = { Text("مبلغ پیش‌فرض (تومان)") }, singleLine = true)
-                    OutlinedTextField(value = pEmoji, onValueChange = { pEmoji = it }, label = { Text("آیکون ایموجی") }, singleLine = true)
+                    Text("انتخاب آیکون وکتور (SVG):", fontSize = 12.sp, color = TextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("SVG_COFFEE", "SVG_TAXI", "SVG_SHOP", "SVG_FOOD", "SVG_GAS", "SVG_BOLT").forEach { key ->
+                            val selected = pEmoji == key
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) CyanPrimary.copy(alpha = 0.2f) else SurfaceCard)
+                                    .border(1.dp, if (selected) CyanPrimary else Color(0x26FFFFFF), RoundedCornerShape(10.dp))
+                                    .clickable { pEmoji = key },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = AppSvgIcons.resolveQuickPresetVector(key),
+                                    contentDescription = key,
+                                    tint = if (selected) CyanPrimary else TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1342,7 +1405,7 @@ fun ExpensesScreen(
                     onClick = {
                         val amt = pAmount.toLongOrNull() ?: 0L
                         if (pTitle.isNotBlank() && amt > 0) {
-                            onAddQuickPreset(pTitle, amt, PersianUtils.inferCategoryFromText(pTitle), pEmoji.ifBlank { "⚡" })
+                            onAddQuickPreset(pTitle, amt, PersianUtils.inferCategoryFromText(pTitle), pEmoji.ifBlank { "SVG_BOLT" })
                             showAddPresetDialog = false
                         }
                     },
