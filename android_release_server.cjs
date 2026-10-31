@@ -38,7 +38,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       appName: 'Personal Life OS',
-      platform: 'Android Native (Kotlin + Jetpack Compose + Room v4)',
+      platform: 'Android Native (Kotlin + Jetpack Compose + Room v7)',
       versionName: '1.7.0R',
       versionCode: 8,
       pillars: ['DAILY_LOG', 'GOALS_AND_HABITS', 'HOME', 'AI_ASSISTANT'],
@@ -92,7 +92,7 @@ const server = http.createServer((req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Personal Life OS (v1.5.0) — نسخه چهاربخشی و Liquid Glass</title>
+  <title>Personal Life OS (v1.7.0R) — سیستم مدیریت تاپیک‌ها، مأموریت‌ها و یادآور هوشمند</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -405,15 +405,15 @@ const server = http.createServer((req, res) => {
   <!-- Top Real-time Control & Download Bar -->
   <div class="top-control-bar">
     <div style="display: flex; align-items: center; gap: 10px;">
-      <span class="badge-chip"><span class="pulse-dot"></span> معماری ۴ بخشی Liquid Glass فعال است</span>
-      <span style="font-size: 0.78rem; color: var(--text-muted);">Personal Life OS (v1.5.0)</span>
+      <span class="badge-chip"><span class="pulse-dot"></span> معماری تاپیک‌ها و مأموریت‌ها v1.7.0R فعال است</span>
+      <span style="font-size: 0.78rem; color: var(--text-muted);">Personal Life OS (v1.7.0R)</span>
     </div>
     <div style="display: flex; align-items: center; gap: 8px;">
-      <a href="/download/app-debug.apk" class="btn-apk" download="Personal-Life-OS-v1.5.0-Debug.apk">
+      <a href="/download/app-debug.apk" class="btn-apk" download="Personal-Life-OS-v1.7.0R-TopicsPro-Debug.apk">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         دانلود APK دیباگ (${debugInfo.sizeMb})
       </a>
-      <a href="/download/app-release.apk" class="btn-apk btn-apk-secondary" download="Personal-Life-OS-v1.5.0-Release.apk">
+      <a href="/download/app-release.apk" class="btn-apk btn-apk-secondary" download="Personal-Life-OS-v1.7.0R-TopicsPro-Release.apk">
         دانلود APK ریلیز (${releaseInfo.sizeMb})
       </a>
     </div>
@@ -655,7 +655,7 @@ const server = http.createServer((req, res) => {
       <div id="pillar-dashboard" class="page active">
         <!-- Hero Summary Banner -->
         <div class="card card-hero">
-          <div style="font-size: 0.68rem; color: var(--cyan); font-weight: 700; margin-bottom: 2px;">💎 داشبورد وضعیت امروز (v1.5.0)</div>
+          <div style="font-size: 0.68rem; color: var(--cyan); font-weight: 700; margin-bottom: 2px;">💎 داشبورد وضعیت امروز (v1.7.0R)</div>
           <div style="font-size: 0.95rem; font-weight: 800; color: #fff;">روز به‌خیر! ۴ ستون زندگی شما هماهنگ هستند</div>
           <div style="font-size: 0.72rem; color: var(--text-muted); margin: 4px 0 10px;">خلاصه وضعیت، اقدام‌های بعدی، روندهای ماهانه و تعهدات مالی.</div>
           <div style="display: flex; gap: 8px;">
