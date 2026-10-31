@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const DEBUG_APK = path.resolve(__dirname, 'app/build/outputs/apk/debug/app-debug.apk');
 const RELEASE_APK = path.resolve(__dirname, 'app/build/outputs/apk/release/app-release.apk');
 const FALLBACK_APK = path.resolve(__dirname, '.build-outputs/app-debug.apk');
