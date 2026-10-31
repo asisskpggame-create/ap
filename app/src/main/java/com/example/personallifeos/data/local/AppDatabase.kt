@@ -1,6 +1,7 @@
 package com.example.personallifeos.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -9,6 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 
 @Database(
     entities = [
@@ -21,7 +23,7 @@ import kotlinx.coroutines.launch
         HealthLogEntity::class,
         VaultNoteEntity::class
     ],
-    version = 4,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,85 +34,104 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        /**
-         * Non-destructive migration from v3 -> v4:
-         * Preserves all existing tasks, expenses, debts, habits, health logs, and vault notes,
-         * while adding the new Topics & Mission Management columns and tables.
-         */
+        private fun migrateToVersion7(db: SupportSQLiteDatabase) {
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN topicId TEXT")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'TODO'")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN subtasksSerialized TEXT NOT NULL DEFAULT ''")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderTime TEXT")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderEpochMillis INTEGER")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderRepeatMode TEXT NOT NULL DEFAULT 'ONCE'")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderBeforeMinutes INTEGER NOT NULL DEFAULT 0")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN isMajorMission INTEGER NOT NULL DEFAULT 0")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN completedAt TEXT")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN activityLogSerialized TEXT NOT NULL DEFAULT ''")
+            safeExec(db, "ALTER TABLE tasks ADD COLUMN linkedDebtId TEXT")
+
+            safeExec(db, "ALTER TABLE expenses ADD COLUMN accountName TEXT DEFAULT 'حساب پیش‌فرض'")
+            safeExec(db, "ALTER TABLE expenses ADD COLUMN idempotencyKey TEXT")
+            safeExec(db, "ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'EXPENSE'")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `topics` (
+                    `id` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `description` TEXT NOT NULL,
+                    `iconEmoji` TEXT NOT NULL,
+                    `colorHex` INTEGER NOT NULL,
+                    `startDate` TEXT NOT NULL,
+                    `endDate` TEXT,
+                    `priority` TEXT NOT NULL,
+                    `tagOrCategory` TEXT NOT NULL,
+                    `isActive` INTEGER NOT NULL,
+                    `isArchived` INTEGER NOT NULL,
+                    `reminderEnabled` INTEGER NOT NULL,
+                    `reminderTime` TEXT,
+                    `topicNote` TEXT NOT NULL,
+                    `createdAt` TEXT NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reminders` (
+                    `id` TEXT NOT NULL,
+                    `entityType` TEXT NOT NULL,
+                    `entityId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `triggerTime` TEXT NOT NULL,
+                    `isSnoozed` INTEGER NOT NULL,
+                    `isCompleted` INTEGER NOT NULL,
+                    `sensitiveAmountToman` INTEGER,
+                    `topicId` TEXT,
+                    `topicTitle` TEXT,
+                    `repeatMode` TEXT NOT NULL,
+                    `snoozeIntervalMinutes` INTEGER NOT NULL,
+                    `triggerEpochMillis` INTEGER,
+                    `isEnabled` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
+        val MIGRATION_5_7 = object : Migration(5, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
+        val MIGRATION_4_7 = object : Migration(4, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
+        val MIGRATION_3_7 = object : Migration(3, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
+        val MIGRATION_2_7 = object : Migration(2, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
+        val MIGRATION_1_7 = object : Migration(1, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
+        }
+
         val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN topicId TEXT")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'TODO'")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN subtasksSerialized TEXT NOT NULL DEFAULT ''")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderTime TEXT")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderEpochMillis INTEGER")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderRepeatMode TEXT NOT NULL DEFAULT 'ONCE'")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN reminderBeforeMinutes INTEGER NOT NULL DEFAULT 0")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN isMajorMission INTEGER NOT NULL DEFAULT 0")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN completedAt TEXT")
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN activityLogSerialized TEXT NOT NULL DEFAULT ''")
-
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `topics` (
-                        `id` TEXT NOT NULL,
-                        `title` TEXT NOT NULL,
-                        `description` TEXT NOT NULL,
-                        `iconEmoji` TEXT NOT NULL,
-                        `colorHex` INTEGER NOT NULL,
-                        `startDate` TEXT NOT NULL,
-                        `endDate` TEXT,
-                        `priority` TEXT NOT NULL,
-                        `tagOrCategory` TEXT NOT NULL,
-                        `isActive` INTEGER NOT NULL,
-                        `isArchived` INTEGER NOT NULL,
-                        `reminderEnabled` INTEGER NOT NULL,
-                        `reminderTime` TEXT,
-                        `topicNote` TEXT NOT NULL,
-                        `createdAt` TEXT NOT NULL,
-                        PRIMARY KEY(`id`)
-                    )
-                    """.trimIndent()
-                )
-
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `reminders` (
-                        `id` TEXT NOT NULL,
-                        `entityType` TEXT NOT NULL,
-                        `entityId` TEXT NOT NULL,
-                        `title` TEXT NOT NULL,
-                        `triggerTime` TEXT NOT NULL,
-                        `isSnoozed` INTEGER NOT NULL,
-                        `isCompleted` INTEGER NOT NULL,
-                        `sensitiveAmountToman` INTEGER,
-                        `topicId` TEXT,
-                        `topicTitle` TEXT,
-                        `repeatMode` TEXT NOT NULL,
-                        `snoozeIntervalMinutes` INTEGER NOT NULL,
-                        `triggerEpochMillis` INTEGER,
-                        `isEnabled` INTEGER NOT NULL,
-                        PRIMARY KEY(`id`)
-                    )
-                    """.trimIndent()
-                )
-            }
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
         }
 
         val MIGRATION_2_4 = object : Migration(2, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                safeExec(db, "ALTER TABLE tasks ADD COLUMN linkedDebtId TEXT")
-                safeExec(db, "ALTER TABLE expenses ADD COLUMN accountName TEXT DEFAULT 'حساب پیش‌فرض'")
-                safeExec(db, "ALTER TABLE expenses ADD COLUMN idempotencyKey TEXT")
-                MIGRATION_3_4.migrate(db)
-            }
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
         }
 
         val MIGRATION_1_4 = object : Migration(1, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                MIGRATION_2_4.migrate(db)
-            }
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion7(db)
         }
 
         private fun safeExec(db: SupportSQLiteDatabase, sql: String) {
@@ -121,14 +142,48 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private fun migrateLegacyDatabaseFileIfNeeded(context: Context) {
+            try {
+                val oldDbFile = context.getDatabasePath("personal_life_os_cache.db")
+                val newDbFile = context.getDatabasePath("personal_life_os.db")
+                if (oldDbFile.exists() && !newDbFile.exists()) {
+                    newDbFile.parentFile?.mkdirs()
+                    oldDbFile.copyTo(newDbFile, overwrite = true)
+
+                    val oldWal = File(oldDbFile.parentFile, "personal_life_os_cache.db-wal")
+                    val newWal = File(newDbFile.parentFile, "personal_life_os.db-wal")
+                    if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
+
+                    val oldShm = File(oldDbFile.parentFile, "personal_life_os_cache.db-shm")
+                    val newShm = File(newDbFile.parentFile, "personal_life_os.db-shm")
+                    if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
+
+                    Log.i("AppDatabase", "Successfully migrated legacy personal_life_os_cache.db to personal_life_os.db")
+                }
+            } catch (e: Exception) {
+                Log.e("AppDatabase", "Error migrating legacy database files: ${e.message}", e)
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                migrateLegacyDatabaseFileIfNeeded(context.applicationContext)
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "personal_life_os.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_2_4, MIGRATION_1_4)
+                    .addMigrations(
+                        MIGRATION_6_7,
+                        MIGRATION_5_7,
+                        MIGRATION_4_7,
+                        MIGRATION_3_7,
+                        MIGRATION_2_7,
+                        MIGRATION_1_7,
+                        MIGRATION_3_4,
+                        MIGRATION_2_4,
+                        MIGRATION_1_4
+                    )
                     .addCallback(DatabaseSeedCallback())
                     .fallbackToDestructiveMigration()
                     .build()

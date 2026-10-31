@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
         android:allowBackup="true"
@@ -38,6 +40,41 @@
                 <action android:name="com.example.personallifeos.ACTION_COMPLETE_TASK_FROM_NOTIFICATION" />
             </intent-filter>
         </receiver>
+
+        <!-- Real-time incoming Iranian bank SMS listener -->
+        <receiver
+            android:name=".sms.BankSmsReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Homescreen Quick Actions Widget -->
+        <receiver
+            android:name=".widget.LifeOsQuickWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/life_os_widget_info" />
+        </receiver>
+
+        <!-- Notification Shade Quick Settings Tile for Voice Capture -->
+        <service
+            android:name=".service.QuickVoiceTileService"
+            android:icon="@mipmap/ic_launcher"
+            android:label="ثبت صوتی سریع"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

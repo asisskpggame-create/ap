@@ -38,5 +38,14 @@ class MainActivity : ComponentActivity() {
         if (topicId != null || taskId != null) {
             mainViewModel.handleNotificationDeepLink(topicId, taskId)
         }
+
+        if (intent?.getBooleanExtra("EXTRA_OPEN_VOICE_DIALOG", false) == true) {
+            mainViewModel.openVoiceCapture()
+        }
+
+        val navTab = intent?.getIntExtra("EXTRA_NAVIGATE_TAB", -1) ?: -1
+        if (navTab >= 0) {
+            mainViewModel.navigateToTab(navTab)
+        }
     }
 }

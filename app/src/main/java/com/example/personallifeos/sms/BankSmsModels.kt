@@ -40,6 +40,7 @@ enum class BankType(
     MELAL("مؤسسه اعتباری ملل", "ملل", 0xFF059669),
     KOSAR("مؤسسه اعتباری کوثر", "کوثر", 0xFFF59E0B),
     NOOR("مؤسسه اعتباری نور", "نور", 0xFFEAB308),
+    CUSTOM("سایر بانک‌ها / سفارشی", "سایر بانک‌ها", 0xFF6366F1),
     UNKNOWN("بانک ناشناس", "ناشناس", 0xFF64748B)
 }
 
@@ -86,7 +87,8 @@ data class BankUserConfig(
     val bank: BankType,
     val senderNumber: String,
     val requireSenderMatch: Boolean = true,
-    val verifiedTemplateKeys: Set<String> = emptySet() // Format: "${templateId}@v${version}"
+    val verifiedTemplateKeys: Set<String> = emptySet(), // Format: "${templateId}@v${version}"
+    val customBankName: String? = null
 )
 
 /**
@@ -98,7 +100,8 @@ data class ReceivedSmsSenderItem(
     val bankTitleFa: String,
     val lastMessagePreview: String,
     val receivedTimeFa: String,
-    val suggestedBank: BankType
+    val suggestedBank: BankType,
+    val messageCount: Int = 1
 )
 
 data class BankNotificationItem(

@@ -1,6 +1,14 @@
 package com.example.personallifeos.sms
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object IranianBankSmsEngine {
 
@@ -212,7 +220,8 @@ object IranianBankSmsEngine {
         bank: BankType,
         senderNumber: String,
         requireSenderMatch: Boolean = true,
-        verifyDefaultTemplate: Boolean = true
+        verifyDefaultTemplate: Boolean = true,
+        customBankName: String? = null
     ) {
         val current = bankConfigs[bank]
         val updatedKeys = (current?.verifiedTemplateKeys ?: emptySet()).toMutableSet()
@@ -228,7 +237,8 @@ object IranianBankSmsEngine {
             bank = bank,
             senderNumber = normalizeDigits(senderNumber).trim(),
             requireSenderMatch = requireSenderMatch,
-            verifiedTemplateKeys = updatedKeys
+            verifiedTemplateKeys = updatedKeys,
+            customBankName = customBankName?.trim()?.ifBlank { null }
         )
     }
 
@@ -259,11 +269,99 @@ object IranianBankSmsEngine {
                 bankTitleFa = if (notif.parsedResult.bank != BankType.UNKNOWN) notif.parsedResult.bank.faName else "پیامک دریافتی",
                 lastMessagePreview = notif.rawText.replace("\n", " • ").take(75),
                 receivedTimeFa = notif.receivedAt,
-                suggestedBank = notif.parsedResult.bank
+                suggestedBank = notif.parsedResult.bank,
+                messageCount = 1
             )
         }
         val combined = (fromLive + defaultInboxSenders)
         return combined.distinctBy { it.senderNumber.lowercase() }
+    }
+
+    /**
+     * Reads real SMS messages from the device inbox if READ_SMS permission is granted,
+     * groups by sender address, counts message volume, grabs the latest message snippet,
+     * detects the bank, and returns a sorted list of distinct SMS senders.
+     * Falls back seamlessly to live notifications and default bank senders.
+     */
+    fun readDeviceSmsInboxSenders(
+        context: Context,
+        liveNotifications: List<BankNotificationItem> = emptyList()
+    ): List<ReceivedSmsSenderItem> {
+        val deviceSenders = mutableListOf<ReceivedSmsSenderItem>()
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            try {
+                val uri = Uri.parse("content://sms/inbox")
+                val projection = arrayOf("address", "body", "date")
+                val cursor = context.contentResolver.query(
+                    uri,
+                    projection,
+                    null,
+                    null,
+                    "date DESC"
+                )
+                cursor?.use { c ->
+                    val addressIndex = c.getColumnIndex("address")
+                    val bodyIndex = c.getColumnIndex("body")
+                    val dateIndex = c.getColumnIndex("date")
+
+                    val senderGroups = mutableMapOf<String, MutableList<Pair<String, Long>>>()
+                    var count = 0
+                    while (c.moveToNext() && count < 500) {
+                        count++
+                        val address = if (addressIndex >= 0) c.getString(addressIndex) ?: "" else ""
+                        val body = if (bodyIndex >= 0) c.getString(bodyIndex) ?: "" else ""
+                        val date = if (dateIndex >= 0) c.getLong(dateIndex) else 0L
+                        val cleanAddress = normalizeDigits(address).trim()
+                        if (cleanAddress.isNotBlank()) {
+                            val list = senderGroups.getOrPut(cleanAddress) { mutableListOf() }
+                            list.add(body to date)
+                        }
+                    }
+
+                    senderGroups.forEach { (sender, msgs) ->
+                        val latestMsg = msgs.firstOrNull()?.first ?: ""
+                        val latestDateMillis = msgs.firstOrNull()?.second ?: 0L
+                        val detectedBank = detectBank(latestMsg, sender)
+                        val bankTitle = if (detectedBank != BankType.UNKNOWN) {
+                            detectedBank.faName
+                        } else {
+                            "سرشماره پیامک"
+                        }
+                        val timeStr = if (latestDateMillis > 0) {
+                            try {
+                                val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+                                sdf.format(Date(latestDateMillis))
+                            } catch (_: Exception) {
+                                "پیامک ذخیره‌شده"
+                            }
+                        } else "پیامک ذخیره‌شده"
+
+                        deviceSenders.add(
+                            ReceivedSmsSenderItem(
+                                senderNumber = sender,
+                                bankTitleFa = bankTitle,
+                                lastMessagePreview = latestMsg.replace("\n", " • ").take(85),
+                                receivedTimeFa = timeStr,
+                                suggestedBank = detectedBank,
+                                messageCount = msgs.size
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Graceful fallback to default senders
+            }
+        }
+
+        val baseList = getReceivedSmsInboxSenders(liveNotifications)
+        val combined = (deviceSenders + baseList)
+        return combined.distinctBy { it.senderNumber.lowercase() }
+            .sortedByDescending { it.messageCount }
     }
 
     fun defaultTemplateIdForBank(bank: BankType): String = when (bank) {

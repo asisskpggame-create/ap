@@ -82,6 +82,7 @@ import com.example.personallifeos.sms.DetectedCurrencyUnit
 import com.example.personallifeos.sms.IranianBankSmsEngine
 import com.example.personallifeos.sms.SmsTransactionDirection
 import com.example.personallifeos.ui.components.AppSvgIcons
+import com.example.personallifeos.ui.components.SmsScanner
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BorderCyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
@@ -147,6 +148,7 @@ fun ExpensesScreen(
     var smsInput by remember { mutableStateOf("") }
     var senderInput by remember { mutableStateOf("") }
     var smsFeedback by remember { mutableStateOf<String?>(null) }
+    var isSmsScannerOpen by remember { mutableStateOf(false) }
     var csvExportPreview by remember { mutableStateOf<String?>(null) }
 
     // BigDecimal Accounting Summaries
@@ -1058,6 +1060,69 @@ fun ExpensesScreen(
             // TAB 3: پیامک بانکی و میرزا (Mirza Visual Banks & SMS Parser)
             // =================================================================
             if (selectedFinanceTab == 3) {
+                // SmsScanner Launch Banner
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF0C2440), Color(0xFF07182C))
+                                )
+                            )
+                            .border(1.dp, CyanPrimary.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                            .clickable { isSmsScannerOpen = true }
+                            .padding(16.dp)
+                            .testTag("launch_sms_scanner_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .background(CyanPrimary.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Sms, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(24.dp))
+                                }
+                                Column {
+                                    Text(
+                                        text = "اسکنر پیامک‌های بانکی (SmsScanner)",
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "اسکن زنده پیامک‌ها، استخراج نام بانک، مبلغ و ثبت هوشمند در هزینه‌ها",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { isSmsScannerOpen = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.height(38.dp).testTag("open_sms_scanner_btn")
+                            ) {
+                                Text("اسکن پیامک", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
                 if (configuredBanks.isNotEmpty()) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1361,6 +1426,17 @@ fun ExpensesScreen(
                 }
             },
             containerColor = SurfaceDark
+        )
+    }
+
+    // SmsScanner Component Modal
+    if (isSmsScannerOpen) {
+        SmsScanner(
+            isOpen = true,
+            onDismiss = { isSmsScannerOpen = false },
+            handleAddExpense = { title, amount, category, bankName, isSms, type, accountName ->
+                onAddExpense(title, amount, category, bankName, isSms, type, accountName)
+            }
         )
     }
 

@@ -305,4 +305,39 @@ class BankSmsEngineAuditTest {
         assertFalse(restored.subtasks[1].isCompleted)
         assertEquals(1, restored.activityLog.size)
     }
+
+    @Test
+    fun `regression 12 - IranianBankSmsEngine parses real transaction message and extracts bank, amount, and description for handleAddExpense`() {
+        val rawMellatSms = "بانک ملت • برداشت از ۶۱۰۴۳۳******۱۲۳۴ مبلغ ۲۵۰,۰۰۰ ریال مانده: ۱۵,۰۰۰,۰۰۰ ریال کد پیگیری: ۹۸۲۳۴۱"
+        val parsed = com.example.personallifeos.sms.IranianBankSmsEngine.parse(rawMellatSms, "98200033")
+
+        assertEquals(com.example.personallifeos.sms.BankType.MELLAT, parsed.bank)
+        assertEquals(25000L, parsed.amountToman)
+        assertEquals(250000L, parsed.amountRial)
+        assertTrue(parsed.direction.isExpense)
+
+        var addedTitle = ""
+        var addedAmount = 0L
+        var addedCategory = ""
+        var addedType = com.example.personallifeos.data.model.TransactionType.EXPENSE
+
+        val handleAddExpense: (String, Long, String, com.example.personallifeos.data.model.TransactionType) -> Unit = { title, amount, category, type ->
+            addedTitle = title
+            addedAmount = amount
+            addedCategory = category
+            addedType = type
+        }
+
+        val txType = when (parsed.direction) {
+            com.example.personallifeos.sms.SmsTransactionDirection.DEPOSIT -> com.example.personallifeos.data.model.TransactionType.INCOME
+            else -> com.example.personallifeos.data.model.TransactionType.EXPENSE
+        }
+        val autoTitle = "برداشت از ${parsed.bank.shortNameFa}"
+
+        handleAddExpense(autoTitle, parsed.amountToman, parsed.suggestedCategory, txType)
+
+        assertEquals("برداشت از ملت", addedTitle)
+        assertEquals(25000L, addedAmount)
+        assertEquals(com.example.personallifeos.data.model.TransactionType.EXPENSE, addedType)
+    }
 }

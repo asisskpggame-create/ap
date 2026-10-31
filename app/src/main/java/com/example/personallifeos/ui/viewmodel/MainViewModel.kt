@@ -120,6 +120,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearDeepLinkTarget() = clearDeepLink()
 
+    private val _requestOpenVoiceModal = MutableStateFlow(false)
+    val requestOpenVoiceModal: StateFlow<Boolean> = _requestOpenVoiceModal.asStateFlow()
+
+    fun openVoiceCapture() {
+        _requestOpenVoiceModal.value = true
+    }
+
+    fun clearVoiceCaptureRequest() {
+        _requestOpenVoiceModal.value = false
+    }
+
+    private val _requestedNavigationTab = MutableStateFlow<Int?>(null)
+    val requestedNavigationTab: StateFlow<Int?> = _requestedNavigationTab.asStateFlow()
+
+    fun navigateToTab(tabIndex: Int) {
+        _requestedNavigationTab.value = tabIndex
+    }
+
+    fun clearNavigationTabRequest() {
+        _requestedNavigationTab.value = null
+    }
+
     private val _defaultHealth = HealthLog(
         id = "hl1",
         date = PersianUtils.getPersianDateString(),
@@ -1009,14 +1031,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Iranian Bank SMS Engine & Live Notification Center
     // =========================================================================
 
-    fun saveBankConfig(bank: BankType, senderNumber: String, requireSenderMatch: Boolean) {
+    fun saveBankConfig(
+        bank: BankType,
+        senderNumber: String,
+        requireSenderMatch: Boolean,
+        customBankName: String? = null
+    ) {
         IranianBankSmsEngine.configureBankSenderPolicy(
             bank = bank,
             senderNumber = senderNumber,
             requireSenderMatch = requireSenderMatch,
-            verifyDefaultTemplate = true
+            verifyDefaultTemplate = true,
+            customBankName = customBankName
         )
         _configuredBanks.value = IranianBankSmsEngine.getConfiguredBanks()
+    }
+
+    fun saveBankConfig(bank: BankType, senderNumber: String, requireSenderMatch: Boolean) {
+        saveBankConfig(bank, senderNumber, requireSenderMatch, null)
     }
 
     fun parseAndAddSms(smsText: String, senderAddress: String? = null): String {

@@ -136,8 +136,30 @@ fun PersonalLifeOsApp(
     val bankNotifications by viewModel.bankNotifications.collectAsState()
     val notificationSettings by viewModel.notificationSettings.collectAsState()
     val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
+    val requestOpenVoiceModal by viewModel.requestOpenVoiceModal.collectAsState()
+    val requestedNavigationTab by viewModel.requestedNavigationTab.collectAsState()
 
     val unreadCount = bankNotifications.count { !it.isRead }
+
+    LaunchedEffect(requestOpenVoiceModal) {
+        if (requestOpenVoiceModal) {
+            isVoiceModalOpen = true
+            viewModel.clearVoiceCaptureRequest()
+        }
+    }
+
+    LaunchedEffect(requestedNavigationTab) {
+        requestedNavigationTab?.let { tabIdx ->
+            when (tabIdx) {
+                0 -> currentScreen = Screen.Dashboard
+                1 -> currentScreen = Screen.Tasks
+                2 -> currentScreen = Screen.Expenses
+                3 -> currentScreen = Screen.Goals
+                4 -> currentScreen = Screen.Settings
+            }
+            viewModel.clearNavigationTabRequest()
+        }
+    }
 
     // Navigate directly to «اهداف و مسیر» when an Android system reminder notification is tapped
     LaunchedEffect(deepLinkTopicId, deepLinkTaskId) {
@@ -542,8 +564,8 @@ fun PersonalLifeOsApp(
             isOpen = isBankSelectorOpen,
             liveNotifications = bankNotifications,
             onDismiss = { isBankSelectorOpen = false },
-            onSaveBankConfig = { bank, sender, reqMatch ->
-                viewModel.saveBankConfig(bank, sender, reqMatch)
+            onSaveBankConfig = { bank, sender, reqMatch, customName ->
+                viewModel.saveBankConfig(bank, sender, reqMatch, customName)
             }
         )
 
