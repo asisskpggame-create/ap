@@ -267,7 +267,7 @@ class BankSmsEngineAuditTest {
         assertEquals(4, stats.remainingTasks)
         assertEquals(60, stats.progressPercent)
         assertEquals(1, stats.overdueTasks)
-        assertEquals(2, stats.urgentOrMajorTasks) // idx 7 (URGENT) and idx 8 (isMajorMission)
+        assertEquals(2, stats.urgentOrMajorTasks.size) // idx 7 (URGENT) and idx 8 (isMajorMission)
         assertEquals("۱۴۰۵/۰۸/۰۲", stats.nearestDeadline)
     }
 

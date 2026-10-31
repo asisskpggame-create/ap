@@ -5,7 +5,8 @@ enum class TaskCategory(val titleFa: String) {
     PERSONAL("شخصی"),
     FINANCE("مالی"),
     HEALTH("سلامت"),
-    STUDY("مطالعه")
+    STUDY("مطالعه"),
+    GROWTH("رشد و یادگیری")
 }
 
 enum class TaskPriority(val titleFa: String, val weight: Int) {
@@ -55,7 +56,7 @@ data class TaskItem(
     val priority: TaskPriority,
     val completed: Boolean = false,
     val dueDate: String,
-    val createdAt: String,
+    val createdAt: String = "۱۴۰۵/۰۸/۰۱",
     val linkedDebtId: String? = null,
     val topicId: String? = null,
     val description: String = "",

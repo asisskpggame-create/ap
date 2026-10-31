@@ -42,6 +42,12 @@ data class TaskEntity(
     val activityLogSerialized: String = ""
 ) {
     fun toDomain(): TaskItem {
+        return toModelInternal()
+    }
+
+    fun toModel(): TaskItem = toDomain()
+
+    private fun toModelInternal(): TaskItem {
         val parsedStatus = TaskStatus.entries.find { it.name.equals(status, ignoreCase = true) }
             ?: if (completed) TaskStatus.COMPLETED else TaskStatus.TODO
         val isDone = completed || parsedStatus == TaskStatus.COMPLETED
@@ -69,6 +75,8 @@ data class TaskEntity(
     }
 
     companion object {
+        fun fromModel(task: TaskItem): TaskEntity = fromDomain(task)
+
         fun fromDomain(task: TaskItem): TaskEntity {
             val isDone = task.completed || task.status == TaskStatus.COMPLETED
             val finalStatus = if (isDone) TaskStatus.COMPLETED else task.status

@@ -1522,7 +1522,7 @@ fun TopicWorkspaceDialog(
                                                 }
                                                 Text(
                                                     text = "اولویت: ${mission.priority.titleFa} • مهلت: ${mission.dueDate}" +
-                                                        (if (mission.reminderDateTime.isNotBlank()) " • یادآوری: ${mission.reminderDateTime}" else ""),
+                                                        (if (!mission.reminderDateTime.isNullOrBlank()) " • یادآوری: ${mission.reminderDateTime}" else ""),
                                                     fontSize = 11.sp,
                                                     color = TextMuted
                                                 )
