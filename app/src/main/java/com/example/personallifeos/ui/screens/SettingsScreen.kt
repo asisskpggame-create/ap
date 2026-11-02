@@ -1,18 +1,23 @@
 package com.example.personallifeos.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Download
@@ -63,6 +68,8 @@ import com.example.personallifeos.ui.theme.TextSecondary
 @Composable
 fun SettingsScreen(
     notificationSettings: NotificationSettingsState = NotificationSettingsState(),
+    currentThemeMode: com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode = com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode.DARK,
+    onSelectThemeMode: (com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode) -> Unit = {},
     onUpdateNotificationSettings: (NotificationSettingsState) -> Unit = {},
     onOpenNotificationCenter: () -> Unit = {},
     onOpenBankSelector: () -> Unit = {},
@@ -84,19 +91,126 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // User Profile Card (Screen 8 in master spec)
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "تنظیمات، اعلان‌ها و پشتیبان‌گیری رمزنگاری‌شده",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "مدیریت فیش‌خوان زنده بانکی، بکاپ محلی AES-256-GCM، موتور یادآوری مشترک و مشخصات نسخه 1.6.0R",
-                    fontSize = 12.sp,
-                    color = TextMuted
-                )
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "ع‌م",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "علی محمدی",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "pro@lifeos.ir",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(EmeraldAccent.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "حساب فعال",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldAccent
+                        )
+                    }
+                }
+            }
+        }
+
+        // Theme Toggle Card (Light / Dark)
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "ظاهر و شخصی‌سازی (تم برنامه)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val isDark = currentThemeMode == com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode.DARK
+                        val isLight = currentThemeMode == com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode.LIGHT
+
+                        // Dark Theme Button
+                        Button(
+                            onClick = { onSelectThemeMode(com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode.DARK) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isDark) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (isDark) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("🌙 تم تاریک", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Light Theme Button
+                        Button(
+                            onClick = { onSelectThemeMode(com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode.LIGHT) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isLight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (isLight) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("☀️ تم روشن", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 

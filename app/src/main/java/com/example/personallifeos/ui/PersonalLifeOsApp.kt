@@ -10,33 +10,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Wallet
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -45,60 +32,61 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.personallifeos.ui.components.AppBottomNavBar
+import com.example.personallifeos.ui.components.NavDestinationItem
+import com.example.personallifeos.ui.screens.AddTaskOrTopicChooserSheet
 import com.example.personallifeos.ui.screens.AssistantScreen
 import com.example.personallifeos.ui.screens.BankVisualSelectorDialog
+import com.example.personallifeos.ui.screens.CalendarScreen
 import com.example.personallifeos.ui.screens.DashboardScreen
 import com.example.personallifeos.ui.screens.ExpensesScreen
 import com.example.personallifeos.ui.screens.FloatingReceiptNotificationBanner
+import com.example.personallifeos.ui.screens.GoalsScreen
 import com.example.personallifeos.ui.screens.HealthScreen
+import com.example.personallifeos.ui.screens.MoreHubScreen
 import com.example.personallifeos.ui.screens.NotificationCenterDialog
 import com.example.personallifeos.ui.screens.SettingsScreen
 import com.example.personallifeos.ui.screens.TasksScreen
+import com.example.personallifeos.ui.screens.TopicWorkspaceDialog
+import com.example.personallifeos.ui.screens.TopicsScreen
 import com.example.personallifeos.ui.screens.VaultScreen
 import com.example.personallifeos.ui.screens.VoiceCaptureDialog
-import com.example.personallifeos.ui.theme.AmberWarning
-import com.example.personallifeos.ui.theme.BgDark
 import com.example.personallifeos.ui.theme.CyanPrimary
-import com.example.personallifeos.ui.theme.EmeraldAccent
-import com.example.personallifeos.ui.theme.SurfaceDark
-import com.example.personallifeos.ui.theme.TextMuted
-import com.example.personallifeos.ui.theme.TextPrimary
-import com.example.personallifeos.ui.theme.TextSecondary
 import com.example.personallifeos.ui.viewmodel.MainViewModel
-import com.example.personallifeos.util.PersianUtils
 
+/**
+ * 5-Pillar Navigation Destinations (as defined in master redesign specification & mockup):
+ * 1. Home (خانه)
+ * 2. Tasks (وظایف)
+ * 3. Topics (تاپیک‌ها)
+ * 4. Finance (مالی)
+ * 5. More (بیشتر)
+ */
 sealed class Screen(val route: String, val titleFa: String, val icon: ImageVector) {
-    data object Expenses : Screen("expenses", "مالی", Icons.Default.Wallet)
-    data object Tasks : Screen("tasks", "اهداف و مسیر", Icons.Default.CheckCircle)
-    data object Dashboard : Screen("dashboard", "داشبورد", Icons.Default.Dashboard)
-    data object Assistant : Screen("assistant", "AI", Icons.Default.SmartToy)
-    data object Health : Screen("health", "سلامت", Icons.Default.Favorite)
-    data object Vault : Screen("vault", "صندوق امن", Icons.Default.Lock)
-    data object Settings : Screen("settings", "تنظیمات", Icons.Default.Settings)
+    data object Dashboard : Screen("home", "خانه", Icons.Default.Home)
+    data object Tasks : Screen("tasks", "وظایف", Icons.Default.CheckCircle)
+    data object Topics : Screen("topics", "تاپیک‌ها", Icons.Default.School)
+    data object Expenses : Screen("finance", "مالی", Icons.Default.Wallet)
+    data object More : Screen("more", "بیشتر", Icons.Default.GridView)
 }
 
-// Exact 4-Pillar Core Navigation Order from APP_ROADMAP_FA.md Section 2:
-// 1. مالی | 2. اهداف و مسیر | 3. داشبورد | 4. AI
 val navigationItems = listOf(
-    Screen.Expenses,
-    Screen.Tasks,
-    Screen.Dashboard,
-    Screen.Assistant
+    NavDestinationItem("home", "خانه", Icons.Default.Home, CyanPrimary),
+    NavDestinationItem("tasks", "وظایف", Icons.Default.CheckCircle, CyanPrimary),
+    NavDestinationItem("topics", "تاپیک‌ها", Icons.Default.School, CyanPrimary),
+    NavDestinationItem("finance", "مالی", Icons.Default.Wallet, CyanPrimary),
+    NavDestinationItem("more", "بیشتر", Icons.Default.GridView, CyanPrimary)
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PersonalLifeOsApp(
     viewModel: MainViewModel,
@@ -108,6 +96,8 @@ fun PersonalLifeOsApp(
     var isVoiceModalOpen by remember { mutableStateOf(false) }
     var isBankSelectorOpen by remember { mutableStateOf(false) }
     var isNotificationCenterOpen by remember { mutableStateOf(false) }
+    var isTopicWorkspaceOpen by remember { mutableStateOf(false) }
+    var isAddTopicChooserOpen by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 720
@@ -138,8 +128,8 @@ fun PersonalLifeOsApp(
     val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
     val requestOpenVoiceModal by viewModel.requestOpenVoiceModal.collectAsState()
     val requestedNavigationTab by viewModel.requestedNavigationTab.collectAsState()
-
-    val unreadCount = bankNotifications.count { !it.isRead }
+    val moreSubscreen by viewModel.moreSubscreen.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
 
     LaunchedEffect(requestOpenVoiceModal) {
         if (requestOpenVoiceModal) {
@@ -153,49 +143,72 @@ fun PersonalLifeOsApp(
             when (tabIdx) {
                 0 -> currentScreen = Screen.Dashboard
                 1 -> currentScreen = Screen.Tasks
-                2 -> currentScreen = Screen.Expenses
-                3 -> currentScreen = Screen.Assistant
-                4 -> currentScreen = Screen.Settings
+                2 -> currentScreen = Screen.Topics
+                3 -> currentScreen = Screen.Expenses
+                4 -> currentScreen = Screen.More
             }
             viewModel.clearNavigationTabRequest()
         }
     }
 
-    // Navigate directly to «اهداف و مسیر» when an Android system reminder notification is tapped
+    // Deep Link Navigation
     LaunchedEffect(deepLinkTopicId, deepLinkTaskId) {
-        if (!deepLinkTopicId.isNullOrBlank() || !deepLinkTaskId.isNullOrBlank()) {
+        if (!deepLinkTopicId.isNullOrBlank()) {
+            currentScreen = Screen.Topics
+            isTopicWorkspaceOpen = true
+        } else if (!deepLinkTaskId.isNullOrBlank()) {
             currentScreen = Screen.Tasks
         }
     }
 
-    BackHandler(enabled = currentScreen != Screen.Dashboard) {
-        currentScreen = Screen.Dashboard
+    BackHandler(enabled = moreSubscreen != null || currentScreen != Screen.Dashboard) {
+        if (moreSubscreen != null) {
+            viewModel.navigateToMoreSubscreen(null)
+        } else {
+            currentScreen = Screen.Dashboard
+        }
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Row(
             modifier = modifier
                 .fillMaxSize()
-                .background(BgDark)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             if (isTablet) {
                 NavigationRail(
-                    containerColor = SurfaceDark,
-                    contentColor = CyanPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.testTag("tablet_nav_rail")
                 ) {
-                    navigationItems.forEach { screen ->
+                    navigationItems.forEach { item ->
+                        val isSelected = when (item.id) {
+                            "home" -> currentScreen == Screen.Dashboard
+                            "tasks" -> currentScreen == Screen.Tasks
+                            "topics" -> currentScreen == Screen.Topics
+                            "finance" -> currentScreen == Screen.Expenses
+                            "more" -> currentScreen == Screen.More
+                            else -> false
+                        }
                         NavigationRailItem(
-                            selected = currentScreen == screen,
-                            onClick = { currentScreen = screen },
-                            icon = { Icon(screen.icon, contentDescription = screen.titleFa) },
-                            label = { Text(screen.titleFa, fontSize = 11.sp) },
+                            selected = isSelected,
+                            onClick = {
+                                currentScreen = when (item.id) {
+                                    "home" -> Screen.Dashboard
+                                    "tasks" -> Screen.Tasks
+                                    "topics" -> Screen.Topics
+                                    "finance" -> Screen.Expenses
+                                    else -> Screen.More
+                                }
+                            },
+                            icon = { Icon(item.icon, contentDescription = item.titleFa) },
+                            label = { Text(item.titleFa, fontSize = 11.sp) },
                             colors = NavigationRailItemDefaults.colors(
                                 selectedIconColor = Color.Black,
-                                selectedTextColor = CyanPrimary,
-                                indicatorColor = CyanPrimary,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextMuted
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                     }
@@ -203,154 +216,35 @@ fun PersonalLifeOsApp(
             }
 
             Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Personal Life OS",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .padding(start = 6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0x2606B6D4))
-                                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "v1.7.0R",
-                                        fontSize = 10.sp,
-                                        color = CyanPrimary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        },
-                        actions = {
-                            // Mirza Add Bank Quick Button
-                            IconButton(
-                                onClick = { isBankSelectorOpen = true },
-                                modifier = Modifier.testTag("topbar_add_bank_btn")
-                            ) {
-                                Icon(
-                                    Icons.Default.AccountBalance,
-                                    contentDescription = "افزودن بانک جدید",
-                                    tint = EmeraldAccent
-                                )
-                            }
-
-                            // Smart Notification Center Quick Button with Unread Badge
-                            IconButton(
-                                onClick = { isNotificationCenterOpen = true },
-                                modifier = Modifier.testTag("topbar_notifications_btn")
-                            ) {
-                                BadgedBox(
-                                    badge = {
-                                        if (unreadCount > 0) {
-                                            Badge(containerColor = AmberWarning, contentColor = Color.Black) {
-                                                Text(PersianUtils.formatPersianNumber(unreadCount.toLong()), fontSize = 9.sp)
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        Icons.Default.Notifications,
-                                        contentDescription = "مرکز اعلان و فیش‌خوان زنده",
-                                        tint = if (unreadCount > 0) AmberWarning else TextSecondary
-                                    )
-                                }
-                            }
-
-                            // Health & Calorie Module Quick Button
-                            IconButton(
-                                onClick = {
-                                    currentScreen = if (currentScreen == Screen.Health) Screen.Dashboard else Screen.Health
-                                },
-                                modifier = Modifier.testTag("topbar_health_btn")
-                            ) {
-                                Icon(
-                                    Icons.Default.Favorite,
-                                    contentDescription = "سلامت و کالری",
-                                    tint = if (currentScreen == Screen.Health) Color(0xFFEC4899) else TextSecondary
-                                )
-                            }
-
-                            // Encrypted Vault Quick Button
-                            IconButton(
-                                onClick = {
-                                    currentScreen = if (currentScreen == Screen.Vault) Screen.Dashboard else Screen.Vault
-                                },
-                                modifier = Modifier.testTag("topbar_vault_btn")
-                            ) {
-                                Icon(
-                                    Icons.Default.Lock,
-                                    contentDescription = "صندوق امن",
-                                    tint = if (currentScreen == Screen.Vault) CyanPrimary else TextSecondary
-                                )
-                            }
-
-                            // Settings Quick Button
-                            IconButton(
-                                onClick = {
-                                    currentScreen = if (currentScreen == Screen.Settings) Screen.Dashboard else Screen.Settings
-                                },
-                                modifier = Modifier.testTag("topbar_settings_btn")
-                            ) {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = "تنظیمات",
-                                    tint = if (currentScreen == Screen.Settings) CyanPrimary else TextSecondary
-                                )
-                            }
-
-                            // Voice & SMS Quick Button
-                            IconButton(
-                                onClick = { isVoiceModalOpen = true },
-                                modifier = Modifier.testTag("topbar_voice_btn")
-                            ) {
-                                Icon(Icons.Default.Mic, contentDescription = "ویس‌کپچر", tint = CyanPrimary)
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = SurfaceDark,
-                            titleContentColor = TextPrimary
-                        )
-                    )
-                },
                 bottomBar = {
                     if (!isTablet) {
-                        NavigationBar(
-                            containerColor = SurfaceDark,
-                            tonalElevation = 8.dp,
-                            modifier = Modifier.testTag("bottom_nav_bar")
-                        ) {
-                            navigationItems.forEach { screen ->
-                                NavigationBarItem(
-                                    selected = currentScreen == screen,
-                                    onClick = { currentScreen = screen },
-                                    icon = { Icon(screen.icon, contentDescription = screen.titleFa, modifier = Modifier.size(20.dp)) },
-                                    label = { Text(screen.titleFa, fontSize = 10.sp) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color.Black,
-                                        selectedTextColor = CyanPrimary,
-                                        indicatorColor = CyanPrimary,
-                                        unselectedIconColor = TextSecondary,
-                                        unselectedTextColor = TextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_${screen.route}")
-                                )
-                            }
+                        val currentTabId = when (currentScreen) {
+                            Screen.Dashboard -> "home"
+                            Screen.Tasks -> "tasks"
+                            Screen.Topics -> "topics"
+                            Screen.Expenses -> "finance"
+                            Screen.More -> "more"
                         }
+                        AppBottomNavBar(
+                            items = navigationItems,
+                            selectedId = currentTabId,
+                            onItemSelected = { selectedId ->
+                                currentScreen = when (selectedId) {
+                                    "home" -> Screen.Dashboard
+                                    "tasks" -> Screen.Tasks
+                                    "topics" -> Screen.Topics
+                                    "finance" -> Screen.Expenses
+                                    else -> Screen.More
+                                }
+                            }
+                        )
                     }
                 },
                 floatingActionButton = {
                     if (currentScreen == Screen.Dashboard) {
                         FloatingActionButton(
                             onClick = { isVoiceModalOpen = true },
-                            containerColor = CyanPrimary,
+                            containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = Color.Black,
                             shape = CircleShape,
                             modifier = Modifier.testTag("fab_voice_capture")
@@ -359,7 +253,7 @@ fun PersonalLifeOsApp(
                         }
                     }
                 },
-                containerColor = BgDark
+                containerColor = MaterialTheme.colorScheme.background
             ) { paddingValues ->
                 Column(modifier = Modifier.padding(paddingValues)) {
                     FloatingReceiptNotificationBanner(
@@ -386,19 +280,34 @@ fun PersonalLifeOsApp(
                                 maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
                                 healthLog = healthLog,
                                 onNavigate = { route ->
-                                    currentScreen = when (route) {
-                                        "tasks" -> Screen.Tasks
-                                        "expenses" -> Screen.Expenses
-                                        "assistant" -> Screen.Assistant
-                                        "health" -> Screen.Health
-                                        "vault" -> Screen.Vault
-                                        "settings" -> Screen.Settings
-                                        else -> Screen.Dashboard
+                                    when (route) {
+                                        "tasks" -> currentScreen = Screen.Tasks
+                                        "topics" -> currentScreen = Screen.Topics
+                                        "expenses" -> currentScreen = Screen.Expenses
+                                        "goals" -> {
+                                            currentScreen = Screen.More
+                                            viewModel.navigateToMoreSubscreen("goals")
+                                        }
+                                        "calendar" -> {
+                                            currentScreen = Screen.More
+                                            viewModel.navigateToMoreSubscreen("calendar")
+                                        }
+                                        "vault" -> {
+                                            currentScreen = Screen.More
+                                            viewModel.navigateToMoreSubscreen("vault")
+                                        }
+                                        "settings" -> {
+                                            currentScreen = Screen.More
+                                            viewModel.navigateToMoreSubscreen("settings")
+                                        }
+                                        "reminders" -> isNotificationCenterOpen = true
+                                        else -> currentScreen = Screen.Dashboard
                                     }
                                 },
                                 onOpenTopicFromDashboard = { topicId ->
                                     viewModel.handleNotificationDeepLink(topicId, null)
-                                    currentScreen = Screen.Tasks
+                                    currentScreen = Screen.Topics
+                                    isTopicWorkspaceOpen = true
                                 },
                                 onOpenVoiceModal = { isVoiceModalOpen = true },
                                 onToggleTask = { viewModel.toggleTask(it) },
@@ -420,7 +329,7 @@ fun PersonalLifeOsApp(
                                 isPomodoroRunning = isPomodoroRunning,
                                 completedPomodoroSessions = completedPomodoroSessions,
                                 onAddTask = { title, cat, prio, due -> viewModel.addTask(title, cat, prio, due) },
-                                onAddAdvancedTask = { title, cat, prio, due, desc, topId, isMajor, remTime, _, repMode, subtasks ->
+                                onAddAdvancedTask = { title, cat, prio, due, desc, topId, isMajor, remTime, epoch, repMode, subtasks ->
                                     viewModel.addTask(
                                         title = title,
                                         category = cat,
@@ -429,9 +338,10 @@ fun PersonalLifeOsApp(
                                         description = desc,
                                         topicId = topId,
                                         isMajorMission = isMajor,
-                                        reminderTime = remTime,
-                                        repeatMode = repMode,
-                                        initialSubtasks = subtasks
+                                        reminderDateTime = remTime,
+                                        reminderEpochMillis = epoch,
+                                        reminderRepeatMode = repMode,
+                                        subtaskTitles = subtasks
                                     )
                                 },
                                 onToggleTask = { viewModel.toggleTask(it) },
@@ -463,14 +373,21 @@ fun PersonalLifeOsApp(
                                 onToggleTopicReminder = { viewModel.toggleTopicReminder(it) },
                                 onDuplicateTopicAsTemplate = { viewModel.duplicateTopicAsTemplate(it) },
                                 onUpdateTopicNote = { topic, note -> viewModel.updateTopicNote(topic, note) },
-                                onDeleteTopicConfirmed = { topic, deleteTasks -> viewModel.deleteTopic(topic.id, deleteTasks) },
-                                onAddGoal = { title, desc, date, action, cat -> viewModel.addGoal(title, desc, date, action, cat) },
-                                onUpdateGoalProgress = { id, delta -> viewModel.updateGoalProgress(id, delta) },
-                                onDeleteGoal = { viewModel.deleteGoal(it) },
+                                onDeleteTopicConfirmed = { topic, keepTasks -> viewModel.deleteTopic(topic.id, !keepTasks) },
                                 onToggleHabit = { viewModel.toggleHabit(it) },
                                 onAddHabit = { viewModel.addHabit(it) },
                                 onTogglePomodoro = { viewModel.togglePomodoroTimer() },
                                 onResetPomodoro = { viewModel.resetPomodoroTimer(it) }
+                            )
+
+                            Screen.Topics -> TopicsScreen(
+                                topics = topics,
+                                tasks = tasks,
+                                onOpenTopic = { topicId ->
+                                    viewModel.handleNotificationDeepLink(topicId, null)
+                                    isTopicWorkspaceOpen = true
+                                },
+                                onAddNewTopicClick = { isAddTopicChooserOpen = true }
                             )
 
                             Screen.Expenses -> ExpensesScreen(
@@ -509,40 +426,126 @@ fun PersonalLifeOsApp(
                                 onOpenNotificationCenter = { isNotificationCenterOpen = true }
                             )
 
-                            Screen.Health -> HealthScreen(
-                                healthLog = healthLog,
-                                onUpdateWater = { viewModel.updateWater(it) },
-                                onUpdateFullMetrics = { sleep, qual, exMin, exType, burned, intake ->
-                                    viewModel.updateFullHealthMetrics(sleep, qual, exMin, exType, burned, intake)
-                                },
-                                onRecordScannedFoodOrReceipt = { summary, cal, receiptAmt ->
-                                    viewModel.recordScannedFoodOrReceipt(summary, cal, receiptAmt)
+                            Screen.More -> {
+                                when (moreSubscreen) {
+                                    null -> MoreHubScreen(
+                                        onNavigateToSubscreen = { sub ->
+                                            if (sub == "reminders") {
+                                                isNotificationCenterOpen = true
+                                            } else {
+                                                viewModel.navigateToMoreSubscreen(sub)
+                                            }
+                                        }
+                                    )
+
+                                    "calendar" -> CalendarScreen(
+                                        tasks = tasks,
+                                        onBack = { viewModel.navigateToMoreSubscreen(null) },
+                                        onOpenTask = { /* open task */ }
+                                    )
+
+                                    "goals" -> GoalsScreen(
+                                        goals = goals,
+                                        onBack = { viewModel.navigateToMoreSubscreen(null) },
+                                        onAddGoalClick = { /* add goal */ }
+                                    )
+
+                                    "habits" -> TasksScreen(
+                                        tasks = tasks,
+                                        habits = habits,
+                                        goals = goals,
+                                        debts = debts,
+                                        topics = topics,
+                                        onAddTask = { t, c, p, d -> viewModel.addTask(t, c, p, d) },
+                                        onAddAdvancedTask = { title, cat, prio, due, desc, topId, isMajor, remTime, epoch, repMode, subtasks ->
+                                            viewModel.addTask(
+                                                title = title,
+                                                category = cat,
+                                                priority = prio,
+                                                dueDate = due,
+                                                description = desc,
+                                                topicId = topId,
+                                                isMajorMission = isMajor,
+                                                reminderDateTime = remTime,
+                                                reminderEpochMillis = epoch,
+                                                reminderRepeatMode = repMode,
+                                                subtaskTitles = subtasks
+                                            )
+                                        },
+                                        onToggleTask = { viewModel.toggleTask(it) },
+                                        onUpdateTaskStatus = { t, s -> viewModel.updateTaskStatus(t, s) },
+                                        onToggleMajorMission = { viewModel.toggleTaskMajorMission(it) },
+                                        onAddSubtask = { t, s -> viewModel.addSubtaskToTask(t, s) },
+                                        onToggleSubtask = { t, s -> viewModel.toggleSubtaskInTask(t, s) },
+                                        onMoveTaskToTopic = { t, n -> viewModel.moveTaskToTopic(t, n) },
+                                        onTriggerRealNotificationForTask = { viewModel.triggerImmediateTestReminderNotification(it) },
+                                        onPostponeTask = { viewModel.postponeTaskToTomorrow(it) },
+                                        onDeleteTask = { viewModel.deleteTask(it) },
+                                        onPayLinkedDebtInstallment = { d, a -> viewModel.recordDebtInstallmentPayment(d, a) },
+                                        onAddTopic = { n, d, ic, col, st, en, pr, tg, re, rt ->
+                                            viewModel.addTopic(
+                                                title = n,
+                                                description = d,
+                                                iconEmoji = ic,
+                                                colorHex = col,
+                                                startDate = st,
+                                                endDate = en,
+                                                priority = pr,
+                                                tagOrCategory = tg,
+                                                reminderEnabled = re,
+                                                reminderTime = rt
+                                            )
+                                        },
+                                        onCreateTopicFromTemplate = { viewModel.createTopicFromPresetTemplate(it) },
+                                        onToggleTopicArchive = { viewModel.toggleTopicArchive(it) },
+                                        onToggleTopicReminder = { viewModel.toggleTopicReminder(it) },
+                                        onDuplicateTopicAsTemplate = { viewModel.duplicateTopicAsTemplate(it) },
+                                        onUpdateTopicNote = { topic, note -> viewModel.updateTopicNote(topic, note) },
+                                        onDeleteTopicConfirmed = { topic, keepTasks -> viewModel.deleteTopic(topic.id, !keepTasks) },
+                                        onToggleHabit = { viewModel.toggleHabit(it) },
+                                        onAddHabit = { viewModel.addHabit(it) },
+                                        onTogglePomodoro = { viewModel.togglePomodoroTimer() },
+                                        onResetPomodoro = { viewModel.resetPomodoroTimer(it) }
+                                    )
+
+                                    "health" -> HealthScreen(
+                                        healthLog = healthLog,
+                                        onUpdateWater = { viewModel.updateWater(it) },
+                                        onUpdateFullMetrics = { sleep, qual, exMin, exType, burned, intake ->
+                                            viewModel.updateFullHealthMetrics(sleep, qual, exMin, exType, burned, intake)
+                                        },
+                                        onRecordScannedFoodOrReceipt = { summary, cal, receiptAmt ->
+                                            viewModel.recordScannedFoodOrReceipt(summary, cal, receiptAmt)
+                                        }
+                                    )
+
+                                    "vault" -> VaultScreen(
+                                        vaultNotes = vaultNotes,
+                                        onAddNote = { title, content, cat -> viewModel.addVaultNote(title, content, cat) },
+                                        onDeleteNote = { viewModel.deleteVaultNote(it) }
+                                    )
+
+                                    "assistant" -> AssistantScreen(
+                                        messages = chatMessages,
+                                        isLoading = isChatLoading,
+                                        onSendMessage = { viewModel.sendChatMessage(it) },
+                                        onConfirmDraft = { viewModel.confirmAiDraft(it) },
+                                        onCancelDraft = { viewModel.cancelAiDraft(it) }
+                                    )
+
+                                    "settings" -> SettingsScreen(
+                                        notificationSettings = notificationSettings,
+                                        currentThemeMode = themeMode,
+                                        onSelectThemeMode = { viewModel.setThemeMode(it) },
+                                        onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
+                                        onOpenNotificationCenter = { isNotificationCenterOpen = true },
+                                        onOpenBankSelector = { isBankSelectorOpen = true },
+                                        onExportPlainJson = { viewModel.exportBackupJson() },
+                                        onExportEncryptedAes = { viewModel.exportEncryptedAesBackup(it) },
+                                        onResetData = { viewModel.resetData() }
+                                    )
                                 }
-                            )
-
-                            Screen.Vault -> VaultScreen(
-                                vaultNotes = vaultNotes,
-                                onAddNote = { title, content, cat -> viewModel.addVaultNote(title, content, cat) },
-                                onDeleteNote = { viewModel.deleteVaultNote(it) }
-                            )
-
-                            Screen.Assistant -> AssistantScreen(
-                                messages = chatMessages,
-                                isLoading = isChatLoading,
-                                onSendMessage = { viewModel.sendChatMessage(it) },
-                                onConfirmDraft = { viewModel.confirmAiDraft(it) },
-                                onCancelDraft = { viewModel.cancelAiDraft(it) }
-                            )
-
-                            Screen.Settings -> SettingsScreen(
-                                notificationSettings = notificationSettings,
-                                onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
-                                onOpenNotificationCenter = { isNotificationCenterOpen = true },
-                                onOpenBankSelector = { isBankSelectorOpen = true },
-                                onExportPlainJson = { viewModel.exportBackupJson() },
-                                onExportEncryptedAes = { viewModel.exportEncryptedAesBackup(it) },
-                                onResetData = { viewModel.resetData() }
-                            )
+                            }
                         }
                     }
                 }
@@ -562,24 +565,110 @@ fun PersonalLifeOsApp(
 
         BankVisualSelectorDialog(
             isOpen = isBankSelectorOpen,
-            liveNotifications = bankNotifications,
             onDismiss = { isBankSelectorOpen = false },
-            onSaveBankConfig = { bank, sender, reqMatch, customName ->
-                viewModel.saveBankConfig(bank, sender, reqMatch, customName)
+            configuredBanks = configuredBanks,
+            onSaveBankConfig = { bank, requireMatch, senders, customName ->
+                viewModel.saveBankConfig(bank, requireMatch, senders, customName)
             }
         )
 
         NotificationCenterDialog(
             isOpen = isNotificationCenterOpen,
+            onDismiss = { isNotificationCenterOpen = false },
             notifications = bankNotifications,
-            settings = notificationSettings,
-            onUpdateSettings = { viewModel.updateNotificationSettings(it) },
-            onSimulateIncomingSms = { sender, raw -> viewModel.simulateIncomingBankSms(sender, raw) },
-            onConfirmNeedsReview = { item, dir -> viewModel.confirmNotificationReview(item, dir) },
-            onDismissNotification = { viewModel.dismissNotification(it) },
-            onMarkAllRead = { viewModel.markAllNotificationsRead() },
-            onOpenBankSelector = { isBankSelectorOpen = true },
-            onClose = { isNotificationCenterOpen = false }
+            pendingSms = pendingReviewSms,
+            maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
+            onMarkAsRead = { viewModel.markNotificationAsRead(it) },
+            onClearAll = { viewModel.clearAllNotifications() },
+            onAcceptPending = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
+            onDismissPending = { viewModel.dismissPendingReview() },
+            onSimulateIncomingSms = { viewModel.simulateIncomingBankNotification() }
         )
+
+        // Topic Workspace Sheet for Tab 3 (Topics)
+        val selectedTopic = topics.find { it.id == deepLinkTopicId }
+        if (isTopicWorkspaceOpen && selectedTopic != null) {
+            TopicWorkspaceDialog(
+                topic = selectedTopic,
+                tasks = tasks,
+                topics = topics,
+                onDismiss = {
+                    isTopicWorkspaceOpen = false
+                    viewModel.clearDeepLinkTarget()
+                },
+                onUpdateTopic = { id, name, desc, icon, color, start, end, prio, tag, remEn, remTime ->
+                    viewModel.updateTopic(id, name, desc, icon, color, start, end, prio, tag, remEn, remTime)
+                },
+                onArchiveTopic = {
+                    viewModel.archiveTopic(it)
+                    isTopicWorkspaceOpen = false
+                    viewModel.clearDeepLinkTarget()
+                },
+                onRestoreTopic = { viewModel.restoreTopic(it) },
+                onDeleteTopic = {
+                    viewModel.deleteTopic(it)
+                    isTopicWorkspaceOpen = false
+                    viewModel.clearDeepLinkTarget()
+                },
+                onAddTaskToTopic = { title, cat, prio, due, desc, topId, isM, rem, _, rep, subs ->
+                    viewModel.addTask(title, cat, prio, due, desc, topId, isM, rem, rep, subs)
+                },
+                onToggleTask = { viewModel.toggleTask(it) },
+                onUpdateTaskStatus = { t, s -> viewModel.updateTaskStatus(t, s) },
+                onToggleMajorMission = { viewModel.toggleTaskMajorMission(it) },
+                onAddSubtask = { t, s -> viewModel.addSubtaskToTask(t, s) },
+                onToggleSubtask = { t, s -> viewModel.toggleSubtaskInTask(t, s) },
+                onMoveTaskToTopic = { t, n -> viewModel.moveTaskToTopic(t, n) },
+                onTriggerRealNotification = { viewModel.triggerImmediateTestReminderNotification(it) },
+                onPostponeTask = { viewModel.postponeTaskToTomorrow(it) },
+                onDeleteTask = { viewModel.deleteTask(it) }
+            )
+        }
+
+        // Add Task Or Topic Chooser Sheet
+        if (isAddTopicChooserOpen) {
+            AddTaskOrTopicChooserSheet(
+                topics = topics,
+                onDismiss = { isAddTopicChooserOpen = false },
+                onSelectCreateNewTask = {
+                    isAddTopicChooserOpen = false
+                    currentScreen = Screen.Tasks
+                },
+                onSelectCreateNewTopic = {
+                    isAddTopicChooserOpen = false
+                    // Triggers Add Topic dialog
+                },
+                onApplyPresetTemplate = { template ->
+                    viewModel.addTopic(
+                        title = template.title,
+                        description = template.description,
+                        iconEmoji = template.iconEmoji,
+                        colorHex = template.colorHex,
+                        startDate = PersianUtils.getPersianDateString(),
+                        endDate = null,
+                        priority = template.defaultPriority.name,
+                        tagOrCategory = template.tagOrCategory,
+                        reminderEnabled = true,
+                        reminderTime = "هر روز • ساعت ۱۰:۰۰"
+                    )
+                    isAddTopicChooserOpen = false
+                },
+                onDuplicateExistingTopic = { srcTopic ->
+                    viewModel.addTopic(
+                        title = "${srcTopic.title} (نسخه جدید)",
+                        description = srcTopic.description,
+                        iconEmoji = srcTopic.iconEmoji,
+                        colorHex = srcTopic.colorHex,
+                        startDate = PersianUtils.getPersianDateString(),
+                        endDate = srcTopic.endDate,
+                        priority = srcTopic.priority.name,
+                        tagOrCategory = srcTopic.tagOrCategory,
+                        reminderEnabled = srcTopic.reminderEnabled,
+                        reminderTime = srcTopic.reminderTime
+                    )
+                    isAddTopicChooserOpen = false
+                }
+            )
+        }
     }
 }

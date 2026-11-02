@@ -142,6 +142,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _requestedNavigationTab.value = null
     }
 
+    enum class AppThemeMode { SYSTEM, DARK, LIGHT }
+
+    private val _themeMode = MutableStateFlow(AppThemeMode.DARK)
+    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: AppThemeMode) {
+        _themeMode.value = mode
+    }
+
+    private val _moreSubscreen = MutableStateFlow<String?>(null)
+    val moreSubscreen: StateFlow<String?> = _moreSubscreen.asStateFlow()
+
+    fun navigateToMoreSubscreen(subscreen: String?) {
+        _moreSubscreen.value = subscreen
+    }
+
     private val _defaultHealth = HealthLog(
         id = "hl1",
         date = PersianUtils.getPersianDateString(),
@@ -432,6 +448,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    fun updateTopic(
+        id: String,
+        title: String,
+        description: String,
+        iconEmoji: String,
+        colorHex: Long,
+        startDate: String,
+        endDate: String?,
+        priority: TaskPriority,
+        tagOrCategory: String,
+        reminderEnabled: Boolean,
+        reminderTime: String?
+    ) {
+        val existing = topics.value.find { it.id == id }
+        val updated = (existing ?: TopicItem(id = id, title = title, description = description)).copy(
+            title = title,
+            description = description,
+            iconEmoji = iconEmoji,
+            colorHex = colorHex,
+            startDate = startDate,
+            endDate = endDate,
+            priority = priority,
+            tagOrCategory = tagOrCategory,
+            reminderEnabled = reminderEnabled,
+            reminderTime = reminderTime
+        )
+        updateTopic(updated)
     }
 
     fun toggleTopicArchive(topic: TopicItem) {

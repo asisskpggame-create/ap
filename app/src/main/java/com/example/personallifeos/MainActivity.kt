@@ -6,10 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.example.personallifeos.notification.SmartReminderManager
 import com.example.personallifeos.ui.PersonalLifeOsApp
 import com.example.personallifeos.ui.theme.PersonalLifeOSTheme
 import com.example.personallifeos.ui.viewmodel.MainViewModel
+import com.example.personallifeos.ui.viewmodel.MainViewModel.AppThemeMode
 
 class MainActivity : ComponentActivity() {
     private val mainViewModel: MainViewModel by viewModels()
@@ -20,7 +24,14 @@ class MainActivity : ComponentActivity() {
         handleNotificationIntent(intent)
         enableEdgeToEdge()
         setContent {
-            PersonalLifeOSTheme {
+            val themeMode by mainViewModel.themeMode.collectAsState()
+            val isDarkTheme = when (themeMode) {
+                AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+                AppThemeMode.DARK -> true
+                AppThemeMode.LIGHT -> false
+                else -> isSystemInDarkTheme()
+            }
+            PersonalLifeOSTheme(darkTheme = isDarkTheme) {
                 PersonalLifeOsApp(viewModel = mainViewModel)
             }
         }

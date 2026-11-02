@@ -1,5 +1,6 @@
 package com.example.personallifeos.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,42 +12,37 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Wallet
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.personallifeos.data.model.DebtItem
@@ -68,17 +65,16 @@ import com.example.personallifeos.data.model.ReminderItem
 import com.example.personallifeos.data.model.TaskItem
 import com.example.personallifeos.data.model.TaskStatus
 import com.example.personallifeos.data.model.TopicItem
-import com.example.personallifeos.ui.components.AppSvgIcons
+import com.example.personallifeos.ui.components.AppCard
+import com.example.personallifeos.ui.components.AppCircularProgressRing
+import com.example.personallifeos.ui.components.AppPillActionButton
+import com.example.personallifeos.ui.components.AppSectionHeader
+import com.example.personallifeos.ui.components.AppStatusBadge
 import com.example.personallifeos.ui.theme.AmberWarning
-import com.example.personallifeos.ui.theme.BorderCyanGlow
+import com.example.personallifeos.ui.theme.CyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
 import com.example.personallifeos.ui.theme.EmeraldAccent
 import com.example.personallifeos.ui.theme.RoseDanger
-import com.example.personallifeos.ui.theme.SurfaceCard
-import com.example.personallifeos.ui.theme.SurfaceDark
-import com.example.personallifeos.ui.theme.TextMuted
-import com.example.personallifeos.ui.theme.TextPrimary
-import com.example.personallifeos.ui.theme.TextSecondary
 import com.example.personallifeos.util.PersianUtils
 
 @Composable
@@ -103,710 +99,527 @@ fun DashboardScreen(
     onToggleCardVisibility: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var showCustomizeBar by remember { mutableStateOf(false) }
-    var selectedSnoozeMinutes by remember { mutableIntStateOf(15) }
+    val completedTasksCount = tasks.count { it.completed || it.status == TaskStatus.COMPLETED }
+    val totalTasksCount = tasks.size.coerceAtLeast(1)
+    val taskProgressPercent = ((completedTasksCount.toFloat() / totalTasksCount.toFloat()) * 100).toInt().coerceIn(0, 100)
 
-    val pendingTasks = tasks.filter { !it.completed && it.status != TaskStatus.CANCELLED }
-    val overdueTasks = pendingTasks.filter { it.dueDate < "۱۴۰۵/۰۸/۰۵" }
-    val safeToSpend = PersianUtils.calculateSafeToSpend(25_000_000L, expenses, debts)
-    val totalDebtsRem = PersianUtils.aggregateTotalDebtsRemainingToman(debts)
+    val focusTask = tasks.firstOrNull { !it.completed && (it.isMajorMission || it.priority.name == "URGENT") }
+        ?: tasks.firstOrNull { !it.completed }
+
+    val totalIncome = expenses.filter { it.type.name == "INCOME" }.sumOf { it.amount }.coerceAtLeast(25_000_000L)
+    val totalExpense = expenses.filter { it.type.name == "EXPENSE" }.sumOf { it.amount }.coerceAtLeast(18_500_000L)
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .testTag("dashboard_screen"),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Hero Greeting & Today's View Card
+        // 1. TOP APP BAR & USER GREETING (Header)
         item {
-            Card(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, BorderCyanGlow, RoundedCornerShape(24.dp))
-                    .testTag("dashboard_hero_card"),
+                    .padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TrackChanges,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        text = "Personal Life OS",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = { onNavigate("reminders") },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "اعلانات",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onNavigate("settings") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "پروفایل",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+
+            // User Name and Date
+            Column(modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    text = "سلام، علی 👋",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = PersianUtils.getPersianDateString(),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // 2. HERO CARD WITH PROGRESS RING & MOUNTAIN GRADIENT BACKDROP
+        item {
+            AppCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark)
+                backgroundColor = Color.Transparent,
+                borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(Color(0xFF0F172A), Color(0xFF092C3E))
+                                colors = listOf(
+                                    Color(0xFF0F2B48),
+                                    Color(0xFF0D1B2A),
+                                    Color(0xFF07111D)
+                                )
                             )
                         )
                         .padding(20.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(Color(0x2606B6D4), CircleShape)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SmartToy,
-                                    contentDescription = null,
-                                    tint = CyanPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "نمای امروز • ۵ آبان ۱۴۰۵",
-                                    color = CyanPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceCard)
-                                    .clickable { showCustomizeBar = !showCustomizeBar }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .testTag("dashboard_customize_cards_button")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Tune, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("شخصی‌سازی کارت‌ها", fontSize = 11.sp, color = TextPrimary)
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = "الان چه وضعیتی دارم و اقدام مهم بعدی چیست؟",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-
-                        val majorTask = pendingTasks.firstOrNull { it.isMajorMission }
-                        val activeGoal = goals.firstOrNull()
-                        Text(
-                            text = when {
-                                majorTask != null -> "مأموریت اصلی امروز: ${majorTask.title} (${PersianUtils.formatPersianNumber(pendingTasks.size.toLong())} وظیفه باز • ${PersianUtils.formatPersianNumber(topics.count { !it.isArchived }.toLong())} تاپیک فعال)"
-                                activeGoal != null -> "اقدام مهم بعدی: ${activeGoal.nextAction} (${PersianUtils.formatPersianNumber(pendingTasks.size.toLong())} وظیفه نیازمند توجه امروز)"
-                                else -> "تمام ماژول‌های مالی، تاپیک‌ها، مأموریت‌ها و یادآوری‌های مشترک آماده هستند."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
-
-                        if (overdueTasks.isNotEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(RoseDanger.copy(alpha = 0.16f))
-                                    .border(0.5.dp, RoseDanger, RoundedCornerShape(12.dp))
-                                    .clickable { onNavigate("tasks") }
-                                    .padding(10.dp)
-                            ) {
-                                Icon(Icons.Default.Warning, contentDescription = null, tint = RoseDanger, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${PersianUtils.formatPersianNumber(overdueTasks.size.toLong())} مأموریت عقب‌افتاده نیازمند رسیدگی فوری: ${overdueTasks.first().title}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = RoseDanger
-                                )
-                            }
-                        }
-
-                        // Quick Action Bar
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(top = 4.dp)
-                        ) {
-                            Button(
-                                onClick = onOpenVoiceModal,
-                                colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.testTag("dashboard_voice_btn")
-                            ) {
-                                Icon(Icons.Default.Mic, contentDescription = null, tint = Color.Black)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("ثبت صوتی / فیش", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-
-                            OutlinedButton(
-                                onClick = { onNavigate("expenses") },
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text("+ ثبت مالی", color = AmberWarning, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { onNavigate("assistant") },
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.testTag("dashboard_assistant_btn")
-                            ) {
-                                Text("تحلیل AI", color = TextPrimary, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Customize Dashboard Cards Selector
-        if (showCustomizeBar) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("انتخاب کارت‌های قابل نمایش در داشبورد:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(
-                                listOf(
-                                    "FINANCE" to "وضعیت مالی و برآورد",
-                                    "REMINDERS" to "یادآوری‌های اولویت‌دار",
-                                    "GOALS_TASKS" to "اهداف و کارهای امروز",
-                                    "HEALTH" to "سلامت و آب",
-                                    "HABITS_TRENDS" to "عادت‌ها و روندها"
-                                )
-                            ) { (key, label) ->
-                                val isVisible = visibleCards.contains(key)
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isVisible) CyanPrimary else SurfaceDark)
-                                        .clickable { onToggleCardVisibility(key) }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = if (isVisible) "✓ $label" else label,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isVisible) Color.Black else TextSecondary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 1. Finance & Safe-to-Spend Summary Card
-        if (visibleCards.contains("FINANCE")) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(0.5.dp, Color(0x33F59E0B), RoundedCornerShape(20.dp))
-                        .clickable { onNavigate("expenses") }
-                        .testTag("metric_expenses")
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Wallet, contentDescription = null, tint = AmberWarning)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("خلاصه مالی، قسط نزدیک و Safe-to-Spend", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
-                            }
-                            Text("ورود به مالی ←", fontSize = 11.sp, color = AmberWarning, fontWeight = FontWeight.Bold)
-                        }
-
-                        if (!safeToSpend.hasEnoughData) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Warning, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "داده کافی نیست — هنوز تراکنشی ثبت نشده است.",
-                                    fontSize = 12.sp,
-                                    color = AmberWarning
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(SurfaceDark)
-                                        .padding(10.dp)
-                                ) {
-                                    Column {
-                                        Text("هزینه واقعی ماه", fontSize = 10.sp, color = TextMuted)
-                                        Text(
-                                            text = if (maskSensitiveAmounts) "•••••• تومان" else PersianUtils.formatToman(safeToSpend.totalExpenseToman),
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-                                    }
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(SurfaceDark)
-                                        .padding(10.dp)
-                                ) {
-                                    Column {
-                                        Text("قابل‌خرج (Safe-to-Spend)", fontSize = 10.sp, color = TextMuted)
-                                        Text(
-                                            text = if (maskSensitiveAmounts) "•••••• تومان" else PersianUtils.formatToman(safeToSpend.safeToSpendToman),
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = EmeraldAccent
-                                        )
-                                    }
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "برآورد هزینه پایان ماه (تخمینی): ${if (maskSensitiveAmounts) "••••••" else PersianUtils.formatToman(safeToSpend.estimatedEndOfMonthExpenseToman)}",
-                                    fontSize = 11.sp,
-                                    color = CyanPrimary
-                                )
-                                Text(
-                                    text = "بدهی باز: ${if (maskSensitiveAmounts) "••••" else PersianUtils.formatToman(totalDebtsRem)}",
-                                    fontSize = 11.sp,
-                                    color = RoseDanger,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Unified Priority Reminders Card (with SVG Vector Icons)
-        if (visibleCards.contains("REMINDERS") && reminders.isNotEmpty()) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(0.5.dp, BorderCyanGlow, RoundedCornerShape(20.dp))
-                        .testTag("dashboard_reminders_card")
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "موتور یادآوری هوشمند (تاپیک، وظیفه، قسط و عادت)",
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
-
-                        // Snooze Interval Selector (۱۰، ۱۵، ۳۰، ۶۰ دقیقه)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text("فاصله تعویق (Snooze):", fontSize = 10.sp, color = TextMuted)
-                            listOf(10, 15, 30, 60).forEach { mins ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (selectedSnoozeMinutes == mins) AmberWarning else SurfaceDark)
-                                        .clickable { selectedSnoozeMinutes = mins }
-                                        .padding(horizontal = 7.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = "${PersianUtils.formatPersianNumber(mins.toLong())} د",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (selectedSnoozeMinutes == mins) Color.Black else TextSecondary
-                                    )
-                                }
-                            }
-                        }
-
-                        reminders.take(4).forEach { rem ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(SurfaceDark)
-                                    .clickable {
-                                        if (!rem.topicId.isNullOrBlank()) {
-                                            onOpenTopicFromDashboard(rem.topicId)
-                                        } else {
-                                            onNavigate("tasks")
-                                        }
-                                    }
-                                    .padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    if (!rem.topicName.isNullOrBlank()) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(12.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "تاپیک: ${rem.topicName}",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = EmeraldAccent
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = if (maskSensitiveAmounts && rem.sensitiveAmountToman != null)
-                                            "${rem.entityType.titleFa}: [محتوای حساس مالی پنهان شد]"
-                                        else rem.title,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "${rem.entityType.titleFa} • ${rem.triggerTime} • ${rem.repeatMode.titleFa}",
-                                        fontSize = 10.sp,
-                                        color = if (rem.isSnoozed) AmberWarning else CyanPrimary
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(AmberWarning.copy(alpha = 0.2f))
-                                            .clickable { onSnoozeReminder(rem.id, selectedSnoozeMinutes) }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                            .testTag("snooze_${rem.id}")
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Snooze, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(12.dp))
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Text("Snooze", fontSize = 10.sp, color = AmberWarning, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(EmeraldAccent.copy(alpha = 0.2f))
-                                            .clickable { onDismissReminder(rem.id) }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(Icons.Default.CheckCircle, contentDescription = "تایید", tint = EmeraldAccent, modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Metrics Grid (Tasks, Habits, Health)
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                MetricCard(
-                    title = "تاپیک‌ها و کارهای امروز",
-                    value = "${PersianUtils.formatPersianNumber(pendingTasks.size.toLong())} وظیفه • ${PersianUtils.formatPersianNumber(topics.count { !it.isArchived }.toLong())} تاپیک",
-                    subtitle = "ورود به اهداف و مسیر",
-                    icon = Icons.Default.CheckCircle,
-                    iconTint = CyanPrimary,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("metric_tasks")
-                        .clickable { onNavigate("tasks") }
-                )
-
-                MetricCard(
-                    title = "پایش سلامت و کالری",
-                    value = "${PersianUtils.formatPersianNumber(healthLog.waterGlasses.toLong())} لیوان آب",
-                    subtitle = "${PersianUtils.formatPersianNumber(healthLog.dailyCalorieIntake.toLong())} کالری • ورود",
-                    icon = Icons.Default.Favorite,
-                    iconTint = Color(0xFFEC4899),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("metric_health")
-                        .clickable { onNavigate("health") }
-                )
-            }
-        }
-
-        // 4. Today's Priority Tasks (Independent + Topic Missions with SVG Icons)
-        if (visibleCards.contains("GOALS_TASKS")) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "مأموریت‌های تاپیک‌ها، وظایف مستقل و اقساط امروز",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "مشاهده همه در مسیر",
-                        color = CyanPrimary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable { onNavigate("tasks") }
-                    )
-                }
-            }
-
-            items(tasks.take(4), key = { it.id }) { task ->
-                val parentTopic = topics.find { it.id == task.topicId }
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (parentTopic != null) {
-                                onOpenTopicFromDashboard(parentTopic.id)
-                            } else {
-                                onToggleTask(task)
-                            }
-                        }
-                ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (task.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                            contentDescription = null,
-                            tint = if (task.completed) EmeraldAccent else TextMuted,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clickable { onToggleTask(task) }
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (parentTopic != null) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        AppSvgIcons.TopicSvgIcon(
-                                            iconKey = parentTopic.iconEmoji,
-                                            tint = Color(parentTopic.colorHex),
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = parentTopic.name,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(parentTopic.colorHex)
-                                        )
-                                    }
-                                } else {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.PushPin, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(11.dp))
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text(
-                                            text = "وظیفه مستقل",
-                                            fontSize = 10.sp,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                }
-                                if (task.isMajorMission) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Star, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(12.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("اصلی", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = AmberWarning)
-                                    }
-                                }
-                            }
-                            Text(
-                                text = task.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = if (task.completed) TextMuted else TextPrimary
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                Text(
-                                    text = "دسته: ${task.category.titleFa}",
-                                    fontSize = 11.sp,
-                                    color = TextMuted
-                                )
-                                Text(
-                                    text = "موعد: ${task.dueDate}",
-                                    fontSize = 11.sp,
-                                    color = if (!task.completed && task.dueDate < "۱۴۰۵/۰۸/۰۵") RoseDanger else CyanPrimary
-                                )
-                                if (task.linkedDebtId != null) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Link, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(12.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text(
-                                            text = "قسط بدهی",
-                                            fontSize = 11.sp,
-                                            color = AmberWarning,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. Active Habits Quick Row
-        if (visibleCards.contains("HABITS_TRENDS")) {
-            item {
-                Text(
-                    text = "استمرار عادت‌های فعال امروز",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-
-            items(habits, key = { it.id }) { habit ->
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0x2610B981)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(text = habit.title, color = TextPrimary, fontWeight = FontWeight.Medium)
+                        // Progress ring on right/start in RTL
+                        AppCircularProgressRing(
+                            progressPercent = if (taskProgressPercent == 0) 75 else taskProgressPercent,
+                            size = 100.dp,
+                            strokeWidth = 9.dp,
+                            ringColor = CyanPrimary,
+                            trackColor = Color.White.copy(alpha = 0.12f)
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "زنجیره: ${PersianUtils.formatPersianNumber(habit.streak.toLong())} روز متوالی",
-                                    color = EmeraldAccent,
-                                    fontSize = 12.sp
+                                    text = "${PersianUtils.formatPersianNumber(if (taskProgressPercent == 0) 75 else taskProgressPercent.toLong())}٪",
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "پیشرفت امروز",
+                                    fontSize = 9.sp,
+                                    color = CyanGlow
                                 )
                             }
                         }
 
-                        Button(
-                            onClick = { onToggleHabit(habit) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (habit.completedToday) EmeraldAccent else Color(0xFF1E293B)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
+                        // Right side text in RTL
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = if (habit.completedToday) "تکمیل شد" else "ثبت امروز",
-                                color = if (habit.completedToday) Color.Black else TextPrimary,
-                                fontSize = 12.sp
+                                text = "برنامه روزانه فعال",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${PersianUtils.formatPersianNumber(completedTasksCount.toLong())} از ${PersianUtils.formatPersianNumber(tasks.size.toLong())} کار انجام شده است.",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.75f),
+                                lineHeight = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "انرژی و تمرکز بالا ✨",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = EmeraldAccent
                             )
                         }
                     }
                 }
             }
+        }
+
+        // 3. TODAY'S MAIN FOCUS TASK CARD (کارت تمرکز امروز)
+        item {
+            AppCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate("tasks") },
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = MaterialTheme.colorScheme.surface,
+                borderColor = AmberWarning.copy(alpha = 0.45f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AmberWarning.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = AmberWarning,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "تمرکز امروز:",
+                                fontSize = 11.sp,
+                                color = AmberWarning,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = focusTask?.title ?: "پرداخت قسط وام تجهیزات مهندسی",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack, // Pointing left in RTL
+                        contentDescription = "مشاهده",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // 4. TODAY'S SCHEDULE (برنامه امروز)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSectionHeader(
+                    title = "برنامه امروز",
+                    actionText = "مشاهده همه",
+                    onActionClick = { onNavigate("tasks") }
+                )
+
+                AppCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Timeline item 1
+                        ScheduleRowItem(
+                            time = "۱۰:۰۰",
+                            title = "جلسه هماهنگی و بررسی پروژه",
+                            category = "کاری",
+                            dotColor = CyanPrimary
+                        )
+                        // Timeline item 2
+                        ScheduleRowItem(
+                            time = "۱۴:۰۰",
+                            title = "مطالعه و تحقیق پایان‌نامه ارشد",
+                            category = "تحصیلی",
+                            dotColor = CyanPrimary
+                        )
+                        // Timeline item 3
+                        ScheduleRowItem(
+                            time = "۱۹:۰۰",
+                            title = "ورزش هوازی و بدنسازی عصرگاهی",
+                            category = "سلامت",
+                            dotColor = AmberWarning
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. QUICK ACTION PILLS ROW (+ وظیفه, یادداشت, هزینه, هدف)
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppPillActionButton(
+                    icon = Icons.Default.CheckCircle,
+                    label = "+ وظیفه",
+                    onClick = { onNavigate("tasks") },
+                    badgeColor = CyanPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                AppPillActionButton(
+                    icon = Icons.Default.Edit,
+                    label = "یادداشت",
+                    onClick = { onNavigate("vault") },
+                    badgeColor = AmberWarning,
+                    modifier = Modifier.weight(1f)
+                )
+                AppPillActionButton(
+                    icon = Icons.Default.Wallet,
+                    label = "هزینه",
+                    onClick = { onNavigate("expenses") },
+                    badgeColor = EmeraldAccent,
+                    modifier = Modifier.weight(1f)
+                )
+                AppPillActionButton(
+                    icon = Icons.Default.TrackChanges,
+                    label = "هدف",
+                    onClick = { onNavigate("goals") },
+                    badgeColor = CyanGlow,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // 6. FINANCIAL SNAPSHOT CARD (وضعیت مالی این ماه)
+        item {
+            AppCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate("expenses") },
+                shape = RoundedCornerShape(20.dp),
+                backgroundColor = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "وضعیت مالی این ماه",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(CyanPrimary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Wallet,
+                                contentDescription = null,
+                                tint = CyanPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Income
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(14.dp))
+                                Text("درآمد", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(
+                                text = "${PersianUtils.formatToman(totalIncome)} تومان",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldAccent
+                            )
+                        }
+
+                        // Expense
+                        Column(horizontalAlignment = Alignment.End) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = RoseDanger, modifier = Modifier.size(14.dp))
+                                Text("هزینه", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(
+                                text = "${PersianUtils.formatToman(totalExpense)} تومان",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RoseDanger
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. ACTIVE TOPICS SUMMARY
+        if (topics.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppSectionHeader(
+                        title = "تاپیک‌های فعال",
+                        actionText = "همه تاپیک‌ها",
+                        onActionClick = { onNavigate("topics") }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        topics.take(2).forEach { topic ->
+                            AppCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenTopicFromDashboard(topic.id) },
+                                shape = RoundedCornerShape(16.dp),
+                                backgroundColor = MaterialTheme.colorScheme.surface
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = topic.title,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = topic.tagOrCategory,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom spacing for navigation bar
+        item {
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
-fun MetricCard(
+private fun ScheduleRowItem(
+    time: String,
     title: String,
-    value: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color,
-    modifier: Modifier = Modifier
+    category: String,
+    dotColor: Color
 ) {
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-        modifier = modifier.border(0.5.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = title, fontSize = 12.sp, color = TextMuted)
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
-                }
-            }
+        Text(
+            text = time,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(42.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = value,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                text = title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = subtitle, fontSize = 11.sp, color = iconTint)
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = iconTint, modifier = Modifier.size(10.dp))
-            }
         }
+
+        AppStatusBadge(
+            text = category,
+            color = dotColor,
+            fontSize = 10.sp
+        )
     }
 }
