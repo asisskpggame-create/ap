@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.personallifeos.data.model.GoalItem
+import com.example.personallifeos.data.model.TaskCategory
 import com.example.personallifeos.ui.components.AppCard
 import com.example.personallifeos.ui.components.AppCircularProgressRing
 import com.example.personallifeos.ui.components.AppFilterChip

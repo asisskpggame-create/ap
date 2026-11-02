@@ -84,6 +84,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url === '/download/sources.zip' || url === '/download/fixed-sources.zip' || url === '/download/all-sources.zip') {
+    const zipPath = path.resolve(__dirname, 'public/personal-life-os-v1.7.0R-all-sources.zip');
+    if (!fs.existsSync(zipPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('فایل سورس‌ها یافت نشد.');
+      return;
+    }
+    const stats = fs.statSync(zipPath);
+    res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Length': stats.size,
+      'Content-Disposition': 'attachment; filename="personal-life-os-v1.7.0R-all-sources.zip"'
+    });
+    fs.createReadStream(zipPath).pipe(res);
+    return;
+  }
+
   const debugInfo = getApkStats(DEBUG_APK);
   const releaseInfo = getApkStats(RELEASE_APK);
 
@@ -409,12 +426,15 @@ const server = http.createServer((req, res) => {
       <span style="font-size: 0.78rem; color: var(--text-muted);">Personal Life OS (v1.7.0R)</span>
     </div>
     <div style="display: flex; align-items: center; gap: 8px;">
-      <a href="/download/app-debug.apk" class="btn-apk" download="Personal-Life-OS-v1.7.0R-TopicsPro-Debug.apk">
+      <a href="/download/sources.zip" class="btn-apk" style="background: linear-gradient(135deg, #10b981, #059669); color: white;" download="personal-life-os-v1.7.0R-all-sources.zip">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        دانلود APK دیباگ (${debugInfo.sizeMb})
+        📦 دانلود سورس‌های آماده گیت‌هاب (ZIP)
       </a>
       <a href="/download/app-release.apk" class="btn-apk btn-apk-secondary" download="Personal-Life-OS-v1.7.0R-TopicsPro-Release.apk">
         دانلود APK ریلیز (${releaseInfo.sizeMb})
+      </a>
+      <a href="/download/app-debug.apk" class="btn-apk btn-apk-secondary" download="Personal-Life-OS-v1.7.0R-TopicsPro-Debug.apk">
+        دانلود APK دیباگ (${debugInfo.sizeMb})
       </a>
     </div>
   </div>
