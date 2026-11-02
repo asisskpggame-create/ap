@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = process.env.APP_PORT ? parseInt(process.env.APP_PORT, 10) : 3000;
 const DEBUG_APK = path.resolve(__dirname, 'app/build/outputs/apk/debug/app-debug.apk');
 const RELEASE_APK = path.resolve(__dirname, 'app/build/outputs/apk/release/app-release.apk');
 const FALLBACK_APK = path.resolve(__dirname, '.build-outputs/app-debug.apk');
@@ -98,6 +98,23 @@ const server = http.createServer((req, res) => {
       'Content-Disposition': 'attachment; filename="personal-life-os-v1.7.0R-all-sources.zip"'
     });
     fs.createReadStream(zipPath).pipe(res);
+    return;
+  }
+
+  if (url === '/download/PersonalLifeOsApp.kt') {
+    const filePath = path.resolve(__dirname, 'public/PersonalLifeOsApp.kt');
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('فایل یافت نشد.');
+      return;
+    }
+    const stats = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': stats.size,
+      'Content-Disposition': 'attachment; filename="PersonalLifeOsApp.kt"'
+    });
+    fs.createReadStream(filePath).pipe(res);
     return;
   }
 

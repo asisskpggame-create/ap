@@ -288,6 +288,24 @@ data class ExpenseItem(
     val idempotencyKey: String? = null
 )
 
+enum class RecurringFrequency(val titleFa: String, val subtitleFa: String, val intervalDays: Int) {
+    DAILY("روزانه", "هر روز", 1),
+    WEEKLY("هفتگی", "هر هفته", 7),
+    MONTHLY("ماهانه", "سر هر ماه", 30)
+}
+
+data class RecurringExpenseItem(
+    val id: String,
+    val title: String,
+    val amount: Long, // in Tomans
+    val category: String,
+    val frequency: RecurringFrequency,
+    val nextDueDate: String,
+    val isActive: Boolean = true,
+    val note: String = "",
+    val createdAt: String = "۱۴۰۵/۰۸/۰۵"
+)
+
 data class DebtItem(
     val id: String,
     val title: String,

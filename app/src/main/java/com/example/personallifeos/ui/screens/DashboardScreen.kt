@@ -70,6 +70,7 @@ import com.example.personallifeos.ui.components.AppCircularProgressRing
 import com.example.personallifeos.ui.components.AppPillActionButton
 import com.example.personallifeos.ui.components.AppSectionHeader
 import com.example.personallifeos.ui.components.AppStatusBadge
+import com.example.personallifeos.ui.components.HabitStreakHeatmap
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.CyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
@@ -437,7 +438,18 @@ fun DashboardScreen(
             }
         }
 
-        // 6. FINANCIAL SNAPSHOT CARD (وضعیت مالی این ماه)
+        // 6. HABIT STREAK HEATMAP (پایش و استمرار ۳۰ روزه عادت‌ها)
+        item {
+            HabitStreakHeatmap(
+                habits = habits,
+                onToggleHabit = onToggleHabit,
+                onAddHabitClick = { onNavigate("tasks") },
+                title = "روند و پایبندی ۳۰ روزه عادت‌ها",
+                modifier = Modifier.testTag("dashboard_habit_streak_heatmap")
+            )
+        }
+
+        // 7. FINANCIAL SNAPSHOT CARD (وضعیت مالی این ماه)
         item {
             AppCard(
                 modifier = Modifier

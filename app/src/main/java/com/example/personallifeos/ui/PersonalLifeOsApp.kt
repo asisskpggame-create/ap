@@ -107,6 +107,7 @@ fun PersonalLifeOsApp(
     val habits by viewModel.habits.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val debts by viewModel.debts.collectAsState()
+    val recurringExpenses by viewModel.recurringExpenses.collectAsState()
     val quickPresets by viewModel.quickPresets.collectAsState()
     val goals by viewModel.goals.collectAsState()
     val categoryBudgets by viewModel.categoryBudgets.collectAsState()
@@ -393,6 +394,7 @@ fun PersonalLifeOsApp(
                             Screen.Expenses -> ExpensesScreen(
                                 expenses = expenses,
                                 debts = debts,
+                                recurringExpenses = recurringExpenses,
                                 quickPresets = quickPresets,
                                 categoryBudgets = categoryBudgets,
                                 configuredBanks = configuredBanks,
@@ -419,6 +421,12 @@ fun PersonalLifeOsApp(
                                 onCreateDebtPlan = { debt, count -> viewModel.createDebtRepaymentPlan(debt, count) },
                                 onSettleDebt = { viewModel.settleDebtCompletely(it) },
                                 onDeleteDebt = { viewModel.deleteDebt(it) },
+                                onAddRecurringExpense = { title, amt, cat, freq, due, note ->
+                                    viewModel.addRecurringExpense(title, amt, cat, freq, due, note)
+                                },
+                                onToggleRecurringExpense = { viewModel.toggleRecurringExpenseActive(it) },
+                                onDeleteRecurringExpense = { viewModel.deleteRecurringExpense(it) },
+                                onExecuteRecurringExpense = { viewModel.executeRecurringExpenseNow(it) },
                                 onParseSms = { sms, sender -> viewModel.parseAndAddSms(sms, sender) },
                                 onConfirmReview = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
                                 onDismissReview = { viewModel.dismissPendingReview() },
@@ -510,6 +518,8 @@ fun PersonalLifeOsApp(
 
                                     "health" -> HealthScreen(
                                         healthLog = healthLog,
+                                        habits = habits,
+                                        onToggleHabit = { viewModel.toggleHabit(it) },
                                         onUpdateWater = { viewModel.updateWater(it) },
                                         onUpdateFullMetrics = { sleep, qual, exMin, exType, burned, intake ->
                                             viewModel.updateFullHealthMetrics(sleep, qual, exMin, exType, burned, intake)
@@ -565,24 +575,24 @@ fun PersonalLifeOsApp(
 
         BankVisualSelectorDialog(
             isOpen = isBankSelectorOpen,
+            liveNotifications = bankNotifications,
             onDismiss = { isBankSelectorOpen = false },
-            configuredBanks = configuredBanks,
-            onSaveBankConfig = { bank, requireMatch, senders, customName ->
-                viewModel.saveBankConfig(bank, requireMatch, senders, customName)
+            onSaveBankConfig = { bank, sender, reqMatch, customName ->
+                viewModel.saveBankConfig(bank, sender, reqMatch, customName)
             }
         )
 
         NotificationCenterDialog(
             isOpen = isNotificationCenterOpen,
-            onDismiss = { isNotificationCenterOpen = false },
             notifications = bankNotifications,
-            pendingSms = pendingReviewSms,
-            maskSensitiveAmounts = notificationSettings.maskSensitiveAmounts,
-            onMarkAsRead = { viewModel.markNotificationAsRead(it) },
-            onClearAll = { viewModel.clearAllNotifications() },
-            onAcceptPending = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
-            onDismissPending = { viewModel.dismissPendingReview() },
-            onSimulateIncomingSms = { viewModel.simulateIncomingBankNotification() }
+            settings = notificationSettings,
+            onUpdateSettings = { viewModel.updateNotificationSettings(it) },
+            onSimulateIncomingSms = { sender, raw -> viewModel.simulateIncomingBankSms(sender, raw) },
+            onConfirmNeedsReview = { item, dir -> viewModel.confirmNotificationReview(item, dir) },
+            onDismissNotification = { viewModel.dismissNotification(it) },
+            onMarkAllRead = { viewModel.markAllNotificationsRead() },
+            onOpenBankSelector = { isBankSelectorOpen = true },
+            onClose = { isNotificationCenterOpen = false }
         )
 
         // Topic Workspace Sheet for Tab 3 (Topics)
@@ -590,82 +600,74 @@ fun PersonalLifeOsApp(
         if (isTopicWorkspaceOpen && selectedTopic != null) {
             TopicWorkspaceDialog(
                 topic = selectedTopic,
-                tasks = tasks,
-                topics = topics,
+                allTopics = topics,
+                topicTasks = tasks.filter { it.topicId == selectedTopic.id },
                 onDismiss = {
                     isTopicWorkspaceOpen = false
                     viewModel.clearDeepLinkTarget()
                 },
-                onUpdateTopic = { id, name, desc, icon, color, start, end, prio, tag, remEn, remTime ->
-                    viewModel.updateTopic(id, name, desc, icon, color, start, end, prio, tag, remEn, remTime)
-                },
-                onArchiveTopic = {
-                    viewModel.archiveTopic(it)
+                onOpenNewTaskForTopic = {
                     isTopicWorkspaceOpen = false
-                    viewModel.clearDeepLinkTarget()
+                    currentScreen = Screen.Tasks
                 },
-                onRestoreTopic = { viewModel.restoreTopic(it) },
-                onDeleteTopic = {
-                    viewModel.deleteTopic(it)
-                    isTopicWorkspaceOpen = false
-                    viewModel.clearDeepLinkTarget()
-                },
-                onAddTaskToTopic = { title, cat, prio, due, desc, topId, isM, rem, _, rep, subs ->
-                    viewModel.addTask(title, cat, prio, due, desc, topId, isM, rem, rep, subs)
-                },
-                onToggleTask = { viewModel.toggleTask(it) },
                 onUpdateTaskStatus = { t, s -> viewModel.updateTaskStatus(t, s) },
                 onToggleMajorMission = { viewModel.toggleTaskMajorMission(it) },
                 onAddSubtask = { t, s -> viewModel.addSubtaskToTask(t, s) },
                 onToggleSubtask = { t, s -> viewModel.toggleSubtaskInTask(t, s) },
                 onMoveTaskToTopic = { t, n -> viewModel.moveTaskToTopic(t, n) },
-                onTriggerRealNotification = { viewModel.triggerImmediateTestReminderNotification(it) },
-                onPostponeTask = { viewModel.postponeTaskToTomorrow(it) },
-                onDeleteTask = { viewModel.deleteTask(it) }
+                onTriggerRealNotificationForTask = { viewModel.triggerImmediateTestReminderNotification(it) },
+                onDeleteTask = { viewModel.deleteTask(it) },
+                onToggleTopicReminder = { viewModel.toggleTopicReminder(it) },
+                onToggleTopicArchive = { viewModel.toggleTopicArchive(it) },
+                onDuplicateTopicAsTemplate = { viewModel.duplicateTopicAsTemplate(it) },
+                onUpdateTopicNote = { topic, note -> viewModel.updateTopicNote(topic, note) },
+                onDeleteTopicConfirmed = { topic, keepTasks ->
+                    viewModel.deleteTopic(topic.id, !keepTasks)
+                    isTopicWorkspaceOpen = false
+                    viewModel.clearDeepLinkTarget()
+                }
             )
         }
 
         // Add Task Or Topic Chooser Sheet
         if (isAddTopicChooserOpen) {
             AddTaskOrTopicChooserSheet(
+                isOpen = isAddTopicChooserOpen,
                 topics = topics,
                 onDismiss = { isAddTopicChooserOpen = false },
-                onSelectCreateNewTask = {
-                    isAddTopicChooserOpen = false
-                    currentScreen = Screen.Tasks
-                },
-                onSelectCreateNewTopic = {
-                    isAddTopicChooserOpen = false
-                    // Triggers Add Topic dialog
-                },
-                onApplyPresetTemplate = { template ->
-                    viewModel.addTopic(
-                        title = template.title,
-                        description = template.description,
-                        iconEmoji = template.iconEmoji,
-                        colorHex = template.colorHex,
-                        startDate = PersianUtils.getPersianDateString(),
-                        endDate = null,
-                        priority = template.defaultPriority.name,
-                        tagOrCategory = template.tagOrCategory,
-                        reminderEnabled = true,
-                        reminderTime = "هر روز • ساعت ۱۰:۰۰"
+                onCreateTask = { title, cat, prio, due, desc, topId, isMajor, remTime, epoch, repMode, subtasks ->
+                    viewModel.addTask(
+                        title = title,
+                        category = cat,
+                        priority = prio,
+                        dueDate = due,
+                        description = desc,
+                        topicId = topId,
+                        isMajorMission = isMajor,
+                        reminderDateTime = remTime,
+                        reminderEpochMillis = epoch,
+                        reminderRepeatMode = repMode,
+                        subtaskTitles = subtasks
                     )
                     isAddTopicChooserOpen = false
                 },
-                onDuplicateExistingTopic = { srcTopic ->
+                onCreateTopic = { name, desc, icon, color, start, end, prio, tag, remEn, remTime ->
                     viewModel.addTopic(
-                        title = "${srcTopic.title} (نسخه جدید)",
-                        description = srcTopic.description,
-                        iconEmoji = srcTopic.iconEmoji,
-                        colorHex = srcTopic.colorHex,
-                        startDate = PersianUtils.getPersianDateString(),
-                        endDate = srcTopic.endDate,
-                        priority = srcTopic.priority.name,
-                        tagOrCategory = srcTopic.tagOrCategory,
-                        reminderEnabled = srcTopic.reminderEnabled,
-                        reminderTime = srcTopic.reminderTime
+                        title = name,
+                        description = desc,
+                        iconEmoji = icon,
+                        colorHex = color,
+                        startDate = start,
+                        endDate = end,
+                        priority = prio,
+                        tagOrCategory = tag,
+                        reminderEnabled = remEn,
+                        reminderTime = remTime
                     )
+                    isAddTopicChooserOpen = false
+                },
+                onCreateTopicFromTemplate = { template ->
+                    viewModel.createTopicFromPresetTemplate(template)
                     isAddTopicChooserOpen = false
                 }
             )

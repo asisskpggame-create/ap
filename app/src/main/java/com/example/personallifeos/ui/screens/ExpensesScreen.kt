@@ -70,11 +70,19 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import com.example.personallifeos.data.model.CategoryBudget
 import com.example.personallifeos.data.model.DebtItem
 import com.example.personallifeos.data.model.DebtType
 import com.example.personallifeos.data.model.ExpenseItem
 import com.example.personallifeos.data.model.QuickPreset
+import com.example.personallifeos.data.model.RecurringExpenseItem
+import com.example.personallifeos.data.model.RecurringFrequency
 import com.example.personallifeos.data.model.TransactionType
 import com.example.personallifeos.sms.BankSmsParsedResult
 import com.example.personallifeos.sms.BankUserConfig
@@ -82,6 +90,7 @@ import com.example.personallifeos.sms.DetectedCurrencyUnit
 import com.example.personallifeos.sms.IranianBankSmsEngine
 import com.example.personallifeos.sms.SmsTransactionDirection
 import com.example.personallifeos.ui.components.AppSvgIcons
+import com.example.personallifeos.ui.components.RecurringExpenseModal
 import com.example.personallifeos.ui.components.SmsScanner
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BorderCyanGlow
@@ -100,6 +109,7 @@ import com.example.personallifeos.util.PersianUtils
 fun ExpensesScreen(
     expenses: List<ExpenseItem>,
     debts: List<DebtItem> = emptyList(),
+    recurringExpenses: List<RecurringExpenseItem> = emptyList(),
     quickPresets: List<QuickPreset> = emptyList(),
     categoryBudgets: List<CategoryBudget> = emptyList(),
     configuredBanks: List<BankUserConfig> = emptyList(),
@@ -114,6 +124,10 @@ fun ExpensesScreen(
     onCreateDebtPlan: (DebtItem, Int) -> Unit = { _, _ -> },
     onSettleDebt: (DebtItem) -> Unit = {},
     onDeleteDebt: (String) -> Unit = {},
+    onAddRecurringExpense: (String, Long, String, RecurringFrequency, String, String) -> Unit = { _, _, _, _, _, _ -> },
+    onToggleRecurringExpense: (String) -> Unit = {},
+    onDeleteRecurringExpense: (String) -> Unit = {},
+    onExecuteRecurringExpense: (RecurringExpenseItem) -> Unit = {},
     onParseSms: (String, String?) -> String,
     onConfirmReview: (SmsTransactionDirection, DetectedCurrencyUnit, Long?) -> String = { _, _, _ -> "" },
     onDismissReview: () -> Unit = {},
@@ -134,6 +148,11 @@ fun ExpensesScreen(
     var searchQuery by remember { mutableStateOf("") }
     var editingExpense by remember { mutableStateOf<ExpenseItem?>(null) }
     var showAddPresetDialog by remember { mutableStateOf(false) }
+
+    // Recurring expenses modal & filter states
+    var showRecurringExpenseModal by remember { mutableStateOf(false) }
+    var selectedRecurringFreqFilter by remember { mutableStateOf<RecurringFrequency?>(null) }
+    var recurringExecutionFeedback by remember { mutableStateOf<String?>(null) }
 
     // Debt form states
     var debtTitle by remember { mutableStateOf("") }
@@ -180,12 +199,31 @@ fun ExpensesScreen(
         }
     }
 
+    val monthlyCommittedToman = remember(recurringExpenses) {
+        recurringExpenses.filter { it.isActive }.sumOf { item ->
+            when (item.frequency) {
+                RecurringFrequency.DAILY -> item.amount * 30
+                RecurringFrequency.WEEKLY -> item.amount * 4
+                RecurringFrequency.MONTHLY -> item.amount
+            }
+        }
+    }
+
+    val activeRecurringCount = remember(recurringExpenses) {
+        recurringExpenses.count { it.isActive }
+    }
+
+    val filteredRecurring = remember(recurringExpenses, selectedRecurringFreqFilter) {
+        if (selectedRecurringFreqFilter == null) recurringExpenses
+        else recurringExpenses.filter { it.frequency == selectedRecurringFreqFilter }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .testTag("expenses_screen")
     ) {
-        // 4-Section Finance Pro Sub-Navigation
+        // 5-Section Finance Pro Sub-Navigation
         ScrollableTabRow(
             selectedTabIndex = selectedFinanceTab,
             containerColor = SurfaceDark,
@@ -200,9 +238,10 @@ fun ExpensesScreen(
         ) {
             listOf(
                 "۱. ورودی و خروجی‌ها",
-                "۲. طلب، بدهی و اقساط (${PersianUtils.formatPersianNumber(debts.size.toLong())})",
-                "۳. بودجه، حساب‌ها و گزارش",
-                "۴. پیامک بانکی و میرزا"
+                "۲. زمان‌بندی و دوره‌ای (${PersianUtils.formatPersianNumber(recurringExpenses.size.toLong())})",
+                "۳. طلب، بدهی و اقساط (${PersianUtils.formatPersianNumber(debts.size.toLong())})",
+                "۴. بودجه، حساب‌ها و گزارش",
+                "۵. پیامک بانکی و اسکنر"
             ).forEachIndexed { idx, title ->
                 Tab(
                     selected = selectedFinanceTab == idx,
@@ -620,6 +659,65 @@ fun ExpensesScreen(
                     }
                 }
 
+                // Shortcut banner to Recurring & Scheduled Transactions
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SurfaceDark)
+                            .border(0.5.dp, CyanPrimary.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                            .clickable { selectedFinanceTab = 1 }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                            .testTag("shortcut_to_scheduled_tab")
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(CyanPrimary.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Autorenew,
+                                        contentDescription = null,
+                                        tint = CyanPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "هزینه‌های زمان‌بندی‌شده و دوره‌ای (${PersianUtils.formatPersianNumber(recurringExpenses.size.toLong())} مورد)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "قبوض، اشتراک‌ها و پرداخت‌های تکرارشونده",
+                                        fontSize = 10.sp,
+                                        color = TextMuted
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "مشاهده تب زمان‌بندی ←",
+                                fontSize = 11.sp,
+                                color = CyanPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // Live Search in Transactions
                 item {
                     OutlinedTextField(
@@ -651,9 +749,408 @@ fun ExpensesScreen(
             }
 
             // =================================================================
-            // TAB 1: طلب، بدهی و اقساط (Debt & Receivable + Goal Link)
+            // TAB 1: زمان‌بندی و دوره‌ای (Recurring & Scheduled Transactions)
             // =================================================================
             if (selectedFinanceTab == 1) {
+                // Summary & Hero Card for Scheduled Expenses
+                item {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, CyanPrimary.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                            .testTag("scheduled_summary_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(CyanPrimary.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Autorenew,
+                                            contentDescription = null,
+                                            tint = CyanPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "هزینه‌های زمان‌بندی‌شده و دوره‌ای",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = "قبوض، اشتراک‌ها، بیمه و پرداخت‌های تکرارشونده",
+                                            fontSize = 11.sp,
+                                            color = TextMuted
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { showRecurringExpenseModal = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.testTag("open_recurring_modal_btn")
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ تعریف هزینه دوره‌ای", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            // 2-Metric Summary Box
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1.3f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(SurfaceDark)
+                                        .padding(12.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("تعهد ماهانه دوره‌ای", fontSize = 10.sp, color = TextMuted)
+                                        Text(
+                                            text = PersianUtils.formatToman(monthlyCommittedToman),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AmberWarning
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(0.9f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(SurfaceDark)
+                                        .padding(12.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("وضعیت موارد", fontSize = 10.sp, color = TextMuted)
+                                        Text(
+                                            text = "${PersianUtils.formatPersianNumber(activeRecurringCount.toLong())} از ${PersianUtils.formatPersianNumber(recurringExpenses.size.toLong())} فعال",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = EmeraldAccent
+                                        )
+                                    }
+                                }
+                            }
+
+                            recurringExecutionFeedback?.let { msg ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(EmeraldAccent.copy(alpha = 0.15f))
+                                        .border(1.dp, EmeraldAccent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(16.dp))
+                                        Text(msg, fontSize = 11.sp, color = EmeraldAccent, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Frequency Filters (All, Daily, Weekly, Monthly)
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val filterAllActive = selectedRecurringFreqFilter == null
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (filterAllActive) CyanPrimary else SurfaceCard)
+                                .clickable { selectedRecurringFreqFilter = null }
+                                .padding(vertical = 8.dp)
+                                .testTag("filter_recurring_all"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "همه (${PersianUtils.formatPersianNumber(recurringExpenses.size.toLong())})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (filterAllActive) Color.Black else TextSecondary
+                            )
+                        }
+
+                        RecurringFrequency.entries.forEach { freq ->
+                            val isSel = selectedRecurringFreqFilter == freq
+                            val count = recurringExpenses.count { it.frequency == freq }
+                            val testTagKey = when (freq) {
+                                RecurringFrequency.DAILY -> "filter_recurring_daily"
+                                RecurringFrequency.WEEKLY -> "filter_recurring_weekly"
+                                RecurringFrequency.MONTHLY -> "filter_recurring_monthly"
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSel) CyanPrimary else SurfaceCard)
+                                    .clickable { selectedRecurringFreqFilter = freq }
+                                    .padding(vertical = 8.dp)
+                                    .testTag(testTagKey),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${freq.titleFa} (${PersianUtils.formatPersianNumber(count.toLong())})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSel) Color.Black else TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (filteredRecurring.isEmpty()) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("empty_recurring_card")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Autorenew,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Text(
+                                    text = "هیچ هزینه زمان‌بندی‌شده یا دوره‌ای در این فیلتر یافت نشد.",
+                                    fontSize = 12.sp,
+                                    color = TextMuted
+                                )
+                                Button(
+                                    onClick = { showRecurringExpenseModal = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("+ تعریف هزینه دوره‌ای جدید", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(filteredRecurring, key = { it.id }) { item ->
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = if (item.isActive) 1.dp else 0.5.dp,
+                                    color = if (item.isActive) CyanPrimary.copy(alpha = 0.4f) else Color(0x26FFFFFF),
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .testTag("recurring_card_${item.id}")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // Top row: Title, Category & Frequency Badge
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.title,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (item.isActive) TextPrimary else TextMuted
+                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = item.category,
+                                                fontSize = 11.sp,
+                                                color = CyanPrimary
+                                            )
+                                            if (item.note.isNotBlank()) {
+                                                Text("•", fontSize = 10.sp, color = TextMuted)
+                                                Text(
+                                                    text = item.note,
+                                                    fontSize = 11.sp,
+                                                    color = TextMuted
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Frequency Badge
+                                    val freqBadgeColor = when (item.frequency) {
+                                        RecurringFrequency.DAILY -> AmberWarning
+                                        RecurringFrequency.WEEKLY -> CyanPrimary
+                                        RecurringFrequency.MONTHLY -> EmeraldAccent
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(freqBadgeColor.copy(alpha = 0.15f))
+                                            .border(1.dp, freqBadgeColor.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = item.frequency.titleFa,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = freqBadgeColor
+                                        )
+                                    }
+                                }
+
+                                // Middle row: Amount and next due date
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("مبلغ هر دوره", fontSize = 10.sp, color = TextMuted)
+                                        Text(
+                                            text = PersianUtils.formatToman(item.amount),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = RoseDanger
+                                        )
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("موعد سررسید بعدی", fontSize = 10.sp, color = TextMuted)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.DateRange,
+                                                contentDescription = null,
+                                                tint = CyanPrimary,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                text = item.nextDueDate,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = TextPrimary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Bottom Action Row: Toggle Active Switch, Execute Now, and Delete
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(SurfaceDark)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Switch(
+                                            checked = item.isActive,
+                                            onCheckedChange = { onToggleRecurringExpense(item.id) },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = EmeraldAccent,
+                                                checkedTrackColor = EmeraldAccent.copy(alpha = 0.3f),
+                                                uncheckedThumbColor = TextMuted,
+                                                uncheckedTrackColor = SurfaceCard
+                                            ),
+                                            modifier = Modifier.testTag("toggle_recurring_${item.id}")
+                                        )
+                                        Text(
+                                            text = if (item.isActive) "فعال" else "متوقف",
+                                            fontSize = 11.sp,
+                                            color = if (item.isActive) EmeraldAccent else TextMuted,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        // Manual Trigger Action ("ثبت دستی الآن")
+                                        OutlinedButton(
+                                            onClick = {
+                                                onExecuteRecurringExpense(item)
+                                                recurringExecutionFeedback = "تراکنش «${item.title}» به مبلغ ${PersianUtils.formatToman(item.amount)} در دفتر کل ثبت شد."
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.testTag("execute_recurring_${item.id}")
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("ثبت دستی الآن", fontSize = 11.sp, color = CyanPrimary, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        // Delete Button
+                                        IconButton(
+                                            onClick = { onDeleteRecurringExpense(item.id) },
+                                            modifier = Modifier.testTag("delete_recurring_${item.id}")
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "حذف", tint = TextMuted, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =================================================================
+            // TAB 2: طلب، بدهی و اقساط (Debt & Receivable + Goal Link)
+            // =================================================================
+            if (selectedFinanceTab == 2) {
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -908,9 +1405,9 @@ fun ExpensesScreen(
             }
 
             // =================================================================
-            // TAB 2: بودجه، حساب‌ها و گزارش (Accounts, Budgets, Charts, CSV)
+            // TAB 3: بودجه، حساب‌ها و گزارش (Accounts, Budgets, Charts, CSV)
             // =================================================================
-            if (selectedFinanceTab == 2) {
+            if (selectedFinanceTab == 3) {
                 // Account Balances Card
                 item {
                     Card(
@@ -1057,9 +1554,9 @@ fun ExpensesScreen(
             }
 
             // =================================================================
-            // TAB 3: پیامک بانکی و میرزا (Mirza Visual Banks & SMS Parser)
+            // TAB 4: پیامک بانکی و اسکنر (Mirza Visual Banks & SMS Parser)
             // =================================================================
-            if (selectedFinanceTab == 3) {
+            if (selectedFinanceTab == 4) {
                 // SmsScanner Launch Banner
                 item {
                     Box(
@@ -1498,6 +1995,17 @@ fun ExpensesScreen(
             containerColor = SurfaceDark
         )
     }
+
+    // RecurringExpenseModal Component
+    RecurringExpenseModal(
+        isOpen = showRecurringExpenseModal,
+        onDismiss = { showRecurringExpenseModal = false },
+        onSaveRecurringExpense = { title, amount, category, frequency, nextDueDate, note ->
+            onAddRecurringExpense(title, amount, category, frequency, nextDueDate, note)
+            showRecurringExpenseModal = false
+            recurringExecutionFeedback = "هزینه دوره‌ای «$title» (${frequency.titleFa}) با موفقیت زمان‌بندی شد."
+        }
+    )
 }
 
 @Composable

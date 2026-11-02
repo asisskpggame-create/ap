@@ -61,7 +61,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.personallifeos.data.model.HabitItem
 import com.example.personallifeos.data.model.HealthLog
+import com.example.personallifeos.ui.components.HabitStreakHeatmap
 import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.BorderCyanGlow
 import com.example.personallifeos.ui.theme.CyanPrimary
@@ -76,6 +78,8 @@ import com.example.personallifeos.util.PersianUtils
 @Composable
 fun HealthScreen(
     healthLog: HealthLog,
+    habits: List<HabitItem> = emptyList(),
+    onToggleHabit: (HabitItem) -> Unit = {},
     onUpdateWater: (Int) -> Unit,
     onUpdateFullMetrics: (Float, String, Int, String, Int, Int) -> Unit = { _, _, _, _, _, _ -> },
     onRecordScannedFoodOrReceipt: (String, Int, Long?) -> Unit = { _, _, _ -> },
@@ -360,6 +364,16 @@ fun HealthScreen(
                     }
                 }
             }
+        }
+
+        // Habit 30-Day Streak Heatmap
+        item {
+            HabitStreakHeatmap(
+                habits = habits,
+                onToggleHabit = onToggleHabit,
+                title = "استمرار ۳۰ روزه عادت‌های سلامت و تندرستی",
+                modifier = Modifier.testTag("health_habit_streak_heatmap")
+            )
         }
 
         // AI Photo Scanner for Food (Calories/Protein) & Purchase Receipts (v1.2.0 Super-App Feature)

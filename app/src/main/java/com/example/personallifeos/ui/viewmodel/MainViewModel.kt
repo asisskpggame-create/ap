@@ -14,6 +14,8 @@ import com.example.personallifeos.data.model.GoalItem
 import com.example.personallifeos.data.model.HabitItem
 import com.example.personallifeos.data.model.HealthLog
 import com.example.personallifeos.data.model.QuickPreset
+import com.example.personallifeos.data.model.RecurringExpenseItem
+import com.example.personallifeos.data.model.RecurringFrequency
 import com.example.personallifeos.data.model.ReminderEntityType
 import com.example.personallifeos.data.model.ReminderItem
 import com.example.personallifeos.data.model.ReminderRepeatMode
@@ -185,6 +187,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     val quickPresets: StateFlow<List<QuickPreset>> = _quickPresets.asStateFlow()
+
+    // Scheduled & Recurring Expenses
+    private val _recurringExpenses = MutableStateFlow(
+        listOf(
+            RecurringExpenseItem(
+                id = "rec_1",
+                title = "اشتراک اینترنت فیبر نوری",
+                amount = 450_000L,
+                category = "قبوض و اینترنت",
+                frequency = RecurringFrequency.MONTHLY,
+                nextDueDate = "۱۴۰۵/۰۸/۲۵",
+                isActive = true,
+                note = "پرداخت آنلاین خودکار",
+                createdAt = "۱۴۰۵/۰۸/۰۱"
+            ),
+            RecurringExpenseItem(
+                id = "rec_2",
+                title = "بیمه تکمیلی درمان",
+                amount = 1_200_000L,
+                category = "بیمه و سلامت",
+                frequency = RecurringFrequency.MONTHLY,
+                nextDueDate = "۱۴۰۵/۰۸/۳۰",
+                isActive = true,
+                note = "کسر اتوماتیک از حساب",
+                createdAt = "۱۴۰۵/۰۸/۰۱"
+            ),
+            RecurringExpenseItem(
+                id = "rec_3",
+                title = "باشگاه ورزشی و تندرستی",
+                amount = 850_000L,
+                category = "ورزش و سلامت",
+                frequency = RecurringFrequency.MONTHLY,
+                nextDueDate = "۱۴۰۵/۰۹/۰۱",
+                isActive = true,
+                note = "تمدید کارت عضویت",
+                createdAt = "۱۴۰۵/۰۸/۰۱"
+            ),
+            RecurringExpenseItem(
+                id = "rec_4",
+                title = "خرید هفتگی میوه و خواربار",
+                amount = 350_000L,
+                category = "سوپرمارکت و روزمره",
+                frequency = RecurringFrequency.WEEKLY,
+                nextDueDate = "۱۴۰۵/۰۸/۱۲",
+                isActive = true,
+                note = "جمعه‌ها",
+                createdAt = "۱۴۰۵/۰۸/۰۱"
+            )
+        )
+    )
+    val recurringExpenses: StateFlow<List<RecurringExpenseItem>> = _recurringExpenses.asStateFlow()
 
     // Long-Term Goals & Projects (Section 4.1 & 4.2 of Roadmap)
     private val _goals = MutableStateFlow(
@@ -884,6 +937,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         } else {
             _categoryBudgets.value = _categoryBudgets.value + CategoryBudget(category, newLimitToman)
+        }
+    }
+
+    // =========================================================================
+    // Recurring & Scheduled Transactions
+    // =========================================================================
+
+    fun addRecurringExpense(
+        title: String,
+        amount: Long,
+        category: String,
+        frequency: RecurringFrequency,
+        nextDueDate: String = "",
+        note: String = ""
+    ) {
+        if (title.isBlank() || amount <= 0L) return
+        val calculatedDue = nextDueDate.ifBlank {
+            when (frequency) {
+                RecurringFrequency.DAILY -> "فردا • ساعت ۰۹:۰۰"
+                RecurringFrequency.WEEKLY -> "۱۴۰۵/۰۸/۱۲ (هفته آینده)"
+                RecurringFrequency.MONTHLY -> "۱۴۰۵/۰۹/۰۱ (ماه آینده)"
+            }
+        }
+        val newRecurring = RecurringExpenseItem(
+            id = "rec_${System.currentTimeMillis()}",
+            title = title.trim(),
+            amount = amount,
+            category = category.trim().ifBlank { "قبوض و دوره‌ای" },
+            frequency = frequency,
+            nextDueDate = calculatedDue,
+            isActive = true,
+            note = note.trim(),
+            createdAt = PersianUtils.getPersianDateString()
+        )
+        _recurringExpenses.value = listOf(newRecurring) + _recurringExpenses.value
+
+        // Also register an entity reminder so the system notifies the user
+        upsertEntityReminder(
+            entityType = ReminderEntityType.DAILY_EXPENSE,
+            entityId = newRecurring.id,
+            title = "هزینه دوره‌ای (${frequency.titleFa}): $title",
+            triggerTime = calculatedDue,
+            sensitiveAmount = amount
+        )
+    }
+
+    fun toggleRecurringExpenseActive(id: String) {
+        _recurringExpenses.value = _recurringExpenses.value.map { item ->
+            if (item.id == id) item.copy(isActive = !item.isActive) else item
+        }
+    }
+
+    fun deleteRecurringExpense(id: String) {
+        _recurringExpenses.value = _recurringExpenses.value.filterNot { it.id == id }
+        cancelEntityReminder(ReminderEntityType.DAILY_EXPENSE, id)
+    }
+
+    fun executeRecurringExpenseNow(item: RecurringExpenseItem) {
+        // Record as an actual transaction
+        addExpense(
+            title = "${item.title} (${item.frequency.titleFa})",
+            amount = item.amount,
+            category = item.category,
+            isSms = false,
+            type = TransactionType.EXPENSE,
+            accountName = "پرداخت دوره‌ای زمان‌بندی‌شده"
+        )
+        // Advance next due date
+        val advancedDue = when (item.frequency) {
+            RecurringFrequency.DAILY -> "فردا • ساعت ۰۹:۰۰"
+            RecurringFrequency.WEEKLY -> "۷ روز آینده"
+            RecurringFrequency.MONTHLY -> "۳۰ روز آینده"
+        }
+        _recurringExpenses.value = _recurringExpenses.value.map {
+            if (it.id == item.id) it.copy(nextDueDate = advancedDue) else it
         }
     }
 
