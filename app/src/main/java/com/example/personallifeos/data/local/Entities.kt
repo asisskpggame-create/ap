@@ -1,6 +1,7 @@
 package com.example.personallifeos.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.personallifeos.data.model.DebtItem
 import com.example.personallifeos.data.model.DebtType
@@ -265,7 +266,12 @@ data class HabitEntity(
     }
 }
 
-@Entity(tableName = "expenses")
+@Entity(
+    tableName = "expenses",
+    indices = [
+        Index(value = ["idempotencyKey"], unique = true)
+    ]
+)
 data class ExpenseEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -288,7 +294,7 @@ data class ExpenseEntity(
         bankName = bankName,
         accountName = accountName ?: bankName ?: "حساب پیش‌فرض",
         type = TransactionType.entries.find { it.name.equals(type, ignoreCase = true) } ?: TransactionType.EXPENSE,
-        idempotencyKey = idempotencyKey
+        idempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotEmpty() }
     )
 
     companion object {
@@ -302,7 +308,7 @@ data class ExpenseEntity(
             bankName = expense.bankName,
             type = expense.type.name,
             accountName = expense.accountName ?: expense.bankName ?: "حساب پیش‌فرض",
-            idempotencyKey = expense.idempotencyKey
+            idempotencyKey = expense.idempotencyKey?.trim()?.takeIf { it.isNotEmpty() }
         )
     }
 }

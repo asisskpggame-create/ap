@@ -492,7 +492,7 @@ object IranianBankSmsEngine {
         // Check strict sender policy (Audit Fix #3 + Mirza strict sender lock)
         val senderCheck = evaluateSenderPolicy(bank, cleanSender)
 
-        val hashPayload = "${bank.name}_${direction.name}_${amountRial}_${trackingCode ?: dateTime ?: cleanText.take(40)}"
+        val hashPayload = "${bank.name}_${direction.name}_${amountRial}_${accountOrCard ?: ""}_${trackingCode ?: dateTime ?: cleanText.take(40)}"
         val idempotencyKey = calculateHash(hashPayload)
 
         val reviewReasons = mutableListOf<String>()
@@ -993,7 +993,7 @@ object IranianBankSmsEngine {
         return "خرید عمومی"
     }
 
-    private fun calculateHash(input: String): String {
+    fun calculateHash(input: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(input.toByteArray(Charsets.UTF_8))
         return hashBytes.joinToString("") { "%02x".format(it) }

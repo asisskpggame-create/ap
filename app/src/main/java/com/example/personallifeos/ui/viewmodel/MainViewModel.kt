@@ -54,6 +54,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -868,15 +869,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         accountName: String? = null
     ) {
         viewModelScope.launch {
-            if (!idempotencyKey.isNullOrBlank()) {
-                val existing = repository.getExpenseByIdempotencyKey(idempotencyKey)
-                if (existing != null || IranianBankSmsEngine.isDuplicateKey(idempotencyKey)) {
+            val cleanKey = idempotencyKey?.trim()?.takeIf { it.isNotEmpty() }
+            if (cleanKey != null) {
+                val existing = repository.getExpenseByIdempotencyKey(cleanKey)
+                if (existing != null || IranianBankSmsEngine.isDuplicateKey(cleanKey)) {
                     return@launch
                 }
-                IranianBankSmsEngine.markIdempotencyKeyProcessed(idempotencyKey)
             }
             val newExpense = ExpenseItem(
-                id = System.currentTimeMillis().toString(),
+                id = UUID.randomUUID().toString(),
                 title = title,
                 amount = amount,
                 category = category,
@@ -885,9 +886,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isSmsParsed = isSms,
                 bankName = bankName,
                 accountName = accountName ?: bankName ?: "حساب پیش‌فرض",
-                idempotencyKey = idempotencyKey
+                idempotencyKey = cleanKey
             )
-            repository.insertExpense(newExpense)
+            val rowId = repository.insertExpense(newExpense)
+            if (rowId != -1L && cleanKey != null) {
+                IranianBankSmsEngine.markIdempotencyKeyProcessed(cleanKey)
+            }
         }
     }
 

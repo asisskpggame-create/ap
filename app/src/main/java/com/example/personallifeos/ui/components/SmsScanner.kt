@@ -117,7 +117,8 @@ data class ScannedTransactionMessage(
     val accountOrCard: String?,
     val trackingCode: String?,
     val isFinancial: Boolean,
-    val verificationStatus: SmsVerificationStatus
+    val verificationStatus: SmsVerificationStatus,
+    val idempotencyKey: String? = null
 )
 
 /**
@@ -218,7 +219,8 @@ fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessa
                             accountOrCard = parsed.accountOrCard,
                             trackingCode = parsed.trackingCode,
                             isFinancial = isFinancial,
-                            verificationStatus = parsed.verificationStatus
+                            verificationStatus = parsed.verificationStatus,
+                            idempotencyKey = parsed.idempotencyKey
                         )
                     )
                 }
@@ -242,6 +244,7 @@ fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessa
 fun SmsScanner(
     isOpen: Boolean,
     onDismiss: () -> Unit,
+    existingIdempotencyKeys: Set<String> = emptySet(),
     handleAddExpense: (
         title: String,
         amount: Long,
@@ -249,7 +252,8 @@ fun SmsScanner(
         bankName: String?,
         isSms: Boolean,
         type: TransactionType,
-        accountName: String?
+        accountName: String?,
+        idempotencyKey: String?
     ) -> Unit
 ) {
     if (!isOpen) return
@@ -368,41 +372,26 @@ fun SmsScanner(
                     }
                 }
 
-                // SMS Permission Prompt (if permission not yet granted)
                 if (!hasPermission) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF0F2942))
-                            .border(1.dp, CyanPrimary.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.Sms, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(18.dp))
-                            Text(
-                                text = "دسترسی به پیامک‌های دستگاه برای اسکن زنده",
-                                color = TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Text(
-                            text = "برای خواندن مستقیم و خودکار آخرین پیامک‌های بانکی و استخراج مبالغ، دسترسی پیامک را تایید کنید:",
-                            color = TextSecondary,
-                            fontSize = 11.sp
-                        )
-                        Button(
-                            onClick = { permissionLauncher.launch(Manifest.permission.READ_SMS) },
-                            colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().height(42.dp).testTag("request_sms_permission_btn")
-                        ) {
-                            Text("درخواست مجوز پیامک اندروید", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    }
-                }
+                    SmsScannerEmptyState(
+                        hasPermission = false,
+                        totalScannedCount = 0,
+                        searchQuery = "",
+                        onClearSearch = {},
+                        onRequestPermission = { permissionLauncher.launch(Manifest.permission.READ_SMS) },
+                        onOpenAppSettings = {
+                            try {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        },
+                        onRefresh = { scannedMessages = readDeviceTransactionSmsList(context) },
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
 
                 // Search Bar & Reload Button
                 Row(
@@ -515,7 +504,8 @@ fun SmsScanner(
                                                 msg.bankName,
                                                 true,
                                                 validTxType,
-                                                msg.accountOrCard
+                                                msg.accountOrCard,
+                                                msg.idempotencyKey
                                             )
                                             addedMessageIds.add(msg.id)
                                         }
@@ -544,29 +534,32 @@ fun SmsScanner(
                 ) {
                     if (filteredMessages.isEmpty()) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.FilterList, contentDescription = null, tint = TextMuted, modifier = Modifier.size(44.dp))
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    if (!hasPermission) {
-                                        Text("مجوز خواندن پیامک اعطا نشده است", color = AmberWarning, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("برای مشاهده پیامک‌های واقعی بانک‌ها، دکمه درخواست مجوز بالا را لمس کنید.", color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
-                                    } else {
-                                        Text("هیچ پیامک بانکی تراکنشی معتبری در دستگاه یافت نشد", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                }
-                            }
+                            SmsScannerEmptyState(
+                                hasPermission = true,
+                                totalScannedCount = scannedMessages.size,
+                                searchQuery = searchQuery,
+                                onClearSearch = {
+                                    searchQuery = ""
+                                    selectedFilterIndex = 0
+                                },
+                                onRequestPermission = { permissionLauncher.launch(Manifest.permission.READ_SMS) },
+                                onOpenAppSettings = {
+                                    try {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", context.packageName, null)
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                },
+                                onRefresh = { scannedMessages = readDeviceTransactionSmsList(context) }
+                            )
                         }
                     } else {
                         items(filteredMessages, key = { it.id }) { msg ->
                             val isSelected = selectedMessageIds.contains(msg.id)
-                            val isAlreadyAdded = addedMessageIds.contains(msg.id)
+                            val isAlreadyAdded = addedMessageIds.contains(msg.id) ||
+                                (msg.idempotencyKey != null && (existingIdempotencyKeys.contains(msg.idempotencyKey) || IranianBankSmsEngine.isDuplicateKey(msg.idempotencyKey)))
 
                             TransactionMessageCard(
                                 message = msg,
@@ -584,7 +577,8 @@ fun SmsScanner(
                                         msg.bankName,
                                         true,
                                         chosenType,
-                                        msg.accountOrCard
+                                        msg.accountOrCard,
+                                        msg.idempotencyKey
                                     )
                                     addedMessageIds.add(msg.id)
                                 }
@@ -595,6 +589,34 @@ fun SmsScanner(
             }
         }
     }
+}
+}
+
+/**
+ * Backward-compatible 7-arg overload
+ */
+@Composable
+fun SmsScanner(
+    isOpen: Boolean,
+    onDismiss: () -> Unit,
+    handleAddExpense: (
+        title: String,
+        amount: Long,
+        category: String,
+        bankName: String?,
+        isSms: Boolean,
+        type: TransactionType,
+        accountName: String?
+    ) -> Unit
+) {
+    SmsScanner(
+        isOpen = isOpen,
+        onDismiss = onDismiss,
+        existingIdempotencyKeys = emptySet(),
+        handleAddExpense = { title, amount, category, bankName, isSms, type, accountName, _ ->
+            handleAddExpense(title, amount, category, bankName, isSms, type, accountName)
+        }
+    )
 }
 
 /**
@@ -609,7 +631,8 @@ fun SmsScanner(
     SmsScanner(
         isOpen = isOpen,
         onDismiss = onDismiss,
-        handleAddExpense = { title, amount, category, _, _, type, _ ->
+        existingIdempotencyKeys = emptySet(),
+        handleAddExpense = { title, amount, category, _, _, type, _, _ ->
             handleAddExpense(title, amount, category, type)
         }
     )
@@ -874,6 +897,253 @@ private fun TransactionMessageCard(
                 Text("سرشماره: ${message.sender}", color = CyanPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(message.rawBody, color = TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Empty State for the SMS Scanner Component.
+ * STRICT: Provides clear, honest feedback when permission is denied, inbox is empty,
+ * or no results match the filter, WITHOUT ever displaying fake or mock transactions.
+ */
+@Composable
+fun SmsScannerEmptyState(
+    hasPermission: Boolean,
+    totalScannedCount: Int,
+    searchQuery: String,
+    onClearSearch: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp, horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            when {
+                !hasPermission -> {
+                    // State 1: Permission Denied / Not Granted
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(AmberWarning.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = AmberWarning,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "دسترسی به پیامک‌های دستگاه مسدود است",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = "برای خواندن مستقیم و استخراج مبالغ تراکنش‌ها، برنامه نیازمند مجوز خواندن پیامک (READ_SMS) اندروید است.\n\nبه دلیل حفظ سلامت و واقعی بودن گزارش‌های مالی شما، هیچ تراکنش ساختگی یا تستی به سیستم اضافه نمی‌شود.",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+
+                    // Privacy Assurance Pill
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0F2942))
+                            .border(1.dp, CyanPrimary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            tint = CyanPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "تضمین حریم خصوصی: پیامک‌ها صرفاً محلی روی دستگاه شما پردازش شده و به هیچ سرور خارجی ارسال نمی‌شوند.",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onRequestPermission,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("empty_request_permission_btn")
+                        ) {
+                            Icon(Icons.Default.Sms, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("درخواست مجوز پیامک اندروید", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenAppSettings,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("empty_open_settings_btn")
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("باز کردن تنظیمات برنامه", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                totalScannedCount == 0 -> {
+                    // State 2: Permission Granted, but SMS Inbox has no bank transaction messages
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(CyanPrimary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Inbox,
+                            contentDescription = null,
+                            tint = CyanPrimary,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "صندوق پیامک‌های بانکی خالی است",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = "هیچ پیامک بانکی تراکنشی معتبری (واریز، برداشت، خرید یا انتقال) در پیامک‌های این دستگاه یافت نشد.",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
+
+                    // Explanation Box
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SurfaceCard)
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(16.dp))
+                            Text("درباره اسکن زنده پیامک‌ها:", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text("• پیامک‌های رمز پویا، کد تأیید ورود و پیام‌های خدماتی غیرمالی طبق استاندارد امنیتی فیلتر شده‌اند.", color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("• سیستم به هیچ وجه تراکنش نمونه یا ساختگی بارگذاری نمی‌کند تا مانده و بودجه شما دقیق بماند.", color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("• با دریافت اولین پیامک واریز یا برداشت از بانک، بلافاصله در این لیست ظاهر خواهد شد.", color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp)
+                    }
+
+                    Button(
+                        onClick = onRefresh,
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .testTag("empty_refresh_sms_btn")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("اسکن مجدد صندوق پیامک", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                else -> {
+                    // State 3: Active Filter or Search produced 0 results
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "پیامکی با این مشخصات یافت نشد",
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    val queryNote = if (searchQuery.isNotBlank()) {
+                        "پیامک بانکی منطبق با عبارت «$searchQuery» پیدا نشد."
+                    } else {
+                        "پیامکی در دسته‌بندی فیلتر انتخاب‌شده یافت نشد."
+                    }
+
+                    Text(
+                        text = queryNote,
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    OutlinedButton(
+                        onClick = onClearSearch,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = CyanPrimary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CyanPrimary.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("empty_clear_filter_btn")
+                    ) {
+                        Icon(Icons.Default.Clear, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("پاک کردن فیلترها و نمایش همه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

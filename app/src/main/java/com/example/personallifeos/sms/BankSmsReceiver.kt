@@ -104,7 +104,13 @@ class BankSmsReceiver : BroadcastReceiver() {
                         idempotencyKey = idempotencyKey
                     )
 
-                    dao.insertExpense(entity)
+                    val insertedRowId = dao.insertExpense(entity)
+                    if (insertedRowId == -1L) {
+                        Log.w(TAG, "Duplicate bank SMS ignored by Room unique constraint: $idempotencyKey")
+                        continue
+                    }
+
+                    IranianBankSmsEngine.markIdempotencyKeyProcessed(idempotencyKey)
                     Log.i(TAG, "Successfully recorded SMS transaction: ${parsed.summaryFa}")
 
                     showBankNotification(context, parsed)

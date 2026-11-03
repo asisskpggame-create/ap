@@ -102,11 +102,11 @@ interface LifeOsDao {
     @Query("SELECT * FROM expenses ORDER BY id DESC")
     fun getAllExpenses(): Flow<List<ExpenseEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertExpense(expense: ExpenseEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertExpense(expense: ExpenseEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertExpenses(expenses: List<ExpenseEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertExpenses(expenses: List<ExpenseEntity>): List<Long>
 
     @Update
     suspend fun updateExpense(expense: ExpenseEntity)

@@ -399,7 +399,7 @@ fun PersonalLifeOsApp(
                                 categoryBudgets = categoryBudgets,
                                 configuredBanks = configuredBanks,
                                 pendingReviewSms = pendingReviewSms,
-                                onAddExpense = { title, amount, cat, bank, isSms, txType, acc ->
+                                onAddExpense = { title, amount, cat, bank, isSms, txType, acc, key ->
                                     viewModel.addExpense(
                                         title = title,
                                         amount = amount,
@@ -407,7 +407,8 @@ fun PersonalLifeOsApp(
                                         bankName = bank,
                                         isSms = isSms,
                                         type = txType,
-                                        accountName = acc
+                                        accountName = acc,
+                                        idempotencyKey = key
                                     )
                                 },
                                 onUpdateExpense = { viewModel.updateExpenseItem(it) },

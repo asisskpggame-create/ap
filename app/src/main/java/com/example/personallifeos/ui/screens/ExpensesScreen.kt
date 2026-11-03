@@ -114,7 +114,7 @@ fun ExpensesScreen(
     categoryBudgets: List<CategoryBudget> = emptyList(),
     configuredBanks: List<BankUserConfig> = emptyList(),
     pendingReviewSms: BankSmsParsedResult? = null,
-    onAddExpense: (String, Long, String, String?, Boolean, TransactionType, String?) -> Unit,
+    onAddExpense: (String, Long, String, String?, Boolean, TransactionType, String?, String?) -> Unit,
     onUpdateExpense: (ExpenseItem) -> Unit = {},
     onDeleteExpense: (String) -> Unit,
     onTriggerQuickPreset: (QuickPreset) -> Unit = {},
@@ -639,7 +639,8 @@ fun ExpensesScreen(
                                             selectedAccountName,
                                             false,
                                             selectedTxType,
-                                            selectedAccountName
+                                            selectedAccountName,
+                                            null
                                         )
                                         manualTitle = ""
                                         manualAmount = ""
@@ -1928,11 +1929,13 @@ fun ExpensesScreen(
 
     // SmsScanner Component Modal
     if (isSmsScannerOpen) {
+        val existingKeys = remember(expenses) { expenses.mapNotNull { it.idempotencyKey }.toSet() }
         SmsScanner(
             isOpen = true,
             onDismiss = { isSmsScannerOpen = false },
-            handleAddExpense = { title, amount, category, bankName, isSms, type, accountName ->
-                onAddExpense(title, amount, category, bankName, isSms, type, accountName)
+            existingIdempotencyKeys = existingKeys,
+            handleAddExpense = { title, amount, category, bankName, isSms, type, accountName, key ->
+                onAddExpense(title, amount, category, bankName, isSms, type, accountName, key)
             }
         )
     }

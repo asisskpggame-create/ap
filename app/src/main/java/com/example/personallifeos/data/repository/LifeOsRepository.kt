@@ -114,8 +114,8 @@ class LifeOsRepository(private val dao: LifeOsDao) {
         dao.updateHabit(HabitEntity.fromDomain(habit))
     }
 
-    suspend fun insertExpense(expense: ExpenseItem) {
-        dao.insertExpense(ExpenseEntity.fromDomain(expense))
+    suspend fun insertExpense(expense: ExpenseItem): Long {
+        return dao.insertExpense(ExpenseEntity.fromDomain(expense))
     }
 
     suspend fun updateExpense(expense: ExpenseItem) {

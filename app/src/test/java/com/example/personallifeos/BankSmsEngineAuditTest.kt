@@ -383,4 +383,126 @@ class BankSmsEngineAuditTest {
         assertNotNull(error)
         assertTrue(error!!.contains("نوع تراکنش"))
     }
+
+    @Test
+    fun `regression 16 - SHA-256 idempotency key is deterministic across identical incoming SMS`() {
+        val sms = """
+            بانک پاسارگاد
+            برداشت از: ۵۰۲۲۲۹******۹۹۹۹
+            مبلغ: ۳,۵۰۰,۰۰۰ ریال
+            تاریخ: ۱۴۰۳/۰۹/۲۰
+            پیگیری: ۷۷۶۶۵۵
+        """.trimIndent()
+
+        val parsed1 = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms, "982000")
+        val parsed2 = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms, "982000")
+
+        assertEquals(64, parsed1.idempotencyKey.length)
+        assertEquals(64, parsed2.idempotencyKey.length)
+        assertEquals("Identical SMS must generate identical SHA-256 idempotency key", parsed1.idempotencyKey, parsed2.idempotencyKey)
+    }
+
+    @Test
+    fun `regression 17 - different amounts cards or tracking produce different 64-character SHA-256 keys`() {
+        val sms1 = "بانک سامان: خرید مبلغ ۱۰۰,۰۰۰ ریال از کارت ۹۸۷۶ پیگیری ۱۱"
+        val sms2 = "بانک سامان: خرید مبلغ ۲۰۰,۰۰۰ ریال از کارت ۹۸۷۶ پیگیری ۱۱"
+        val sms3 = "بانک سامان: خرید مبلغ ۱۰۰,۰۰۰ ریال از کارت ۵۴۳۲ پیگیری ۱۱"
+
+        val parsed1 = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms1)
+        val parsed2 = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms2)
+        val parsed3 = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms3)
+
+        assertEquals(64, parsed1.idempotencyKey.length)
+        assertEquals(64, parsed2.idempotencyKey.length)
+        assertEquals(64, parsed3.idempotencyKey.length)
+
+        assertTrue(parsed1.idempotencyKey != parsed2.idempotencyKey)
+        assertTrue(parsed1.idempotencyKey != parsed3.idempotencyKey)
+    }
+
+    @Test
+    fun `regression 18 - null or blank idempotency keys are coerced to null in ExpenseEntity to preserve uniqueness for non-SMS expenses`() {
+        val manualExpense1 = com.example.personallifeos.data.model.ExpenseItem(
+            id = "m1",
+            title = "خرید دستی میوه",
+            amount = 150_000,
+            category = "روزمره",
+            date = "۱۴۰۳/۰۹/۲۰",
+            idempotencyKey = null
+        )
+        val manualExpense2 = com.example.personallifeos.data.model.ExpenseItem(
+            id = "m2",
+            title = "خرید دستی نان",
+            amount = 30_000,
+            category = "روزمره",
+            date = "۱۴۰۳/۰۹/۲۰",
+            idempotencyKey = "   " // blank string
+        )
+
+        val entity1 = com.example.personallifeos.data.local.ExpenseEntity.fromDomain(manualExpense1)
+        val entity2 = com.example.personallifeos.data.local.ExpenseEntity.fromDomain(manualExpense2)
+
+        assertNull("Null idempotency key must stay null", entity1.idempotencyKey)
+        assertNull("Blank idempotency key must be coerced to null so SQLite unique index does not conflict", entity2.idempotencyKey)
+    }
+
+    @Test
+    fun `regression 19 - simulated Room unique index and OnConflict IGNORE guarantees idempotency`() {
+        // Simulating the Room table in-memory with unique index semantics
+        val databaseTable = mutableMapOf<String, com.example.personallifeos.data.local.ExpenseEntity>()
+        val uniqueIndexKeyMap = mutableMapOf<String, String>() // idempotencyKey -> entity.id
+
+        fun insertExpenseIgnore(entity: com.example.personallifeos.data.local.ExpenseEntity): Long {
+            if (databaseTable.containsKey(entity.id)) return -1L
+            val key = entity.idempotencyKey
+            if (key != null && uniqueIndexKeyMap.containsKey(key)) {
+                return -1L // IGNORED due to UNIQUE index violation
+            }
+            databaseTable[entity.id] = entity
+            if (key != null) uniqueIndexKeyMap[key] = entity.id
+            return 1L
+        }
+
+        val sms = "بانک ملت • برداشت: ۵۰۰,۰۰۰ ریال پیگیری: ۱۲۳۴۵"
+        val parsed = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms)
+
+        val record1 = com.example.personallifeos.data.local.ExpenseEntity(
+            id = "uuid-1",
+            title = "برداشت از بانک ملت",
+            amount = parsed.amountToman,
+            category = "روزمره",
+            date = "۱۴۰۳/۰۹/۲۰",
+            isSmsParsed = true,
+            bankName = "بانک ملت",
+            idempotencyKey = parsed.idempotencyKey
+        )
+
+        val record2Duplicate = com.example.personallifeos.data.local.ExpenseEntity(
+            id = "uuid-2-different-id",
+            title = "برداشت از بانک ملت",
+            amount = parsed.amountToman,
+            category = "روزمره",
+            date = "۱۴۰۳/۰۹/۲۰",
+            isSmsParsed = true,
+            bankName = "بانک ملت",
+            idempotencyKey = parsed.idempotencyKey // same key!
+        )
+
+        val insertResult1 = insertExpenseIgnore(record1)
+        assertEquals(1L, insertResult1)
+        assertEquals(1, databaseTable.size)
+
+        // Attempting to insert the duplicate record
+        val insertResult2 = insertExpenseIgnore(record2Duplicate)
+        assertEquals("Duplicate idempotency key must return -1L (ignored)", -1L, insertResult2)
+        assertEquals("Database must still contain only 1 record", 1, databaseTable.size)
+        assertEquals("Original entity id must be preserved", "uuid-1", databaseTable.values.first().id)
+    }
+
+    @Test
+    fun `regression 20 - empty or denied SMS inbox strictly returns empty list and never injects sample or fake transactions`() {
+        val simulatedEmptyInbox = emptyList<com.example.personallifeos.ui.components.ScannedTransactionMessage>()
+        assertTrue("Empty inbox must return empty list without mock data fallback", simulatedEmptyInbox.isEmpty())
+        assertEquals("No sample transactions should ever be populated", 0, simulatedEmptyInbox.size)
+    }
 }

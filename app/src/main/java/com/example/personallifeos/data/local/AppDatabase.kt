@@ -23,7 +23,7 @@ import java.io.File
         HealthLogEntity::class,
         VaultNoteEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +33,15 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        private fun applyUniqueIdempotencyIndex(db: SupportSQLiteDatabase) {
+            // 1. Sanitize empty or blank strings to NULL so they do not conflict in unique index
+            safeExec(db, "UPDATE expenses SET idempotencyKey = NULL WHERE idempotencyKey IS NOT NULL AND (idempotencyKey = '' OR trim(idempotencyKey) = '')")
+            // 2. Clean up any pre-existing duplicate idempotency keys to ensure unique index creation succeeds
+            safeExec(db, "DELETE FROM expenses WHERE idempotencyKey IS NOT NULL AND rowid NOT IN (SELECT min(rowid) FROM expenses WHERE idempotencyKey IS NOT NULL GROUP BY idempotencyKey)")
+            // 3. Create the UNIQUE index as required by Room
+            safeExec(db, "CREATE UNIQUE INDEX IF NOT EXISTS `index_expenses_idempotencyKey` ON `expenses` (`idempotencyKey`)")
+        }
 
         private fun migrateToVersion7(db: SupportSQLiteDatabase) {
             safeExec(db, "ALTER TABLE tasks ADD COLUMN topicId TEXT")
@@ -96,6 +105,39 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 """.trimIndent()
             )
+        }
+
+        private fun migrateToVersion8(db: SupportSQLiteDatabase) {
+            migrateToVersion7(db)
+            applyUniqueIdempotencyIndex(db)
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = applyUniqueIdempotencyIndex(db)
+        }
+
+        val MIGRATION_6_8 = object : Migration(6, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
+        }
+
+        val MIGRATION_5_8 = object : Migration(5, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
+        }
+
+        val MIGRATION_4_8 = object : Migration(4, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
+        }
+
+        val MIGRATION_3_8 = object : Migration(3, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
+        }
+
+        val MIGRATION_2_8 = object : Migration(2, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
+        }
+
+        val MIGRATION_1_8 = object : Migration(1, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion8(db)
         }
 
         val MIGRATION_6_7 = object : Migration(6, 7) {
@@ -174,6 +216,13 @@ abstract class AppDatabase : RoomDatabase() {
                     "personal_life_os.db"
                 )
                     .addMigrations(
+                        MIGRATION_7_8,
+                        MIGRATION_6_8,
+                        MIGRATION_5_8,
+                        MIGRATION_4_8,
+                        MIGRATION_3_8,
+                        MIGRATION_2_8,
+                        MIGRATION_1_8,
                         MIGRATION_6_7,
                         MIGRATION_5_7,
                         MIGRATION_4_7,
