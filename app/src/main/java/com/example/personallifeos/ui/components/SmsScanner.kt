@@ -83,6 +83,7 @@ import com.example.personallifeos.sms.BankType
 import com.example.personallifeos.sms.IranianBankSmsEngine
 import com.example.personallifeos.sms.SmsTransactionDirection
 import com.example.personallifeos.sms.SmsVerificationStatus
+import com.example.personallifeos.ui.theme.AmberWarning
 import com.example.personallifeos.ui.theme.CyanPrimary
 import com.example.personallifeos.ui.theme.EmeraldAccent
 import com.example.personallifeos.ui.theme.RoseDanger
@@ -110,7 +111,7 @@ data class ScannedTransactionMessage(
     val amountToman: Long,
     val amountRial: Long,
     val direction: SmsTransactionDirection,
-    val transactionType: TransactionType,
+    val transactionType: TransactionType?, // STRICT: nullable when direction is UNKNOWN
     val title: String,
     val suggestedCategory: String,
     val accountOrCard: String?,
@@ -122,7 +123,7 @@ data class ScannedTransactionMessage(
 /**
  * Reads real SMS messages from the Android system inbox via ContentResolver if READ_SMS is granted.
  * Parses each message with the IranianBankSmsEngine to extract bank names, amounts, directions, and descriptions.
- * Provides fallback mock transaction messages when run in emulators or when inbox is empty.
+ * STRICT: NEVER supplies mock/fake transactions in production; returns empty list if inbox is empty.
  */
 fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessage> {
     val resultList = mutableListOf<ScannedTransactionMessage>()
@@ -161,18 +162,26 @@ fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessa
 
                     // Parse SMS with the Iranian Bank SMS Engine
                     val parsed: BankSmsParsedResult = IranianBankSmsEngine.parse(body, address)
-                    val isOtp = IranianBankSmsEngine.isOtpOrServiceSms(body)
+                    val isOtp = IranianBankSmsEngine.isOtpOrServiceSms(body) || parsed.isOtpOrServiceMessage
+                    val isFailed = IranianBankSmsEngine.isFailedTransactionSms(body) || parsed.isFailedTransaction
 
-                    // Determine if it is a transaction
-                    val isFinancial = (parsed.amountToman > 0 || parsed.bank != BankType.UNKNOWN) && !isOtp
+                    // STRICT AUDIT REQUIREMENT 4: Discard OTP, service notifications, failed, and rejected messages
+                    if (isOtp || isFailed || parsed.verificationStatus == SmsVerificationStatus.REJECTED) {
+                        continue
+                    }
 
-                    val txType = when (parsed.direction) {
+                    // STRICT AUDIT REQUIREMENT 1: UNKNOWN direction must NEVER default to EXPENSE!
+                    val txType: TransactionType? = when (parsed.direction) {
                         SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
                         SmsTransactionDirection.TRANSFER_POL,
                         SmsTransactionDirection.TRANSFER_PAYA,
                         SmsTransactionDirection.TRANSFER_CARD -> TransactionType.TRANSFER
-                        else -> TransactionType.EXPENSE
+                        SmsTransactionDirection.WITHDRAWAL,
+                        SmsTransactionDirection.PURCHASE -> TransactionType.EXPENSE
+                        SmsTransactionDirection.UNKNOWN -> null
                     }
+
+                    val isFinancial = parsed.amountToman > 0 && !isOtp && !isFailed
 
                     val dateFa = try {
                         val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
@@ -185,7 +194,8 @@ fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessa
                         !parsed.merchantOrTerminal.isNullOrBlank() -> "خرید از ${parsed.merchantOrTerminal}"
                         !parsed.destination.isNullOrBlank() -> "انتقال به ${parsed.destination}"
                         parsed.direction.isExpense -> "برداشت از ${parsed.bank.shortNameFa}"
-                        else -> "واریز به ${parsed.bank.shortNameFa}"
+                        parsed.direction == SmsTransactionDirection.DEPOSIT -> "واریز به ${parsed.bank.shortNameFa}"
+                        else -> "پیامک تراکنش ${parsed.bank.shortNameFa}"
                     }
 
                     val bankLabel = if (parsed.bank != BankType.UNKNOWN) parsed.bank.faName else "پیامک بانکی"
@@ -218,92 +228,8 @@ fun readDeviceTransactionSmsList(context: Context): List<ScannedTransactionMessa
         }
     }
 
-    // If device had no messages or permission was denied/emulator, supply sample bank transactions
-    if (resultList.isEmpty()) {
-        resultList.addAll(getSampleBankTransactions())
-    }
-
+    // STRICT AUDIT REQUIREMENT 2: NEVER supply mock/fake transactions in production!
     return resultList
-}
-
-/**
- * Realistic sample transaction messages for testing and offline demo
- */
-private fun getSampleBankTransactions(): List<ScannedTransactionMessage> {
-    val sampleDefs = listOf(
-        Triple(
-            "98200033",
-            "بانک ملت • برداشت از ۶۱۰۴۳۳******۱۲۳۴ مبلغ ۲۵۰,۰۰۰ ریال مانده: ۱۵,۰۰۰,۰۰۰ ریال کد پیگیری: ۹۸۲۳۴۱",
-            BankType.MELLAT
-        ),
-        Triple(
-            "982000",
-            "بلو • خرید: مبلغ ۱,۴۵۰,۰۰۰ ریال از هایپراستار کسر شد. مانده: ۳۲,۴۵۰,۰۰۰ ریال",
-            BankType.BLUBANK
-        ),
-        Triple(
-            "98300017",
-            "بانک ملی ایران • واریز: ۵,۰۰۰,۰۰۰ ریال به حساب ۰۱*****۱۲۳۴ مانده: ۱۲,۳۰۰,۰۰۰ ریال",
-            BankType.MELLI
-        ),
-        Triple(
-            "98300060",
-            "300325283197 • 850,000- • مانده: 24,120,000 • خرید از فروشگاه رفاه",
-            BankType.SADERAT
-        ),
-        Triple(
-            "30009601",
-            "بلو • انتقال پل: مبلغ ۳,۰۰۰,۰۰۰ ریال به علیرضا یوسفی انجام شد. پیگیری: ۵۵۴۳۲۱",
-            BankType.BLUBANK_POL
-        ),
-        Triple(
-            "98200070",
-            "*بانک تجارت* • برداشت: ۷۲۰,۰۰۰ ریال از پایانه فروش داروخانه رازی مانده: ۵,۴۰۰,۰۰۰ ریال",
-            BankType.TEJARAT
-        ),
-        Triple(
-            "982000500",
-            "بانک پاسارگاد • واریز: ۱۲,۰۰۰,۰۰۰ ریال بابت حقوق مهر ماه به ۳۲۱*****۹۸۷",
-            BankType.PASARGAD
-        )
-    )
-
-    return sampleDefs.mapIndexed { idx, (sender, body, expectedBank) ->
-        val parsed = IranianBankSmsEngine.parse(body, sender)
-        val txType = when (parsed.direction) {
-            SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
-            SmsTransactionDirection.TRANSFER_POL,
-            SmsTransactionDirection.TRANSFER_PAYA,
-            SmsTransactionDirection.TRANSFER_CARD -> TransactionType.TRANSFER
-            else -> TransactionType.EXPENSE
-        }
-        val autoTitle = when {
-            !parsed.merchantOrTerminal.isNullOrBlank() -> "خرید از ${parsed.merchantOrTerminal}"
-            !parsed.destination.isNullOrBlank() -> "انتقال به ${parsed.destination}"
-            parsed.direction.isExpense -> "برداشت از ${expectedBank.shortNameFa}"
-            else -> "واریز به ${expectedBank.shortNameFa}"
-        }
-
-        ScannedTransactionMessage(
-            id = "mock_sms_$idx",
-            sender = sender,
-            rawBody = body,
-            timestampMillis = System.currentTimeMillis() - (idx * 3600000L * 4),
-            dateStringFa = PersianUtils.getPersianDateString(),
-            bankName = expectedBank.faName,
-            bankType = expectedBank,
-            amountToman = if (parsed.amountToman > 0) parsed.amountToman else 25000L * (idx + 1),
-            amountRial = if (parsed.amountRial > 0) parsed.amountRial else 250000L * (idx + 1),
-            direction = parsed.direction,
-            transactionType = txType,
-            title = autoTitle,
-            suggestedCategory = parsed.suggestedCategory,
-            accountOrCard = parsed.accountOrCard,
-            trackingCode = parsed.trackingCode ?: "۹۸۳۴$idx",
-            isFinancial = true,
-            verificationStatus = SmsVerificationStatus.AUTO_ACCEPTED
-        )
-    }
 }
 
 /**
@@ -579,16 +505,20 @@ fun SmsScanner(
                                 onClick = {
                                     val toAdd = scannedMessages.filter { selectedMessageIds.contains(it.id) }
                                     toAdd.forEach { msg ->
-                                        handleAddExpense(
-                                            msg.title,
-                                            msg.amountToman,
-                                            msg.suggestedCategory,
-                                            msg.bankName,
-                                            true,
-                                            msg.transactionType,
-                                            msg.accountOrCard
-                                        )
-                                        addedMessageIds.add(msg.id)
+                                        val validTxType = msg.transactionType
+                                        // STRICT AUDIT REQUIREMENT 1: Skip any item where direction is UNKNOWN
+                                        if (validTxType != null) {
+                                            handleAddExpense(
+                                                msg.title,
+                                                msg.amountToman,
+                                                msg.suggestedCategory,
+                                                msg.bankName,
+                                                true,
+                                                validTxType,
+                                                msg.accountOrCard
+                                            )
+                                            addedMessageIds.add(msg.id)
+                                        }
                                     }
                                     selectedMessageIds.clear()
                                 },
@@ -623,7 +553,13 @@ fun SmsScanner(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Default.FilterList, contentDescription = null, tint = TextMuted, modifier = Modifier.size(44.dp))
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("پیامک تراکنشی مطابق با فیلتر یافت نشد", color = TextSecondary, fontSize = 13.sp)
+                                    if (!hasPermission) {
+                                        Text("مجوز خواندن پیامک اعطا نشده است", color = AmberWarning, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("برای مشاهده پیامک‌های واقعی بانک‌ها، دکمه درخواست مجوز بالا را لمس کنید.", color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
+                                    } else {
+                                        Text("هیچ پیامک بانکی تراکنشی معتبری در دستگاه یافت نشد", color = TextSecondary, fontSize = 13.sp)
+                                    }
                                 }
                             }
                         }
@@ -640,14 +576,14 @@ fun SmsScanner(
                                     if (isSelected) selectedMessageIds.remove(msg.id)
                                     else selectedMessageIds.add(msg.id)
                                 },
-                                onAddSingle = {
+                                onAddSingle = { chosenType ->
                                     handleAddExpense(
                                         msg.title,
                                         msg.amountToman,
                                         msg.suggestedCategory,
                                         msg.bankName,
                                         true,
-                                        msg.transactionType,
+                                        chosenType,
                                         msg.accountOrCard
                                     )
                                     addedMessageIds.add(msg.id)
@@ -688,20 +624,24 @@ private fun TransactionMessageCard(
     isSelected: Boolean,
     isAlreadyAdded: Boolean,
     onToggleSelect: () -> Unit,
-    onAddSingle: () -> Unit
+    onAddSingle: (TransactionType) -> Unit
 ) {
     var showRawSms by remember { mutableStateOf(false) }
+    // STRICT AUDIT REQUIREMENT 1 & 5: When direction is UNKNOWN, require explicit selection!
+    var chosenType by remember(message.id) { mutableStateOf(message.transactionType) }
 
-    val dirColor = when (message.transactionType) {
+    val dirColor = when (chosenType) {
         TransactionType.EXPENSE -> RoseDanger
         TransactionType.INCOME -> EmeraldAccent
         TransactionType.TRANSFER -> CyanPrimary
+        null -> AmberWarning
     }
 
-    val dirLabel = when (message.transactionType) {
+    val dirLabel = when (chosenType) {
         TransactionType.EXPENSE -> "برداشت / خرید"
         TransactionType.INCOME -> "واریز"
         TransactionType.TRANSFER -> "انتقال"
+        null -> "جهت نامشخص ⚠️"
     }
 
     Column(
@@ -816,6 +756,52 @@ private fun TransactionMessageCard(
             }
         }
 
+        // STRICT AUDIT REQUIREMENT 1: When direction is UNKNOWN, show direction selector chips
+        if (chosenType == null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0F1E33))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "⚠️ جهت تراکنش در پیامک تصریح نشده است؛ لطفاً تعیین کنید:",
+                    color = AmberWarning,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(
+                        TransactionType.EXPENSE to "برداشت / هزینه",
+                        TransactionType.INCOME to "واریز / درآمد",
+                        TransactionType.TRANSFER to "انتقال بین حساب‌ها"
+                    ).forEach { (t, lbl) ->
+                        val active = chosenType == t
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) CyanPrimary else SurfaceCard)
+                                .border(1.dp, if (active) CyanPrimary else Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                .clickable { chosenType = t }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = lbl,
+                                color = if (active) Color.Black else TextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         // Bottom Actions: Toggle raw text & Add Single Button
@@ -848,14 +834,29 @@ private fun TransactionMessageCard(
                 }
             } else {
                 Button(
-                    onClick = onAddSingle,
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                    onClick = { chosenType?.let { onAddSingle(it) } },
+                    enabled = chosenType != null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when (chosenType) {
+                            TransactionType.INCOME -> EmeraldAccent
+                            TransactionType.TRANSFER -> CyanPrimary
+                            TransactionType.EXPENSE -> CyanPrimary
+                            null -> Color.Gray.copy(alpha = 0.3f)
+                        },
+                        disabledContainerColor = Color.Gray.copy(alpha = 0.2f)
+                    ),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.height(36.dp).testTag("add_sms_single_btn_${message.id}")
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                    val btnText = when (chosenType) {
+                        TransactionType.INCOME -> "افزودن به درآمدها"
+                        TransactionType.TRANSFER -> "ثبت به عنوان انتقال"
+                        TransactionType.EXPENSE -> "افزودن به هزینه‌ها"
+                        null -> "تعیین جهت الزامی است"
+                    }
+                    Icon(Icons.Default.Add, contentDescription = null, tint = if (chosenType != null) Color.Black else TextMuted, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("افزودن به هزینه‌ها", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(btnText, color = if (chosenType != null) Color.Black else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

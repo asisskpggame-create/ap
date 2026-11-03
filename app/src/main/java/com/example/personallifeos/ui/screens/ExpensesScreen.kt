@@ -2014,18 +2014,24 @@ private fun NeedsReviewSmsCard(
     onConfirm: (SmsTransactionDirection, DetectedCurrencyUnit, Long?) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // STRICT AUDIT REQUIREMENT 5: UNKNOWN must NOT default to WITHDRAWAL or RIAL!
     var selectedReviewDirection by remember(pending.idempotencyKey) {
-        mutableStateOf(
-            if (pending.direction == SmsTransactionDirection.UNKNOWN) SmsTransactionDirection.WITHDRAWAL
+        mutableStateOf<SmsTransactionDirection?>(
+            if (pending.direction == SmsTransactionDirection.UNKNOWN) null
             else pending.direction
         )
     }
     var selectedReviewCurrency by remember(pending.idempotencyKey) {
-        mutableStateOf(
-            if (pending.detectedCurrency == DetectedCurrencyUnit.UNKNOWN) DetectedCurrencyUnit.RIAL
+        mutableStateOf<DetectedCurrencyUnit?>(
+            if (pending.detectedCurrency == DetectedCurrencyUnit.UNKNOWN) null
             else pending.detectedCurrency
         )
     }
+    var showRawSmsText by remember { mutableStateOf(false) }
+
+    val canConfirm = selectedReviewDirection != null &&
+        selectedReviewCurrency != null &&
+        pending.amountToman > 0
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -2055,23 +2061,32 @@ private fun NeedsReviewSmsCard(
                 fontSize = 12.sp
             )
             Text(
-                text = "بانک: ${pending.bank.faName} • مبلغ استخراج‌شده: ${PersianUtils.formatToman(pending.amountToman)}",
+                text = "بانک: ${pending.bank.faName} • مبلغ استخراج‌شده: ${PersianUtils.formatToman(pending.amountToman)} تومان",
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp
+            )
+
+            // Step 1: Direction selector (no default when unknown)
+            Text(
+                text = "۱. تعیین نوع تراکنش (الزامی):",
+                color = if (selectedReviewDirection == null) AmberWarning else CyanPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                     SmsTransactionDirection.WITHDRAWAL to "برداشت / هزینه",
                     SmsTransactionDirection.DEPOSIT to "واریز / درآمد",
-                    SmsTransactionDirection.TRANSFER_CARD to "انتقال کارت"
+                    SmsTransactionDirection.TRANSFER_CARD to "انتقال بین حساب‌ها"
                 ).forEach { (dir, label) ->
                     val active = selectedReviewDirection == dir
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (active) AmberWarning else SurfaceCard)
+                            .background(if (active) CyanPrimary else SurfaceCard)
+                            .border(1.dp, if (active) CyanPrimary else Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
                             .clickable { selectedReviewDirection = dir }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
@@ -2085,16 +2100,92 @@ private fun NeedsReviewSmsCard(
                     }
                 }
             }
+
+            // Step 2: Currency selector
+            Text(
+                text = "۲. واحد پول تراکنش (الزامی):",
+                color = if (selectedReviewCurrency == null) AmberWarning else CyanPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    DetectedCurrencyUnit.TOMAN to "تومان (مبلغ ورودی به تومان است)",
+                    DetectedCurrencyUnit.RIAL to "ریال (تبدیل خودکار به تومان با تقسیم بر ۱۰)"
+                ).forEach { (curr, label) ->
+                    val active = selectedReviewCurrency == curr
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (active) EmeraldAccent else SurfaceCard)
+                            .border(1.dp, if (active) EmeraldAccent else Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                            .clickable { selectedReviewCurrency = curr }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (active) Color.Black else TextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Inspect original SMS body
+            Text(
+                text = if (showRawSmsText) "بستن متن پیامک خام ▴" else "مشاهده متن اصلی پیامک ▾",
+                color = CyanPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable { showRawSmsText = !showRawSmsText }
+                    .padding(vertical = 2.dp)
+            )
+            if (showRawSmsText) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = "فرستنده: ${pending.senderAddress ?: "نامشخص"}\n${pending.summaryFa}",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { onConfirm(selectedReviewDirection, selectedReviewCurrency, pending.amountToman) },
-                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent),
+                    onClick = {
+                        val finalDir = selectedReviewDirection
+                        val finalCurr = selectedReviewCurrency
+                        if (finalDir != null && finalCurr != null) {
+                            onConfirm(finalDir, finalCurr, pending.amountToman)
+                        }
+                    },
+                    enabled = canConfirm,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EmeraldAccent,
+                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                    ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .testTag("confirm_review_sms_btn")
                 ) {
-                    Text("تأیید و ثبت نهایی", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(
+                        text = if (canConfirm) "تأیید و ثبت نهایی" else "تعیین نوع و واحد پول الزامی است",
+                        color = if (canConfirm) Color.Black else TextMuted,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
                 OutlinedButton(
                     onClick = onDismiss,

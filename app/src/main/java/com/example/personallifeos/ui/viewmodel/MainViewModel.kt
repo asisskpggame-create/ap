@@ -1277,12 +1277,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return error
         }
         val finalAmount = overrideAmountToman ?: pending.amountToman
+        // STRICT AUDIT REQUIREMENT 1 & 6: Never map UNKNOWN to EXPENSE!
         val txType = when (overrideDirection) {
             SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
             SmsTransactionDirection.TRANSFER_CARD,
             SmsTransactionDirection.TRANSFER_PAYA,
             SmsTransactionDirection.TRANSFER_POL -> TransactionType.TRANSFER
-            else -> TransactionType.EXPENSE
+            SmsTransactionDirection.WITHDRAWAL,
+            SmsTransactionDirection.PURCHASE -> TransactionType.EXPENSE
+            SmsTransactionDirection.UNKNOWN -> return "جهت تراکنش نامشخص است؛ لطفاً یکی از گزینه‌های واریز، برداشت یا انتقال را انتخاب کنید."
         }
         val title = pending.merchantOrTerminal ?: pending.destination ?: "${overrideDirection.faName} ${pending.bank.faName}"
         addExpense(
@@ -1323,13 +1326,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_notificationSettings.value.floatingBannerEnabled) {
             _activeFloatingBanner.value = item
         }
-        if (parsed.verificationStatus == SmsVerificationStatus.AUTO_ACCEPTED) {
+        // STRICT AUDIT REQUIREMENT 1: Verification status must be AUTO_ACCEPTED and direction not UNKNOWN
+        if (parsed.verificationStatus == SmsVerificationStatus.AUTO_ACCEPTED && parsed.direction != SmsTransactionDirection.UNKNOWN) {
             val txType = when (parsed.direction) {
                 SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
                 SmsTransactionDirection.TRANSFER_CARD,
                 SmsTransactionDirection.TRANSFER_PAYA,
                 SmsTransactionDirection.TRANSFER_POL -> TransactionType.TRANSFER
-                else -> TransactionType.EXPENSE
+                SmsTransactionDirection.WITHDRAWAL,
+                SmsTransactionDirection.PURCHASE -> TransactionType.EXPENSE
+                SmsTransactionDirection.UNKNOWN -> return
             }
             val title = parsed.merchantOrTerminal ?: parsed.destination ?: "${parsed.direction.faName} ${parsed.bank.faName}"
             addExpense(
@@ -1348,13 +1354,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun confirmNotificationReview(item: BankNotificationItem, direction: SmsTransactionDirection) {
+        if (direction == SmsTransactionDirection.UNKNOWN) return
         val err = IranianBankSmsEngine.validateManualConfirmReview(
             parsed = item.parsedResult,
             overrideDirection = direction,
             overrideCurrency = DetectedCurrencyUnit.RIAL
         )
         if (err == null) {
-            val txType = if (direction == SmsTransactionDirection.DEPOSIT) TransactionType.INCOME else TransactionType.EXPENSE
+            val txType = when (direction) {
+                SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
+                SmsTransactionDirection.TRANSFER_CARD,
+                SmsTransactionDirection.TRANSFER_PAYA,
+                SmsTransactionDirection.TRANSFER_POL -> TransactionType.TRANSFER
+                else -> TransactionType.EXPENSE
+            }
             val title = item.parsedResult.merchantOrTerminal ?: "${direction.faName} ${item.parsedResult.bank.faName}"
             addExpense(
                 title = title,

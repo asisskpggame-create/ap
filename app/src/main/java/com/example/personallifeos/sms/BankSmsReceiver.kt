@@ -46,20 +46,49 @@ class BankSmsReceiver : BroadcastReceiver() {
                         continue
                     }
 
+                    // STRICT AUDIT REQUIREMENT 1: Verification status must be AUTO_ACCEPTED.
+                    // NEEDS_REVIEW, REJECTED, or DUPLICATE must NEVER be auto-registered into the ledger.
+                    if (parsed.verificationStatus != SmsVerificationStatus.AUTO_ACCEPTED) {
+                        Log.w(TAG, "Incoming SMS skipped auto-registration (status: ${parsed.verificationStatus}): ${parsed.reviewReasonFa}")
+                        continue
+                    }
+
+                    // STRICT AUDIT REQUIREMENT 1: UNKNOWN direction must NEVER be registered as an expense!
+                    if (parsed.direction == SmsTransactionDirection.UNKNOWN) {
+                        Log.w(TAG, "Incoming SMS skipped: direction is UNKNOWN and cannot be auto-registered")
+                        continue
+                    }
+
                     val idempotencyKey = parsed.idempotencyKey
-                    if (IranianBankSmsEngine.isDuplicateKey(idempotencyKey)) {
+                    // STRICT AUDIT REQUIREMENT 3: Persistent database check in addition to memory cache
+                    val existingInDb = dao.getExpenseByIdempotencyKey(idempotencyKey)
+                    if (existingInDb != null || IranianBankSmsEngine.isDuplicateKey(idempotencyKey)) {
                         Log.d(TAG, "Duplicate bank SMS ignored: $idempotencyKey")
                         continue
                     }
 
                     IranianBankSmsEngine.markIdempotencyKeyProcessed(idempotencyKey)
 
-                    val isDeposit = parsed.direction == SmsTransactionDirection.DEPOSIT
-                    val type = if (isDeposit) "INCOME" else "EXPENSE"
-                    val title = if (isDeposit) {
-                        "واریز به حساب ${parsed.bank.faName}"
-                    } else {
-                        "برداشت/خرید از ${parsed.bank.faName}"
+                    // STRICT AUDIT REQUIREMENT 1 & 6: Explicit mapping of direction to transaction type
+                    val (type, title) = when (parsed.direction) {
+                        SmsTransactionDirection.DEPOSIT -> {
+                            "INCOME" to "واریز به حساب ${parsed.bank.faName}"
+                        }
+                        SmsTransactionDirection.TRANSFER_CARD,
+                        SmsTransactionDirection.TRANSFER_PAYA,
+                        SmsTransactionDirection.TRANSFER_POL -> {
+                            "TRANSFER" to (parsed.destination?.let { "انتقال به $it (${parsed.bank.faName})" } ?: "انتقال از حساب ${parsed.bank.faName}")
+                        }
+                        SmsTransactionDirection.PURCHASE -> {
+                            "EXPENSE" to (parsed.merchantOrTerminal?.let { "خرید از $it (${parsed.bank.faName})" } ?: "خرید با کارت ${parsed.bank.faName}")
+                        }
+                        SmsTransactionDirection.WITHDRAWAL -> {
+                            "EXPENSE" to "برداشت از حساب ${parsed.bank.faName}"
+                        }
+                        SmsTransactionDirection.UNKNOWN -> {
+                            // Defensive guard: never auto-register UNKNOWN
+                            continue
+                        }
                     }
 
                     val entity = ExpenseEntity(

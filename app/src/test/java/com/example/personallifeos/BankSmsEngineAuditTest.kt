@@ -340,4 +340,47 @@ class BankSmsEngineAuditTest {
         assertEquals(25000L, addedAmount)
         assertEquals(com.example.personallifeos.data.model.TransactionType.EXPENSE, addedType)
     }
+
+    @Test
+    fun `regression 13 - complete 64 character SHA-256 idempotency key generated`() {
+        val bluSms = "بلو • برداشت پول: ۹۰۰,۰۰۰ ریال از حساب شما پرید."
+        val parsed = com.example.personallifeos.sms.IranianBankSmsEngine.parse(bluSms, "982000")
+        assertEquals("SHA-256 must be 64 hexadecimal characters", 64, parsed.idempotencyKey.length)
+        assertTrue("Idempotency key must match hex regex", Regex("^[a-f0-9]{64}$").matches(parsed.idempotencyKey))
+    }
+
+    @Test
+    fun `regression 14 - transfer SMS directions must never map to EXPENSE or INCOME`() {
+        val polSms = "بلو • انتقال پل: مبلغ ۱,۵۰۰,۰۰۰ ریال به علیرضا یوسفی"
+        val parsedPol = com.example.personallifeos.sms.IranianBankSmsEngine.parse(polSms, "30009601")
+        assertEquals(com.example.personallifeos.sms.SmsTransactionDirection.TRANSFER_POL, parsedPol.direction)
+
+        val txType = when (parsedPol.direction) {
+            com.example.personallifeos.sms.SmsTransactionDirection.DEPOSIT -> com.example.personallifeos.data.model.TransactionType.INCOME
+            com.example.personallifeos.sms.SmsTransactionDirection.TRANSFER_CARD,
+            com.example.personallifeos.sms.SmsTransactionDirection.TRANSFER_PAYA,
+            com.example.personallifeos.sms.SmsTransactionDirection.TRANSFER_POL -> com.example.personallifeos.data.model.TransactionType.TRANSFER
+            com.example.personallifeos.sms.SmsTransactionDirection.WITHDRAWAL,
+            com.example.personallifeos.sms.SmsTransactionDirection.PURCHASE -> com.example.personallifeos.data.model.TransactionType.EXPENSE
+            com.example.personallifeos.sms.SmsTransactionDirection.UNKNOWN -> null
+        }
+        assertEquals(com.example.personallifeos.data.model.TransactionType.TRANSFER, txType)
+    }
+
+    @Test
+    fun `regression 15 - UNKNOWN direction strictly rejected from direct registration`() {
+        val unknownDirSms = "بانک سپه • ردیف: ۱۲ • مبلغ: ۴۰۰,۰۰۰ ریال به حساب ۵۸۹۲۱۰"
+        val parsed = com.example.personallifeos.sms.IranianBankSmsEngine.parse(unknownDirSms, "98300015")
+        assertEquals(com.example.personallifeos.sms.SmsTransactionDirection.UNKNOWN, parsed.direction)
+        assertFalse(parsed.direction.isExpense)
+
+        // Strict verification: cannot confirm UNKNOWN direction
+        val error = com.example.personallifeos.sms.IranianBankSmsEngine.validateManualConfirmReview(
+            parsed = parsed,
+            overrideDirection = com.example.personallifeos.sms.SmsTransactionDirection.UNKNOWN,
+            overrideCurrency = com.example.personallifeos.sms.DetectedCurrencyUnit.RIAL
+        )
+        assertNotNull(error)
+        assertTrue(error!!.contains("نوع تراکنش"))
+    }
 }
