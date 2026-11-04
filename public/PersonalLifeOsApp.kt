@@ -107,6 +107,7 @@ fun PersonalLifeOsApp(
     val habits by viewModel.habits.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val debts by viewModel.debts.collectAsState()
+    val recurringExpenses by viewModel.recurringExpenses.collectAsState()
     val quickPresets by viewModel.quickPresets.collectAsState()
     val goals by viewModel.goals.collectAsState()
     val categoryBudgets by viewModel.categoryBudgets.collectAsState()
@@ -123,9 +124,11 @@ fun PersonalLifeOsApp(
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     val configuredBanks by viewModel.configuredBanks.collectAsState()
     val pendingReviewSms by viewModel.pendingReviewSms.collectAsState()
+    val smsProcessingHistory by viewModel.smsProcessingHistory.collectAsState()
     val bankNotifications by viewModel.bankNotifications.collectAsState()
     val notificationSettings by viewModel.notificationSettings.collectAsState()
     val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
+    val isSmsEngineActive by viewModel.isSmsEngineActive.collectAsState()
     val requestOpenVoiceModal by viewModel.requestOpenVoiceModal.collectAsState()
     val requestedNavigationTab by viewModel.requestedNavigationTab.collectAsState()
     val moreSubscreen by viewModel.moreSubscreen.collectAsState()
@@ -393,11 +396,13 @@ fun PersonalLifeOsApp(
                             Screen.Expenses -> ExpensesScreen(
                                 expenses = expenses,
                                 debts = debts,
+                                recurringExpenses = recurringExpenses,
                                 quickPresets = quickPresets,
                                 categoryBudgets = categoryBudgets,
                                 configuredBanks = configuredBanks,
                                 pendingReviewSms = pendingReviewSms,
-                                onAddExpense = { title, amount, cat, bank, isSms, txType, acc ->
+                                processingHistory = smsProcessingHistory,
+                                onAddExpense = { title, amount, cat, bank, isSms, txType, acc, key ->
                                     viewModel.addExpense(
                                         title = title,
                                         amount = amount,
@@ -405,7 +410,8 @@ fun PersonalLifeOsApp(
                                         bankName = bank,
                                         isSms = isSms,
                                         type = txType,
-                                        accountName = acc
+                                        accountName = acc,
+                                        idempotencyKey = key
                                     )
                                 },
                                 onUpdateExpense = { viewModel.updateExpenseItem(it) },
@@ -419,11 +425,29 @@ fun PersonalLifeOsApp(
                                 onCreateDebtPlan = { debt, count -> viewModel.createDebtRepaymentPlan(debt, count) },
                                 onSettleDebt = { viewModel.settleDebtCompletely(it) },
                                 onDeleteDebt = { viewModel.deleteDebt(it) },
+                                onAddRecurringExpense = { title, amt, cat, freq, due, note ->
+                                    viewModel.addRecurringExpense(title, amt, cat, freq, due, note)
+                                },
+                                onToggleRecurringExpense = { viewModel.toggleRecurringExpenseActive(it) },
+                                onDeleteRecurringExpense = { viewModel.deleteRecurringExpense(it) },
+                                onExecuteRecurringExpense = { viewModel.executeRecurringExpenseNow(it) },
                                 onParseSms = { sms, sender -> viewModel.parseAndAddSms(sms, sender) },
                                 onConfirmReview = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
+                                onConfirmReviewWithOverrides = { dir, curr, bank, amt, title ->
+                                    viewModel.confirmPendingReviewWithOverrides(dir, curr, bank, amt, title)
+                                },
                                 onDismissReview = { viewModel.dismissPendingReview() },
+                                onSaveBankConfig = { bank, sender, req, customName ->
+                                    viewModel.saveBankConfig(bank, sender, req, customName)
+                                },
+                                onDeleteBankConfig = { viewModel.deleteBankConfig(it) },
+                                onClearSmsHistory = { viewModel.clearSmsProcessingHistory() },
+                                onDeleteSmsHistoryItem = { viewModel.deleteSmsProcessingHistory(it) },
                                 onOpenBankSelector = { isBankSelectorOpen = true },
-                                onOpenNotificationCenter = { isNotificationCenterOpen = true }
+                                onOpenNotificationCenter = { isNotificationCenterOpen = true },
+                                isEngineActive = isSmsEngineActive,
+                                onToggleEngineActive = { viewModel.setSmsEngineActive(it) },
+                                onToggleBankConfig = { bank, enabled -> viewModel.toggleBankConfig(bank, enabled) }
                             )
 
                             Screen.More -> {
@@ -510,6 +534,8 @@ fun PersonalLifeOsApp(
 
                                     "health" -> HealthScreen(
                                         healthLog = healthLog,
+                                        habits = habits,
+                                        onToggleHabit = { viewModel.toggleHabit(it) },
                                         onUpdateWater = { viewModel.updateWater(it) },
                                         onUpdateFullMetrics = { sleep, qual, exMin, exType, burned, intake ->
                                             viewModel.updateFullHealthMetrics(sleep, qual, exMin, exType, burned, intake)
