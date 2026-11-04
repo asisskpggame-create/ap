@@ -318,7 +318,40 @@ class LifeOsRepository(private val dao: LifeOsDao) {
             idempotencyKey = key
         )
 
-        val insertedRow = dao.insertExpense(expenseEntity)
+        val outcomeResult = if (channel == SmsProcessingChannel.LIVE_RECEIVER) {
+            SmsProcessingResult.AUTO_REGISTERED
+        } else {
+            SmsProcessingResult.MANUALLY_CONFIRMED
+        }
+
+        val historyId = UUID.randomUUID().toString()
+        val historyEntity = SmsProcessingHistoryEntity(
+            id = historyId,
+            timestampMillis = System.currentTimeMillis(),
+            receivedTimeFa = PersianUtils.getPersianDateString(),
+            senderAddress = parsed.senderAddress ?: "نامشخص",
+            senderSource = senderSource.name,
+            detectedBank = parsed.bank.name,
+            bankFaName = parsed.bank.faName,
+            transactionDirection = parsed.direction.name,
+            rawExtractedAmount = parsed.rawExtractedAmount,
+            finalAmountToman = finalAmount,
+            detectedCurrency = parsed.detectedCurrency.name,
+            templateId = parsed.templateId,
+            templateVersion = parsed.templateVersion,
+            verificationStatus = parsed.verificationStatus.name,
+            reviewReasonFa = parsed.reviewReasonFa,
+            processingResult = outcomeResult.name,
+            errorDetails = null,
+            idempotencyKey = key,
+            linkedExpenseId = expenseId,
+            processingChannel = channel.name,
+            maskedCardOrAccount = parsed.accountOrCard?.let { PersianUtils.maskCardNumber(it) },
+            trackingCode = parsed.trackingCode,
+            userConfirmedTimestamp = if (outcomeResult == SmsProcessingResult.MANUALLY_CONFIRMED) System.currentTimeMillis() else null
+        )
+
+        val insertedRow = dao.registerSmsTransactionAndHistory(expenseEntity, historyEntity)
         if (insertedRow == -1L) {
             return SmsRegistrationResult(
                 isSuccess = false,
@@ -330,41 +363,6 @@ class LifeOsRepository(private val dao: LifeOsDao) {
 
         // Successfully inserted into database -> mark in engine
         BankSmsProcessingEngine.markIdempotencyKeyProcessed(key)
-
-        val outcomeResult = if (channel == SmsProcessingChannel.LIVE_RECEIVER) {
-            SmsProcessingResult.AUTO_REGISTERED
-        } else {
-            SmsProcessingResult.MANUALLY_CONFIRMED
-        }
-
-        val historyId = UUID.randomUUID().toString()
-        dao.insertProcessingHistory(
-            SmsProcessingHistoryEntity(
-                id = historyId,
-                timestampMillis = System.currentTimeMillis(),
-                receivedTimeFa = PersianUtils.getPersianDateString(),
-                senderAddress = parsed.senderAddress ?: "نامشخص",
-                senderSource = senderSource.name,
-                detectedBank = parsed.bank.name,
-                bankFaName = parsed.bank.faName,
-                transactionDirection = parsed.direction.name,
-                rawExtractedAmount = parsed.rawExtractedAmount,
-                finalAmountToman = finalAmount,
-                detectedCurrency = parsed.detectedCurrency.name,
-                templateId = parsed.templateId,
-                templateVersion = parsed.templateVersion,
-                verificationStatus = parsed.verificationStatus.name,
-                reviewReasonFa = parsed.reviewReasonFa,
-                processingResult = outcomeResult.name,
-                errorDetails = null,
-                idempotencyKey = key,
-                linkedExpenseId = expenseId,
-                processingChannel = channel.name,
-                maskedCardOrAccount = parsed.accountOrCard?.let { PersianUtils.maskCardNumber(it) },
-                trackingCode = parsed.trackingCode,
-                userConfirmedTimestamp = if (outcomeResult == SmsProcessingResult.MANUALLY_CONFIRMED) System.currentTimeMillis() else null
-            )
-        )
 
         return SmsRegistrationResult(
             isSuccess = true,

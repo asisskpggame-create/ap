@@ -218,4 +218,16 @@ interface LifeOsDao {
 
     @Query("DELETE FROM sms_processing_history")
     suspend fun clearProcessingHistory()
+
+    @androidx.room.Transaction
+    suspend fun registerSmsTransactionAndHistory(
+        expense: ExpenseEntity,
+        history: SmsProcessingHistoryEntity
+    ): Long {
+        val insertedRow = insertExpense(expense)
+        if (insertedRow != -1L) {
+            insertProcessingHistory(history)
+        }
+        return insertedRow
+    }
 }
