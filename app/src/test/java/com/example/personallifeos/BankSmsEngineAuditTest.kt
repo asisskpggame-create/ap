@@ -570,7 +570,7 @@ class BankSmsEngineAuditTest {
         assertEquals(BankType.PASARGAD, parsed.bank)
         assertEquals(420_000L, parsed.amountToman)
         assertEquals(SmsTransactionDirection.WITHDRAWAL, parsed.direction)
-        assertEquals("۸۸۹۹۰۰", parsed.trackingCode)
+        assertEquals("889900", parsed.trackingCode)
         assertEquals(64, parsed.idempotencyKey.length)
         assertEquals(SmsVerificationStatus.AUTO_ACCEPTED, parsed.verificationStatus)
     }
