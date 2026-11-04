@@ -82,6 +82,7 @@ import com.example.personallifeos.sms.BankNotificationItem
 import com.example.personallifeos.sms.BankType
 import com.example.personallifeos.sms.IranianBankSmsEngine
 import com.example.personallifeos.sms.ReceivedSmsSenderItem
+import com.example.personallifeos.sms.SmsSenderSource
 
 data class VisualBankOption(
     val bankType: BankType,
@@ -93,9 +94,9 @@ data class VisualBankOption(
 )
 
 /**
- * Primary 8 banks in the exact 2x4 order of the Mirza screenshot
+ * Primary 8 major Iranian banks for quick selection
  */
-val PRIMARY_MIRZA_BANKS = listOf(
+val PRIMARY_IRANIAN_BANKS = listOf(
     VisualBankOption(BankType.MELLI, "ملی", "بانک ملی", "ملی", Color(0xFFB45309), "98300017"),
     VisualBankOption(BankType.BLUBANK, "بلو بانک", "بلو بانک", "b", Color(0xFF3B82F6), "982000"),
     VisualBankOption(BankType.BLUBANK_POL, "بلوبانک حالت پل", "بلوبانک حالت پل", "b", Color(0xFF2563EB), "30009601"),
@@ -148,8 +149,6 @@ val ALL_IRANIAN_VISUAL_BANKS = listOf(
     VisualBankOption(BankType.CUSTOM, "سایر / سفارشی", "بانک یا حساب سفارشی", "+", Color(0xFF6366F1), "")
 )
 
-val MIRZA_VISUAL_BANKS = ALL_IRANIAN_VISUAL_BANKS
-
 @Composable
 fun BankVisualSelectorDialog(
     isOpen: Boolean,
@@ -185,7 +184,7 @@ fun BankVisualSelectorDialog(
         } else if (showAllBanksView) {
             ALL_IRANIAN_VISUAL_BANKS
         } else {
-            PRIMARY_MIRZA_BANKS
+            PRIMARY_IRANIAN_BANKS
         }
     }
 
@@ -197,7 +196,7 @@ fun BankVisualSelectorDialog(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .clip(RoundedCornerShape(28.dp))
-                .testTag("mirza_bank_selector_dialog"),
+                .testTag("bank_visual_selector_dialog"),
             color = Color(0xFFF8FAFC)
         ) {
             Column(
@@ -226,7 +225,7 @@ fun BankVisualSelectorDialog(
                     )
                 }
 
-                // Realistic Mirza-style Navy Bank Card Preview
+                // Navy Bank Card Preview
                 val cardDisplayTitle = if (selectedOption.bankType == BankType.CUSTOM && customBankNameInput.isNotBlank()) {
                     customBankNameInput.trim()
                 } else {
@@ -243,7 +242,7 @@ fun BankVisualSelectorDialog(
                                 colors = listOf(Color(0xFF061B36), Color(0xFF0B315C), Color(0xFF0F3E73))
                             )
                         )
-                        .testTag("mirza_bank_card_preview")
+                        .testTag("bank_card_preview")
                 ) {
                     // Decorative background circles inside the card matching screenshot
                     Canvas(modifier = Modifier.matchParentSize()) {
@@ -821,29 +820,47 @@ fun DeviceSmsSearchDialog(
     }
 
     var searchQuery by remember { mutableStateOf("") }
-    var senderList by remember(hasSmsPermission, liveNotifications) {
-        mutableStateOf(IranianBankSmsEngine.readDeviceSmsInboxSenders(context, liveNotifications))
+    var selectedSourceFilter by remember { mutableStateOf<SmsSenderSource?>(null) }
+
+    var realDeviceSenders by remember(hasSmsPermission) {
+        mutableStateOf(IranianBankSmsEngine.readDeviceSmsInboxSenders(context))
+    }
+    val builtInSenders = remember {
+        IranianBankSmsEngine.getBuiltInSuggestedSenders()
+    }
+    val liveSenders = remember(liveNotifications) {
+        IranianBankSmsEngine.getLiveNotificationSenders(liveNotifications)
     }
 
     // Refresh senders when permission changes
     LaunchedEffect(hasSmsPermission) {
-        senderList = IranianBankSmsEngine.readDeviceSmsInboxSenders(context, liveNotifications)
+        realDeviceSenders = IranianBankSmsEngine.readDeviceSmsInboxSenders(context)
     }
 
-    val filteredSenders = remember(senderList, searchQuery, selectedBank) {
+    val allSenders = remember(realDeviceSenders, liveSenders, builtInSenders) {
+        (realDeviceSenders + liveSenders + builtInSenders).distinctBy { it.senderNumber }
+    }
+
+    val filteredSenders = remember(allSenders, selectedSourceFilter, searchQuery, selectedBank) {
+        val base = if (selectedSourceFilter != null) {
+            allSenders.filter { it.source == selectedSourceFilter }
+        } else {
+            allSenders
+        }
         val q = searchQuery.trim().lowercase()
         val list = if (q.isBlank()) {
-            senderList
+            base
         } else {
-            senderList.filter {
+            base.filter {
                 it.senderNumber.lowercase().contains(q) ||
                 it.bankTitleFa.lowercase().contains(q) ||
                 it.lastMessagePreview.lowercase().contains(q)
             }
         }
-        // Sort items so that items matching the currently selected bank or having highest messages are top
+        // Sort items so that items matching the currently selected bank or real device are top
         list.sortedWith(
             compareByDescending<ReceivedSmsSenderItem> { it.suggestedBank == selectedBank }
+                .thenByDescending { it.source == SmsSenderSource.REAL_DEVICE_INBOX }
                 .thenByDescending { it.messageCount }
         )
     }
@@ -957,6 +974,33 @@ fun DeviceSmsSearchDialog(
                     ),
                     modifier = Modifier.fillMaxWidth().testTag("sms_search_input")
                 )
+
+                // Sender Source Filter Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedSourceFilter == null,
+                        onClick = { selectedSourceFilter = null },
+                        label = { Text("همه (${allSenders.size})", fontSize = 10.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedSourceFilter == SmsSenderSource.REAL_DEVICE_INBOX,
+                        onClick = { selectedSourceFilter = SmsSenderSource.REAL_DEVICE_INBOX },
+                        label = { Text("گوشی (${realDeviceSenders.size})", fontSize = 10.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedSourceFilter == SmsSenderSource.LIVE_NOTIFICATION,
+                        onClick = { selectedSourceFilter = SmsSenderSource.LIVE_NOTIFICATION },
+                        label = { Text("اعلان (${liveSenders.size})", fontSize = 10.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedSourceFilter == SmsSenderSource.BUILT_IN_SUGGESTION,
+                        onClick = { selectedSourceFilter = SmsSenderSource.BUILT_IN_SUGGESTION },
+                        label = { Text("پیشنهاد (${builtInSenders.size})", fontSize = 10.sp) }
+                    )
+                }
 
                 // Stats Banner
                 Row(
@@ -1074,27 +1118,42 @@ fun DeviceSmsSearchDialog(
                                         }
                                     }
 
-                                    // Suggested Bank Badge
-                                    if (item.suggestedBank != BankType.UNKNOWN) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0xFFDCFCE7))
-                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                                .background(Color(item.source.badgeColorHex).copy(alpha = 0.12f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
                                             Text(
-                                                text = item.bankTitleFa,
-                                                fontSize = 10.sp,
+                                                text = item.source.titleFa,
+                                                fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF15803D)
+                                                color = Color(item.source.badgeColorHex)
                                             )
                                         }
-                                    } else {
-                                        Text(
-                                            text = item.receivedTimeFa,
-                                            fontSize = 10.sp,
-                                            color = Color(0xFF94A3B8)
-                                        )
+
+                                        if (item.suggestedBank != BankType.UNKNOWN) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color(0xFFDCFCE7))
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = item.bankTitleFa,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF15803D)
+                                                )
+                                            }
+                                        } else {
+                                            Text(
+                                                text = item.receivedTimeFa,
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF94A3B8)
+                                            )
+                                        }
                                     }
                                 }
 

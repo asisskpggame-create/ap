@@ -19,6 +19,8 @@ import com.example.personallifeos.data.model.TaskStatus
 import com.example.personallifeos.data.model.TopicItem
 import com.example.personallifeos.data.model.TransactionType
 import com.example.personallifeos.data.model.VaultNote
+import com.example.personallifeos.sms.BankType
+import com.example.personallifeos.sms.BankUserConfig
 
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -420,3 +422,95 @@ data class VaultNoteEntity(
         )
     }
 }
+
+/**
+ * Persistent bank configuration in Room database.
+ * Preserves user-assigned senders and template verification states across app restarts.
+ */
+@Entity(tableName = "bank_configs")
+data class BankConfigEntity(
+    @PrimaryKey val bankNameKey: String,
+    val senderNumber: String,
+    val requireSenderMatch: Boolean = true,
+    val customBankName: String? = null,
+    val isEnabled: Boolean = true,
+    val verifiedTemplateKeysSerialized: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val verificationEvidence: String? = null
+) {
+    fun toDomain(): BankUserConfig {
+        val bank = try {
+            BankType.valueOf(bankNameKey)
+        } catch (_: Exception) {
+            BankType.UNKNOWN
+        }
+        val templates = if (verifiedTemplateKeysSerialized.isBlank()) emptySet()
+        else verifiedTemplateKeysSerialized.split("||").filter { it.isNotBlank() }.toSet()
+
+        return BankUserConfig(
+            bank = bank,
+            senderNumber = senderNumber,
+            requireSenderMatch = requireSenderMatch,
+            verifiedTemplateKeys = templates,
+            customBankName = customBankName,
+            isEnabled = isEnabled,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            verificationEvidence = verificationEvidence
+        )
+    }
+
+    companion object {
+        fun fromDomain(config: BankUserConfig): BankConfigEntity {
+            return BankConfigEntity(
+                bankNameKey = config.bank.name,
+                senderNumber = config.senderNumber,
+                requireSenderMatch = config.requireSenderMatch,
+                customBankName = config.customBankName,
+                isEnabled = config.isEnabled,
+                verifiedTemplateKeysSerialized = config.verifiedTemplateKeys.joinToString("||"),
+                createdAt = config.createdAt,
+                updatedAt = config.updatedAt,
+                verificationEvidence = config.verificationEvidence
+            )
+        }
+    }
+}
+
+/**
+ * Persistent SMS Processing History in Room database.
+ * Audits every received, scanned, approved, rejected, or duplicate bank SMS.
+ */
+@Entity(
+    tableName = "sms_processing_history",
+    indices = [
+        Index(value = ["idempotencyKey"]),
+        Index(value = ["timestampMillis"])
+    ]
+)
+data class SmsProcessingHistoryEntity(
+    @PrimaryKey val id: String,
+    val timestampMillis: Long,
+    val receivedTimeFa: String,
+    val senderAddress: String,
+    val senderSource: String,
+    val detectedBank: String,
+    val bankFaName: String,
+    val transactionDirection: String,
+    val rawExtractedAmount: Long,
+    val finalAmountToman: Long,
+    val detectedCurrency: String,
+    val templateId: String,
+    val templateVersion: Int,
+    val verificationStatus: String,
+    val reviewReasonFa: String?,
+    val processingResult: String,
+    val errorDetails: String?,
+    val idempotencyKey: String,
+    val linkedExpenseId: String?,
+    val processingChannel: String,
+    val maskedCardOrAccount: String?,
+    val trackingCode: String?,
+    val userConfirmedTimestamp: Long? = null
+)

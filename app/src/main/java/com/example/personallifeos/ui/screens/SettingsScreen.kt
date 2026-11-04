@@ -236,7 +236,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "مرکز اعلان هوشمند و فیش‌خوان بانکی (سبک میرزا)",
+                            text = "مرکز اعلان و پردازش هوشمند پیامک بانکی",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary

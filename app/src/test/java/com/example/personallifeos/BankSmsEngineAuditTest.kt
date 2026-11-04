@@ -207,7 +207,7 @@ class BankSmsEngineAuditTest {
     }
 
     @Test
-    fun `regression 9 - Mirza sender-locked bank only accepts SMS from its assigned sender number and resolves nameless SMS by sender`() {
+    fun `regression 9 - sender-locked bank only accepts SMS from its assigned sender number and resolves nameless SMS by sender`() {
         IranianBankSmsEngine.configureBankSenderPolicy(
             bank = BankType.MELLI,
             senderNumber = "98300017",
@@ -504,5 +504,74 @@ class BankSmsEngineAuditTest {
         val simulatedEmptyInbox = emptyList<com.example.personallifeos.ui.components.ScannedTransactionMessage>()
         assertTrue("Empty inbox must return empty list without mock data fallback", simulatedEmptyInbox.isEmpty())
         assertEquals("No sample transactions should ever be populated", 0, simulatedEmptyInbox.size)
+    }
+
+    @Test
+    fun `regression 21 - subsystem aliasing and renaming preserves full BankSmsProcessingEngine functionality`() {
+        val sms = "بانک سامان: خرید ۳۴۰,۰۰۰ ریال از کارت ۶۲۱۹۸۶"
+        val parsedUsingNewClass = com.example.personallifeos.sms.BankSmsProcessingEngine.parse(sms)
+        val parsedUsingAlias = com.example.personallifeos.sms.IranianBankSmsEngine.parse(sms)
+
+        assertEquals(parsedUsingNewClass.bank, parsedUsingAlias.bank)
+        assertEquals(parsedUsingNewClass.amountToman, parsedUsingAlias.amountToman)
+        assertEquals(parsedUsingNewClass.idempotencyKey, parsedUsingAlias.idempotencyKey)
+        assertEquals(BankType.SAMAN, parsedUsingNewClass.bank)
+        assertEquals(34_000L, parsedUsingNewClass.amountToman)
+    }
+
+    @Test
+    fun `regression 22 - distinct sender sources are never blended into real inbox history`() {
+        val builtIn = com.example.personallifeos.sms.BankSmsProcessingEngine.getBuiltInSuggestedSenders()
+        assertTrue("Built-in suggestions list must not be empty", builtIn.isNotEmpty())
+        assertTrue("All built-in suggestions must be tagged with BUILT_IN_SUGGESTION", builtIn.all { it.source == com.example.personallifeos.sms.SmsSenderSource.BUILT_IN_SUGGESTION })
+
+        val mockNotifs = listOf(
+            com.example.personallifeos.sms.BankNotificationItem(
+                id = "n1",
+                sender = "982000",
+                rawText = "بلو • برداشت",
+                parsedResult = com.example.personallifeos.sms.BankSmsProcessingEngine.parse("بلو • برداشت ۱۰۰۰ ریال"),
+                receivedAt = "۱۲:۰۰"
+            )
+        )
+        val liveSenders = com.example.personallifeos.sms.BankSmsProcessingEngine.getLiveNotificationSenders(mockNotifs)
+        assertEquals(1, liveSenders.size)
+        assertEquals(com.example.personallifeos.sms.SmsSenderSource.LIVE_NOTIFICATION, liveSenders.first().source)
+    }
+
+    @Test
+    fun `regression 23 - currency recalculation accurately adjusts Tomans from raw extracted amount`() {
+        val rawRial = 5_000_000L
+
+        val tomanFromRial = com.example.personallifeos.sms.BankSmsProcessingEngine.recalculateAmountToman(
+            rawAmount = rawRial,
+            currency = DetectedCurrencyUnit.RIAL
+        )
+        assertEquals(500_000L, tomanFromRial)
+
+        val tomanFromToman = com.example.personallifeos.sms.BankSmsProcessingEngine.recalculateAmountToman(
+            rawAmount = 500_000L,
+            currency = DetectedCurrencyUnit.TOMAN
+        )
+        assertEquals(500_000L, tomanFromToman)
+    }
+
+    @Test
+    fun `regression 24 - test bench parsing never writes to database and produces diagnostic trace`() {
+        val testSms = """
+            بانک پاسارگاد
+            برداشت: ۴,۲۰۰,۰۰۰ ریال
+            مانده: ۵۰,۰۰۰,۰۰۰ ریال
+            پیگیری: ۸۸۹۹۰۰
+        """.trimIndent()
+
+        val parsed = com.example.personallifeos.sms.BankSmsProcessingEngine.parse(testSms, "982000500")
+
+        assertEquals(BankType.PASARGAD, parsed.bank)
+        assertEquals(420_000L, parsed.amountToman)
+        assertEquals(SmsTransactionDirection.WITHDRAWAL, parsed.direction)
+        assertEquals("۸۸۹۹۰۰", parsed.trackingCode)
+        assertEquals(64, parsed.idempotencyKey.length)
+        assertEquals(SmsVerificationStatus.AUTO_ACCEPTED, parsed.verificationStatus)
     }
 }

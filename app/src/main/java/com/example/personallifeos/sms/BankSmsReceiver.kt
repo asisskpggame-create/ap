@@ -14,6 +14,7 @@ import com.example.personallifeos.MainActivity
 import com.example.personallifeos.R
 import com.example.personallifeos.data.local.AppDatabase
 import com.example.personallifeos.data.local.ExpenseEntity
+import com.example.personallifeos.data.local.SmsProcessingHistoryEntity
 import com.example.personallifeos.util.PersianUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,79 +42,58 @@ class BankSmsReceiver : BroadcastReceiver() {
                     val sender = sms.originatingAddress ?: ""
                     val body = sms.messageBody ?: ""
 
-                    val parsed = IranianBankSmsEngine.parse(body, sender)
+                    val parsed = BankSmsProcessingEngine.parse(body, sender)
                     if (parsed.isOtpOrServiceMessage || parsed.isFailedTransaction || parsed.amountToman <= 0) {
                         continue
                     }
 
                     // STRICT AUDIT REQUIREMENT 1: Verification status must be AUTO_ACCEPTED.
-                    // NEEDS_REVIEW, REJECTED, or DUPLICATE must NEVER be auto-registered into the ledger.
-                    if (parsed.verificationStatus != SmsVerificationStatus.AUTO_ACCEPTED) {
-                        Log.w(TAG, "Incoming SMS skipped auto-registration (status: ${parsed.verificationStatus}): ${parsed.reviewReasonFa}")
+                    // NEEDS_REVIEW or UNKNOWN direction must be saved to history queue and never auto-inserted into ledger.
+                    if (parsed.verificationStatus != SmsVerificationStatus.AUTO_ACCEPTED || parsed.direction == SmsTransactionDirection.UNKNOWN) {
+                        Log.w(TAG, "Incoming SMS routed to review queue (status: ${parsed.verificationStatus}): ${parsed.reviewReasonFa}")
+                        dao.insertProcessingHistory(
+                            SmsProcessingHistoryEntity(
+                                id = UUID.randomUUID().toString(),
+                                timestampMillis = System.currentTimeMillis(),
+                                receivedTimeFa = PersianUtils.getPersianDateString(),
+                                senderAddress = sender,
+                                senderSource = SmsSenderSource.LIVE_NOTIFICATION.name,
+                                detectedBank = parsed.bank.name,
+                                bankFaName = parsed.bank.faName,
+                                transactionDirection = parsed.direction.name,
+                                rawExtractedAmount = parsed.rawExtractedAmount,
+                                finalAmountToman = parsed.amountToman,
+                                detectedCurrency = parsed.detectedCurrency.name,
+                                templateId = parsed.templateId,
+                                templateVersion = parsed.templateVersion,
+                                verificationStatus = parsed.verificationStatus.name,
+                                reviewReasonFa = parsed.reviewReasonFa ?: "جهت نامشخص یا نیازمند بررسی کاربر",
+                                processingResult = SmsProcessingResult.NEEDS_REVIEW.name,
+                                errorDetails = null,
+                                idempotencyKey = parsed.idempotencyKey,
+                                linkedExpenseId = null,
+                                processingChannel = SmsProcessingChannel.LIVE_RECEIVER.name,
+                                maskedCardOrAccount = parsed.accountOrCard?.let { PersianUtils.maskCardNumber(it) },
+                                trackingCode = parsed.trackingCode
+                            )
+                        )
                         continue
                     }
 
-                    // STRICT AUDIT REQUIREMENT 1: UNKNOWN direction must NEVER be registered as an expense!
-                    if (parsed.direction == SmsTransactionDirection.UNKNOWN) {
-                        Log.w(TAG, "Incoming SMS skipped: direction is UNKNOWN and cannot be auto-registered")
-                        continue
-                    }
-
-                    val idempotencyKey = parsed.idempotencyKey
-                    // STRICT AUDIT REQUIREMENT 3: Persistent database check in addition to memory cache
-                    val existingInDb = dao.getExpenseByIdempotencyKey(idempotencyKey)
-                    if (existingInDb != null || IranianBankSmsEngine.isDuplicateKey(idempotencyKey)) {
-                        Log.d(TAG, "Duplicate bank SMS ignored: $idempotencyKey")
-                        continue
-                    }
-
-                    IranianBankSmsEngine.markIdempotencyKeyProcessed(idempotencyKey)
-
-                    // STRICT AUDIT REQUIREMENT 1 & 6: Explicit mapping of direction to transaction type
-                    val (type, title) = when (parsed.direction) {
-                        SmsTransactionDirection.DEPOSIT -> {
-                            "INCOME" to "واریز به حساب ${parsed.bank.faName}"
-                        }
-                        SmsTransactionDirection.TRANSFER_CARD,
-                        SmsTransactionDirection.TRANSFER_PAYA,
-                        SmsTransactionDirection.TRANSFER_POL -> {
-                            "TRANSFER" to (parsed.destination?.let { "انتقال به $it (${parsed.bank.faName})" } ?: "انتقال از حساب ${parsed.bank.faName}")
-                        }
-                        SmsTransactionDirection.PURCHASE -> {
-                            "EXPENSE" to (parsed.merchantOrTerminal?.let { "خرید از $it (${parsed.bank.faName})" } ?: "خرید با کارت ${parsed.bank.faName}")
-                        }
-                        SmsTransactionDirection.WITHDRAWAL -> {
-                            "EXPENSE" to "برداشت از حساب ${parsed.bank.faName}"
-                        }
-                        SmsTransactionDirection.UNKNOWN -> {
-                            // Defensive guard: never auto-register UNKNOWN
-                            continue
-                        }
-                    }
-
-                    val entity = ExpenseEntity(
-                        id = UUID.randomUUID().toString(),
-                        title = title,
-                        amount = parsed.amountToman,
-                        category = parsed.suggestedCategory,
-                        date = PersianUtils.getPersianDateString(),
-                        isSmsParsed = true,
-                        bankName = parsed.bank.faName,
-                        type = type,
-                        accountName = parsed.bank.faName,
-                        idempotencyKey = idempotencyKey
+                    // Route through the Central Registration Service
+                    val repository = com.example.personallifeos.data.repository.LifeOsRepository(dao)
+                    val result = repository.registerSmsTransaction(
+                        parsed = parsed,
+                        channel = SmsProcessingChannel.LIVE_RECEIVER,
+                        senderSource = SmsSenderSource.LIVE_NOTIFICATION
                     )
 
-                    val insertedRowId = dao.insertExpense(entity)
-                    if (insertedRowId == -1L) {
-                        Log.w(TAG, "Duplicate bank SMS ignored by Room unique constraint: $idempotencyKey")
-                        continue
+                    if (result.isSuccess) {
+                        Log.i(TAG, "Successfully recorded SMS transaction: ${parsed.summaryFa}")
+                        showBankNotification(context, parsed)
+                    } else {
+                        Log.d(TAG, "SMS skipped or duplicate: ${result.errorMessageFa}")
                     }
-
-                    IranianBankSmsEngine.markIdempotencyKeyProcessed(idempotencyKey)
-                    Log.i(TAG, "Successfully recorded SMS transaction: ${parsed.summaryFa}")
-
-                    showBankNotification(context, parsed)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing incoming SMS in background: ${e.message}", e)

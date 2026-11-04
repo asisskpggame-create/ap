@@ -302,7 +302,7 @@ fun NotificationCenterDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "+ افزودن بانک (میرزا)",
+                                text = "+ اتصال بانک جدید",
                                 color = EmeraldAccent,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,

@@ -10,7 +10,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+typealias BankSmsProcessingEngine = IranianBankSmsEngine
+
 object IranianBankSmsEngine {
+
+    @Volatile
+    private var isEngineEnabled: Boolean = true
+
+    fun isEngineActive(): Boolean = isEngineEnabled
+
+    fun setEngineActive(active: Boolean) {
+        isEngineEnabled = active
+    }
 
     // Template registry with explicit version numbers (Audit Fix #2)
     private val templateVersions = mutableMapOf(
@@ -42,7 +53,7 @@ object IranianBankSmsEngine {
     // In-memory processed idempotency keys (in addition to Room persistence)
     private val processedIdempotencyKeys = mutableSetOf<String>()
 
-    // Realistic SMS Inbox Sender History (used by the SMS Sender Picker button in Mirza Bank Selector)
+    // Built-in standard bank sender suggestions (used by the SMS Sender Picker button in Bank Selector)
     private val defaultInboxSenders = listOf(
         ReceivedSmsSenderItem(
             senderNumber = "98300017",
@@ -213,7 +224,7 @@ object IranianBankSmsEngine {
 
     /**
      * Registers or updates a bank with a specific SMS sender number.
-     * When registered by the user in the Mirza Bank Selector, requireSenderMatch = true
+     * When registered by the user in the Bank Selector, requireSenderMatch = true
      * locks the bank to ONLY read SMS messages from this exact senderNumber.
      */
     fun configureBankSenderPolicy(
@@ -221,7 +232,8 @@ object IranianBankSmsEngine {
         senderNumber: String,
         requireSenderMatch: Boolean = true,
         verifyDefaultTemplate: Boolean = true,
-        customBankName: String? = null
+        customBankName: String? = null,
+        isEnabled: Boolean = true
     ) {
         val current = bankConfigs[bank]
         val updatedKeys = (current?.verifiedTemplateKeys ?: emptySet()).toMutableSet()
@@ -238,8 +250,14 @@ object IranianBankSmsEngine {
             senderNumber = normalizeDigits(senderNumber).trim(),
             requireSenderMatch = requireSenderMatch,
             verifiedTemplateKeys = updatedKeys,
-            customBankName = customBankName?.trim()?.ifBlank { null }
+            customBankName = customBankName?.trim()?.ifBlank { null },
+            isEnabled = isEnabled
         )
+    }
+
+    fun toggleBankConfig(bank: BankType, isEnabled: Boolean) {
+        val current = bankConfigs[bank] ?: return
+        bankConfigs[bank] = current.copy(isEnabled = isEnabled)
     }
 
     fun removeConfiguredBank(bank: BankType) {
@@ -258,22 +276,42 @@ object IranianBankSmsEngine {
         return bankConfigs.values.toList()
     }
 
-    /**
-     * Returns the list of received SMS senders from live notifications + realistic SMS inbox history
-     * so the user can pick their bank's SMS number directly from the inbox list button.
-     */
-    fun getReceivedSmsInboxSenders(liveNotifications: List<BankNotificationItem> = emptyList()): List<ReceivedSmsSenderItem> {
-        val fromLive = liveNotifications.map { notif ->
+    fun getBuiltInSuggestedSenders(): List<ReceivedSmsSenderItem> {
+        return defaultInboxSenders.map {
+            it.copy(source = SmsSenderSource.BUILT_IN_SUGGESTION)
+        }
+    }
+
+    fun getLiveNotificationSenders(liveNotifications: List<BankNotificationItem>): List<ReceivedSmsSenderItem> {
+        return liveNotifications.map { notif ->
             ReceivedSmsSenderItem(
                 senderNumber = normalizeDigits(notif.sender).trim(),
                 bankTitleFa = if (notif.parsedResult.bank != BankType.UNKNOWN) notif.parsedResult.bank.faName else "پیامک دریافتی",
                 lastMessagePreview = notif.rawText.replace("\n", " • ").take(75),
                 receivedTimeFa = notif.receivedAt,
                 suggestedBank = notif.parsedResult.bank,
-                messageCount = 1
+                messageCount = 1,
+                source = SmsSenderSource.LIVE_NOTIFICATION
             )
         }
-        val combined = (fromLive + defaultInboxSenders)
+    }
+
+    fun recalculateAmountToman(rawAmount: Long, currency: DetectedCurrencyUnit): Long {
+        if (rawAmount <= 0L) return 0L
+        return when (currency) {
+            DetectedCurrencyUnit.RIAL -> rawAmount / 10L
+            DetectedCurrencyUnit.TOMAN -> rawAmount
+            DetectedCurrencyUnit.UNKNOWN -> rawAmount / 10L
+        }
+    }
+
+    /**
+     * Returns the list of received SMS senders from live notifications + realistic SMS inbox history
+     * so the user can pick their bank's SMS number directly from the inbox list button.
+     */
+    fun getReceivedSmsInboxSenders(liveNotifications: List<BankNotificationItem> = emptyList()): List<ReceivedSmsSenderItem> {
+        val fromLive = getLiveNotificationSenders(liveNotifications)
+        val combined = (fromLive + getBuiltInSuggestedSenders())
         return combined.distinctBy { it.senderNumber.lowercase() }
     }
 
@@ -435,6 +473,23 @@ object IranianBankSmsEngine {
         val cleanText = normalizeDigits(rawSms).trim()
         val cleanSender = senderAddress?.let { normalizeDigits(it).trim() }?.takeIf { it.isNotBlank() }
 
+        if (!isEngineEnabled) {
+            val hash = calculateHash("DISABLED_" + cleanText.take(40))
+            return BankSmsParsedResult(
+                bank = detectBank(cleanText, cleanSender),
+                direction = SmsTransactionDirection.UNKNOWN,
+                amountRial = 0L,
+                amountToman = 0L,
+                detectedCurrency = DetectedCurrencyUnit.UNKNOWN,
+                verificationStatus = SmsVerificationStatus.REJECTED,
+                reviewReasonFa = "موتور پردازش پیامک بانکی توسط کاربر غیرفعال شده است",
+                idempotencyKey = hash,
+                isOtpOrServiceMessage = false,
+                suggestedCategory = "اطلاع‌رسانی",
+                summaryFa = "پردازش پیامک متوقف است (موتور غیرفعال)"
+            )
+        }
+
         if (isOtpOrServiceSms(cleanText)) {
             val hash = calculateHash("OTP_" + cleanText.take(50))
             return BankSmsParsedResult(
@@ -489,7 +544,7 @@ object IranianBankSmsEngine {
         val templateVersion = getTemplateVersion(templateId)
         val templateVerified = isTemplateVerified(bank, templateId, templateVersion)
 
-        // Check strict sender policy (Audit Fix #3 + Mirza strict sender lock)
+        // Check strict sender policy (Audit Fix #3: strict sender lock)
         val senderCheck = evaluateSenderPolicy(bank, cleanSender)
 
         val hashPayload = "${bank.name}_${direction.name}_${amountRial}_${accountOrCard ?: ""}_${trackingCode ?: dateTime ?: cleanText.take(40)}"
@@ -620,6 +675,12 @@ object IranianBankSmsEngine {
         // 1. Check if this bank has a user-assigned sender number
         val customConfig = bankConfigs[bank]
         if (customConfig != null) {
+            if (!customConfig.isEnabled) {
+                return Pair(
+                    false,
+                    "پایش خودکار برای ${bank.faName} توسط کاربر غیرفعال شده است"
+                )
+            }
             val expected = customConfig.senderNumber
             if (customConfig.requireSenderMatch) {
                 if (cleanSender.isNullOrBlank()) {

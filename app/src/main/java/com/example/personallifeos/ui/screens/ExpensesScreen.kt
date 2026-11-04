@@ -85,6 +85,7 @@ import com.example.personallifeos.data.model.RecurringExpenseItem
 import com.example.personallifeos.data.model.RecurringFrequency
 import com.example.personallifeos.data.model.TransactionType
 import com.example.personallifeos.sms.BankSmsParsedResult
+import com.example.personallifeos.sms.BankType
 import com.example.personallifeos.sms.BankUserConfig
 import com.example.personallifeos.sms.DetectedCurrencyUnit
 import com.example.personallifeos.sms.IranianBankSmsEngine
@@ -114,6 +115,7 @@ fun ExpensesScreen(
     categoryBudgets: List<CategoryBudget> = emptyList(),
     configuredBanks: List<BankUserConfig> = emptyList(),
     pendingReviewSms: BankSmsParsedResult? = null,
+    processingHistory: List<com.example.personallifeos.data.local.SmsProcessingHistoryEntity> = emptyList(),
     onAddExpense: (String, Long, String, String?, Boolean, TransactionType, String?, String?) -> Unit,
     onUpdateExpense: (ExpenseItem) -> Unit = {},
     onDeleteExpense: (String) -> Unit,
@@ -130,9 +132,17 @@ fun ExpensesScreen(
     onExecuteRecurringExpense: (RecurringExpenseItem) -> Unit = {},
     onParseSms: (String, String?) -> String,
     onConfirmReview: (SmsTransactionDirection, DetectedCurrencyUnit, Long?) -> String = { _, _, _ -> "" },
+    onConfirmReviewWithOverrides: (SmsTransactionDirection, DetectedCurrencyUnit, BankType?, Long?, String?) -> Unit = { _, _, _, _, _ -> },
     onDismissReview: () -> Unit = {},
+    onSaveBankConfig: (BankType, String, Boolean, String?) -> Unit = { _, _, _, _ -> },
+    onDeleteBankConfig: (BankType) -> Unit = {},
+    onClearSmsHistory: () -> Unit = {},
+    onDeleteSmsHistoryItem: (String) -> Unit = {},
     onOpenBankSelector: () -> Unit = {},
     onOpenNotificationCenter: () -> Unit = {},
+    isEngineActive: Boolean = true,
+    onToggleEngineActive: (Boolean) -> Unit = {},
+    onToggleBankConfig: (BankType, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var selectedFinanceTab by remember { mutableIntStateOf(0) }
@@ -241,7 +251,7 @@ fun ExpensesScreen(
                 "۲. زمان‌بندی و دوره‌ای (${PersianUtils.formatPersianNumber(recurringExpenses.size.toLong())})",
                 "۳. طلب، بدهی و اقساط (${PersianUtils.formatPersianNumber(debts.size.toLong())})",
                 "۴. بودجه، حساب‌ها و گزارش",
-                "۵. پیامک بانکی و اسکنر"
+                "۵. مدیریت پیامک‌های بانکی"
             ).forEachIndexed { idx, title ->
                 Tab(
                     selected = selectedFinanceTab == idx,
@@ -303,7 +313,7 @@ fun ExpensesScreen(
                                             .background(Color(0xFF1E6F30))
                                             .clickable { onOpenBankSelector() }
                                             .padding(horizontal = 10.dp, vertical = 5.dp)
-                                            .testTag("open_mirza_bank_selector_btn")
+                                            .testTag("open_bank_selector_btn")
                                     ) {
                                         Text("+ افزودن بانک", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
@@ -1555,280 +1565,25 @@ fun ExpensesScreen(
             }
 
             // =================================================================
-            // TAB 4: پیامک بانکی و اسکنر (Mirza Visual Banks & SMS Parser)
+            // TAB 4: مدیریت پیامک‌های بانکی (BankSmsManagementScreen)
             // =================================================================
             if (selectedFinanceTab == 4) {
-                // SmsScanner Launch Banner
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(Color(0xFF0C2440), Color(0xFF07182C))
-                                )
-                            )
-                            .border(1.dp, CyanPrimary.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
-                            .clickable { isSmsScannerOpen = true }
-                            .padding(16.dp)
-                            .testTag("launch_sms_scanner_card")
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(CircleShape)
-                                        .background(CyanPrimary.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Message, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(24.dp))
-                                }
-                                Column {
-                                    Text(
-                                        text = "اسکنر پیامک‌های بانکی (SmsScanner)",
-                                        color = TextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "اسکن زنده پیامک‌ها، استخراج نام بانک، مبلغ و ثبت هوشمند در هزینه‌ها",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { isSmsScannerOpen = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.height(38.dp).testTag("open_sms_scanner_btn")
-                            ) {
-                                Text("اسکن پیامک", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
-
-                if (configuredBanks.isNotEmpty()) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "بانک‌ها و سرشماره‌های اختصاصی (${PersianUtils.formatPersianNumber(configuredBanks.size.toLong())})",
-                                    color = TextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "+ افزودن بانک جدید (میرزا)",
-                                    color = EmeraldAccent,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier
-                                        .clickable { onOpenBankSelector() }
-                                        .testTag("open_mirza_bank_selector_btn")
-                                )
-                            }
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(configuredBanks, key = { it.bank.name }) { cfg ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(Color(0xFF071E3D), Color(0xFF0E3762))
-                                                )
-                                            )
-                                            .border(1.dp, CyanPrimary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                                            .clickable { senderInput = cfg.senderNumber }
-                                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                                    ) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(cfg.bank.faName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                if (cfg.requireSenderMatch) {
-                                                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF86EFAC), modifier = Modifier.size(12.dp))
-                                                }
-                                                Text(
-                                                    text = if (cfg.requireSenderMatch) "فقط سرشماره: ${cfg.senderNumber}" else "سرشماره: ${cfg.senderNumber}",
-                                                    color = Color(0xFF86EFAC),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(0.5.dp, BorderCyanGlow, RoundedCornerShape(20.dp))
-                            .testTag("sms_parser_card")
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0x2606B6D4)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Message, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(18.dp))
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "فیش‌خوان هوشمند با قفل سرشماره اختصاصی",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "هر بانک فقط پیامک‌های ارسالی از سرشماره ثبت‌شده خودش را می‌خواند تا خطای ورودی/خروجی رخ ندهد:",
-                                        fontSize = 11.sp,
-                                        color = TextMuted
-                                    )
-                                }
-                            }
-
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("الگوهای شبکه بانکی (تست با ۱ لمس به همراه سرشماره بانک):", fontSize = 11.sp, color = TextMuted)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    items(IranianBankSmsEngine.SAMPLE_SMS_TEMPLATES.keys.toList()) { bankName ->
-                                        val sampleText = IranianBankSmsEngine.SAMPLE_SMS_TEMPLATES[bankName] ?: ""
-                                        val isSelected = smsInput == sampleText
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (isSelected) CyanPrimary else SurfaceDark)
-                                                .border(0.5.dp, if (isSelected) CyanPrimary else Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                                .clickable {
-                                                    smsInput = sampleText
-                                                    val detectedBank = IranianBankSmsEngine.detectBank(IranianBankSmsEngine.normalizeDigits(sampleText))
-                                                    val matchedCfg = configuredBanks.firstOrNull { it.bank == detectedBank }
-                                                    senderInput = matchedCfg?.senderNumber
-                                                        ?: detectedBank.defaultSenders.firstOrNull()
-                                                        ?: ""
-                                                    smsFeedback = null
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = bankName,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) Color.Black else TextSecondary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedTextField(
-                                    value = senderInput,
-                                    onValueChange = { senderInput = it },
-                                    placeholder = {
-                                        Text("سرشماره فرستنده (مثلاً 98300017)", color = TextMuted, fontSize = 12.sp)
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("sms_sender_field"),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                OutlinedButton(
-                                    onClick = { senderInput = "+989120000000" },
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text("تست شماره متفرقه", color = AmberWarning, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = smsInput,
-                                onValueChange = { smsInput = it },
-                                placeholder = {
-                                    Text("متن پیامک بانکی را وارد یا از کلیپ‌بورد پیست کنید...", color = TextMuted, fontSize = 12.sp)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("sms_input_field"),
-                                minLines = 3,
-                                maxLines = 4,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-
-                            smsFeedback?.let { msg ->
-                                val isWarning = msg.contains("نیازمند بررسی") || msg.contains("مسدود") || msg.contains("رد شد")
-                                val feedbackColor = if (isWarning) AmberWarning else EmeraldAccent
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(feedbackColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                        .padding(10.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isWarning) Icons.Default.Warning else Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = feedbackColor,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = msg, color = feedbackColor, fontSize = 12.sp)
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    if (smsInput.isNotBlank()) {
-                                        smsFeedback = onParseSms(smsInput, senderInput.takeIf { it.isNotBlank() })
-                                        smsInput = ""
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("parse_sms_btn")
-                            ) {
-                                Text("تحلیل و ثبت خودکار تراکنش", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
+                    BankSmsManagementScreen(
+                        configuredBanks = configuredBanks,
+                        processingHistory = processingHistory,
+                        pendingReviewSms = pendingReviewSms,
+                        isEngineActive = isEngineActive,
+                        onToggleEngineActive = onToggleEngineActive,
+                        onToggleBankConfig = onToggleBankConfig,
+                        onSaveBankConfig = onSaveBankConfig,
+                        onDeleteBankConfig = onDeleteBankConfig,
+                        onConfirmReview = onConfirmReviewWithOverrides,
+                        onDismissReview = onDismissReview,
+                        onClearHistory = onClearSmsHistory,
+                        onDeleteHistoryItem = onDeleteSmsHistoryItem,
+                        onAddExpense = onAddExpense
+                    )
                 }
             }
         }

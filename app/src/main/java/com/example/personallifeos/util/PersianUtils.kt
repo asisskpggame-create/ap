@@ -130,6 +130,22 @@ object PersianUtils {
             .lowercase()
     }
 
+    /**
+     * Masks card or account numbers for privacy compliance.
+     */
+    fun maskCardNumber(cardOrAccount: String): String {
+        val clean = cardOrAccount.trim()
+        if (clean.length < 8) return clean
+        return if (clean.length == 16) {
+            "${clean.take(4)}********${clean.takeLast(4)}"
+        } else {
+            val visibleStart = clean.take(2)
+            val visibleEnd = clean.takeLast(4)
+            val stars = "*".repeat((clean.length - 6).coerceIn(4, 8))
+            "$visibleStart$stars$visibleEnd"
+        }
+    }
+
     // =========================================================================
     // BigDecimal Financial Precision & Accounting Rules (HALF_UP, scale = 2)
     // =========================================================================

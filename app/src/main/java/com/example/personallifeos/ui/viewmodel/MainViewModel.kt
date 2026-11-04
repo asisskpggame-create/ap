@@ -32,10 +32,14 @@ import com.example.personallifeos.data.repository.LifeOsRepository
 import com.example.personallifeos.notification.SmartReminderManager
 import com.example.personallifeos.sms.BankNotificationItem
 import com.example.personallifeos.sms.BankSmsParsedResult
+import com.example.personallifeos.sms.BankSmsProcessingEngine
 import com.example.personallifeos.sms.BankType
 import com.example.personallifeos.sms.BankUserConfig
 import com.example.personallifeos.sms.DetectedCurrencyUnit
 import com.example.personallifeos.sms.IranianBankSmsEngine
+import com.example.personallifeos.sms.SmsProcessingChannel
+import com.example.personallifeos.sms.SmsProcessingResult
+import com.example.personallifeos.sms.SmsSenderSource
 import com.example.personallifeos.sms.SmsTransactionDirection
 import com.example.personallifeos.sms.SmsVerificationStatus
 import com.example.personallifeos.ui.screens.NotificationSettingsState
@@ -47,6 +51,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -305,8 +310,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pomodoroJob: Job? = null
 
-    private val _configuredBanks = MutableStateFlow<List<BankUserConfig>>(IranianBankSmsEngine.getConfiguredBanks())
-    val configuredBanks: StateFlow<List<BankUserConfig>> = _configuredBanks.asStateFlow()
+    val configuredBanks: StateFlow<List<BankUserConfig>> = repository.allBankConfigs
+        .map { list: List<BankUserConfig> ->
+            if (list.isEmpty()) BankSmsProcessingEngine.getConfiguredBanks()
+            else list
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            BankSmsProcessingEngine.getConfiguredBanks()
+        )
+
+    val smsProcessingHistory: StateFlow<List<com.example.personallifeos.data.local.SmsProcessingHistoryEntity>> =
+        repository.allProcessingHistory.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+    val pendingReviewHistory: StateFlow<List<com.example.personallifeos.data.local.SmsProcessingHistoryEntity>> =
+        repository.pendingReviewHistory.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
 
     private val _pendingReviewSms = MutableStateFlow<BankSmsParsedResult?>(null)
     val pendingReviewSms: StateFlow<BankSmsParsedResult?> = _pendingReviewSms.asStateFlow()
@@ -319,6 +346,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _activeFloatingBanner = MutableStateFlow<BankNotificationItem?>(null)
     val activeFloatingBanner: StateFlow<BankNotificationItem?> = _activeFloatingBanner.asStateFlow()
+
+    private val _isSmsEngineActive = MutableStateFlow(BankSmsProcessingEngine.isEngineActive())
+    val isSmsEngineActive: StateFlow<Boolean> = _isSmsEngineActive.asStateFlow()
 
     init {
         SmartReminderManager.ensureNotificationChannel(appContext)
@@ -1205,31 +1235,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // =========================================================================
-    // Iranian Bank SMS Engine & Live Notification Center
+    // Iranian Bank SMS Processing Engine (موتور هوشمند پردازش پیامک بانکی)
     // =========================================================================
+
+    fun setSmsEngineActive(active: Boolean) {
+        BankSmsProcessingEngine.setEngineActive(active)
+        _isSmsEngineActive.value = active
+    }
 
     fun saveBankConfig(
         bank: BankType,
         senderNumber: String,
         requireSenderMatch: Boolean,
-        customBankName: String? = null
+        customBankName: String? = null,
+        isEnabled: Boolean = true
     ) {
-        IranianBankSmsEngine.configureBankSenderPolicy(
+        val config = BankUserConfig(
             bank = bank,
-            senderNumber = senderNumber,
+            senderNumber = senderNumber.trim(),
             requireSenderMatch = requireSenderMatch,
-            verifyDefaultTemplate = true,
-            customBankName = customBankName
+            customBankName = customBankName?.trim()?.ifBlank { null },
+            isEnabled = isEnabled
         )
-        _configuredBanks.value = IranianBankSmsEngine.getConfiguredBanks()
+        viewModelScope.launch {
+            repository.saveBankConfig(config)
+        }
+    }
+
+    fun toggleBankConfig(bank: BankType, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.toggleBankConfig(bank, isEnabled)
+        }
     }
 
     fun saveBankConfig(bank: BankType, senderNumber: String, requireSenderMatch: Boolean) {
-        saveBankConfig(bank, senderNumber, requireSenderMatch, null)
+        saveBankConfig(bank, senderNumber, requireSenderMatch, null, true)
+    }
+
+    fun deleteBankConfig(bank: BankType) {
+        viewModelScope.launch {
+            repository.deleteBankConfig(bank.name)
+        }
+    }
+
+    fun clearSmsProcessingHistory() {
+        viewModelScope.launch {
+            repository.clearSmsProcessingHistory()
+        }
+    }
+
+    fun deleteSmsProcessingHistory(id: String) {
+        viewModelScope.launch {
+            repository.deleteSmsProcessingHistory(id)
+        }
     }
 
     fun parseAndAddSms(smsText: String, senderAddress: String? = null): String {
-        val parsed = IranianBankSmsEngine.parse(smsText, senderAddress)
+        val parsed = BankSmsProcessingEngine.parse(smsText, senderAddress)
         return when (parsed.verificationStatus) {
             SmsVerificationStatus.REJECTED -> {
                 parsed.reviewReasonFa ?: "پیامک غیرمالی یا ناموفق است و ثبت نشد."
@@ -1239,27 +1301,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             SmsVerificationStatus.NEEDS_REVIEW -> {
                 _pendingReviewSms.value = parsed
+                viewModelScope.launch {
+                    repository.insertProcessingHistory(
+                        com.example.personallifeos.data.local.SmsProcessingHistoryEntity(
+                            id = UUID.randomUUID().toString(),
+                            timestampMillis = System.currentTimeMillis(),
+                            receivedTimeFa = PersianUtils.getPersianDateString(),
+                            senderAddress = senderAddress ?: "دستی",
+                            senderSource = SmsSenderSource.USER_MANUAL_ENTRY.name,
+                            detectedBank = parsed.bank.name,
+                            bankFaName = parsed.bank.faName,
+                            transactionDirection = parsed.direction.name,
+                            rawExtractedAmount = parsed.rawExtractedAmount,
+                            finalAmountToman = parsed.amountToman,
+                            detectedCurrency = parsed.detectedCurrency.name,
+                            templateId = parsed.templateId,
+                            templateVersion = parsed.templateVersion,
+                            verificationStatus = parsed.verificationStatus.name,
+                            reviewReasonFa = parsed.reviewReasonFa,
+                            processingResult = SmsProcessingResult.NEEDS_REVIEW.name,
+                            errorDetails = null,
+                            idempotencyKey = parsed.idempotencyKey,
+                            linkedExpenseId = null,
+                            processingChannel = SmsProcessingChannel.MANUAL_ENTRY.name,
+                            maskedCardOrAccount = parsed.accountOrCard?.let { PersianUtils.maskCardNumber(it) },
+                            trackingCode = parsed.trackingCode
+                        )
+                    )
+                }
                 "نیازمند بررسی دستی: ${parsed.reviewReasonFa ?: "اطلاعات تراکنش کامل نیست"}"
             }
             SmsVerificationStatus.AUTO_ACCEPTED -> {
-                val txType = when (parsed.direction) {
-                    SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
-                    SmsTransactionDirection.TRANSFER_CARD,
-                    SmsTransactionDirection.TRANSFER_PAYA,
-                    SmsTransactionDirection.TRANSFER_POL -> TransactionType.TRANSFER
-                    else -> TransactionType.EXPENSE
+                viewModelScope.launch {
+                    repository.registerSmsTransaction(
+                        parsed = parsed,
+                        channel = SmsProcessingChannel.MANUAL_ENTRY,
+                        senderSource = SmsSenderSource.USER_MANUAL_ENTRY
+                    )
                 }
-                val title = parsed.merchantOrTerminal ?: parsed.destination ?: "${parsed.direction.faName} ${parsed.bank.faName}"
-                addExpense(
-                    title = title,
-                    amount = parsed.amountToman,
-                    category = parsed.suggestedCategory,
-                    bankName = parsed.bank.faName,
-                    isSms = true,
-                    type = txType,
-                    idempotencyKey = parsed.idempotencyKey,
-                    accountName = parsed.bank.faName
-                )
                 "تراکنش ${PersianUtils.formatToman(parsed.amountToman)} (${parsed.direction.faName}) از ${parsed.bank.faName} با موفقیت ثبت شد ✓"
             }
         }
@@ -1270,40 +1349,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         overrideCurrency: DetectedCurrencyUnit = DetectedCurrencyUnit.RIAL,
         overrideAmountToman: Long? = null
     ): String {
+        return confirmPendingReviewWithOverrides(
+            overrideDirection = overrideDirection,
+            overrideCurrency = overrideCurrency,
+            overrideBank = null,
+            overrideAmountToman = overrideAmountToman
+        )
+    }
+
+    fun confirmPendingReviewWithOverrides(
+        overrideDirection: SmsTransactionDirection,
+        overrideCurrency: DetectedCurrencyUnit = DetectedCurrencyUnit.RIAL,
+        overrideBank: BankType? = null,
+        overrideAmountToman: Long? = null,
+        overrideTitle: String? = null
+    ): String {
         val pending = _pendingReviewSms.value ?: return "پیامکی برای بررسی وجود ندارد."
-        val error = IranianBankSmsEngine.validateManualConfirmReview(
+        val error = BankSmsProcessingEngine.validateManualConfirmReview(
             parsed = pending,
             overrideDirection = overrideDirection,
             overrideCurrency = overrideCurrency,
+            overrideBank = overrideBank,
             overrideAmountToman = overrideAmountToman
         )
         if (error != null) {
             return error
         }
-        val finalAmount = overrideAmountToman ?: pending.amountToman
-        // STRICT AUDIT REQUIREMENT 1 & 6: Never map UNKNOWN to EXPENSE!
-        val txType = when (overrideDirection) {
-            SmsTransactionDirection.DEPOSIT -> TransactionType.INCOME
-            SmsTransactionDirection.TRANSFER_CARD,
-            SmsTransactionDirection.TRANSFER_PAYA,
-            SmsTransactionDirection.TRANSFER_POL -> TransactionType.TRANSFER
-            SmsTransactionDirection.WITHDRAWAL,
-            SmsTransactionDirection.PURCHASE -> TransactionType.EXPENSE
-            SmsTransactionDirection.UNKNOWN -> return "جهت تراکنش نامشخص است؛ لطفاً یکی از گزینه‌های واریز، برداشت یا انتقال را انتخاب کنید."
-        }
-        val title = pending.merchantOrTerminal ?: pending.destination ?: "${overrideDirection.faName} ${pending.bank.faName}"
-        addExpense(
-            title = title,
-            amount = finalAmount,
-            category = pending.suggestedCategory,
-            bankName = pending.bank.faName,
-            isSms = true,
-            type = txType,
-            idempotencyKey = pending.idempotencyKey,
-            accountName = pending.bank.faName
+
+        val finalBank = overrideBank ?: pending.bank
+        val finalAmount = overrideAmountToman
+            ?: if (overrideCurrency != pending.detectedCurrency) {
+                BankSmsProcessingEngine.recalculateAmountToman(pending.rawExtractedAmount, overrideCurrency)
+            } else {
+                pending.amountToman
+            }
+
+        val updatedParsed = pending.copy(
+            bank = finalBank,
+            direction = overrideDirection,
+            amountToman = finalAmount,
+            detectedCurrency = overrideCurrency
         )
+
+        viewModelScope.launch {
+            repository.registerSmsTransaction(
+                parsed = updatedParsed,
+                channel = SmsProcessingChannel.MANUAL_SCAN,
+                senderSource = SmsSenderSource.REAL_DEVICE_INBOX,
+                overrideAmountToman = finalAmount,
+                overrideTitle = overrideTitle
+            )
+        }
+
         _pendingReviewSms.value = null
         return "تراکنش بررسی‌شده (${overrideDirection.faName} - ${PersianUtils.formatToman(finalAmount)}) ثبت شد ✓"
+    }
+
+    fun setPendingReview(result: BankSmsParsedResult) {
+        _pendingReviewSms.value = result
     }
 
     fun dismissPendingReview() {
@@ -1693,7 +1796,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.resetAllData()
             IranianBankSmsEngine.resetDefaultState()
-            _configuredBanks.value = IranianBankSmsEngine.getConfiguredBanks()
             _pendingReviewSms.value = null
             _healthLog.value = _defaultHealth
         }

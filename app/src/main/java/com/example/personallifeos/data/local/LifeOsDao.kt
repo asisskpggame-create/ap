@@ -168,4 +168,54 @@ interface LifeOsDao {
 
     @Query("DELETE FROM vault_notes")
     suspend fun clearVaultNotes()
+
+    // Bank Configurations
+    @Query("SELECT * FROM bank_configs ORDER BY bankNameKey ASC")
+    fun getAllBankConfigs(): Flow<List<BankConfigEntity>>
+
+    @Query("SELECT * FROM bank_configs WHERE bankNameKey = :key LIMIT 1")
+    suspend fun getBankConfigByKey(key: String): BankConfigEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBankConfig(config: BankConfigEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBankConfigs(configs: List<BankConfigEntity>): List<Long>
+
+    @Update
+    suspend fun updateBankConfig(config: BankConfigEntity)
+
+    @Query("DELETE FROM bank_configs WHERE bankNameKey = :key")
+    suspend fun deleteBankConfig(key: String)
+
+    @Query("DELETE FROM bank_configs")
+    suspend fun clearBankConfigs()
+
+    // SMS Processing History
+    @Query("SELECT * FROM sms_processing_history ORDER BY timestampMillis DESC")
+    fun getAllProcessingHistory(): Flow<List<SmsProcessingHistoryEntity>>
+
+    @Query("SELECT * FROM sms_processing_history WHERE processingResult = :result ORDER BY timestampMillis DESC")
+    fun getProcessingHistoryByResult(result: String): Flow<List<SmsProcessingHistoryEntity>>
+
+    @Query("SELECT * FROM sms_processing_history WHERE processingResult = 'NEEDS_REVIEW' ORDER BY timestampMillis DESC")
+    fun getPendingReviewHistory(): Flow<List<SmsProcessingHistoryEntity>>
+
+    @Query("SELECT * FROM sms_processing_history WHERE idempotencyKey = :key LIMIT 1")
+    suspend fun getHistoryByIdempotencyKey(key: String): SmsProcessingHistoryEntity?
+
+    @Query("SELECT * FROM sms_processing_history WHERE id = :id LIMIT 1")
+    suspend fun getHistoryById(id: String): SmsProcessingHistoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProcessingHistory(record: SmsProcessingHistoryEntity): Long
+
+    @Update
+    suspend fun updateProcessingHistory(record: SmsProcessingHistoryEntity)
+
+    @Query("DELETE FROM sms_processing_history WHERE id = :id")
+    suspend fun deleteProcessingHistory(id: String)
+
+    @Query("DELETE FROM sms_processing_history")
+    suspend fun clearProcessingHistory()
 }

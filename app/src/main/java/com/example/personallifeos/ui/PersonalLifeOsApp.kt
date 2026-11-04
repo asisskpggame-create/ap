@@ -124,9 +124,11 @@ fun PersonalLifeOsApp(
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     val configuredBanks by viewModel.configuredBanks.collectAsState()
     val pendingReviewSms by viewModel.pendingReviewSms.collectAsState()
+    val smsProcessingHistory by viewModel.smsProcessingHistory.collectAsState()
     val bankNotifications by viewModel.bankNotifications.collectAsState()
     val notificationSettings by viewModel.notificationSettings.collectAsState()
     val activeFloatingBanner by viewModel.activeFloatingBanner.collectAsState()
+    val isSmsEngineActive by viewModel.isSmsEngineActive.collectAsState()
     val requestOpenVoiceModal by viewModel.requestOpenVoiceModal.collectAsState()
     val requestedNavigationTab by viewModel.requestedNavigationTab.collectAsState()
     val moreSubscreen by viewModel.moreSubscreen.collectAsState()
@@ -399,6 +401,7 @@ fun PersonalLifeOsApp(
                                 categoryBudgets = categoryBudgets,
                                 configuredBanks = configuredBanks,
                                 pendingReviewSms = pendingReviewSms,
+                                processingHistory = smsProcessingHistory,
                                 onAddExpense = { title, amount, cat, bank, isSms, txType, acc, key ->
                                     viewModel.addExpense(
                                         title = title,
@@ -430,9 +433,21 @@ fun PersonalLifeOsApp(
                                 onExecuteRecurringExpense = { viewModel.executeRecurringExpenseNow(it) },
                                 onParseSms = { sms, sender -> viewModel.parseAndAddSms(sms, sender) },
                                 onConfirmReview = { dir, curr, amt -> viewModel.confirmPendingReview(dir, curr, amt) },
+                                onConfirmReviewWithOverrides = { dir, curr, bank, amt, title ->
+                                    viewModel.confirmPendingReviewWithOverrides(dir, curr, bank, amt, title)
+                                },
                                 onDismissReview = { viewModel.dismissPendingReview() },
+                                onSaveBankConfig = { bank, sender, req, customName ->
+                                    viewModel.saveBankConfig(bank, sender, req, customName)
+                                },
+                                onDeleteBankConfig = { viewModel.deleteBankConfig(it) },
+                                onClearSmsHistory = { viewModel.clearSmsProcessingHistory() },
+                                onDeleteSmsHistoryItem = { viewModel.deleteSmsProcessingHistory(it) },
                                 onOpenBankSelector = { isBankSelectorOpen = true },
-                                onOpenNotificationCenter = { isNotificationCenterOpen = true }
+                                onOpenNotificationCenter = { isNotificationCenterOpen = true },
+                                isEngineActive = isSmsEngineActive,
+                                onToggleEngineActive = { viewModel.setSmsEngineActive(it) },
+                                onToggleBankConfig = { bank, enabled -> viewModel.toggleBankConfig(bank, enabled) }
                             )
 
                             Screen.More -> {

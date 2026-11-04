@@ -72,6 +72,39 @@ enum class SmsVerificationStatus(val titleFa: String) {
 }
 
 /**
+ * Strict source classification for sender numbers to guarantee transparency.
+ * Built-in suggestions are NEVER conflated with actual device inbox history.
+ */
+enum class SmsSenderSource(val titleFa: String, val badgeColorHex: Long) {
+    REAL_DEVICE_INBOX("صندوق پیامک گوشی", 0xFF06B6D4),
+    LIVE_NOTIFICATION("اعلان زنده", 0xFF10B981),
+    BUILT_IN_SUGGESTION("پیشنهاد پیش‌فرض سامانه", 0xFF64748B),
+    USER_MANUAL_ENTRY("ورود دستی کاربر", 0xFFF59E0B)
+}
+
+/**
+ * Processing outcome status recorded in persistent audit history.
+ */
+enum class SmsProcessingResult(val titleFa: String, val badgeColorHex: Long) {
+    AUTO_REGISTERED("ثبت خودکار", 0xFF10B981),
+    MANUALLY_CONFIRMED("تأیید دستی کاربر", 0xFF06B6D4),
+    NEEDS_REVIEW("نیازمند بررسی", 0xFFF59E0B),
+    REJECTED("رد شده / غیرمالی", 0xFF94A3B8),
+    DUPLICATE("تکراری (مسدود شده)", 0xFF64748B),
+    PROCESSING_ERROR("خطای پردازش", 0xFFEF4444)
+}
+
+/**
+ * Ingestion channel indicating how the message entered the processing engine.
+ */
+enum class SmsProcessingChannel(val titleFa: String) {
+    LIVE_RECEIVER("دریافت زنده پیامک"),
+    MANUAL_SCAN("اسکن صندوق دستگاه"),
+    MANUAL_ENTRY("ثبت مستقیم دستی"),
+    TEST_BENCH("میز آزمایش پیامک")
+}
+
+/**
  * Audit Fix #2 & #3:
  * Template-level verification and explicit sender policy profile.
  */
@@ -88,12 +121,16 @@ data class BankUserConfig(
     val senderNumber: String,
     val requireSenderMatch: Boolean = true,
     val verifiedTemplateKeys: Set<String> = emptySet(), // Format: "${templateId}@v${version}"
-    val customBankName: String? = null
+    val customBankName: String? = null,
+    val isEnabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val verificationEvidence: String? = null
 )
 
 /**
  * Represents a detected SMS sender from the user's SMS inbox / notification history
- * so the user can pick the exact sender number for a bank from a list or enter it manually.
+ * with its explicit, verified origin source.
  */
 data class ReceivedSmsSenderItem(
     val senderNumber: String,
@@ -101,7 +138,8 @@ data class ReceivedSmsSenderItem(
     val lastMessagePreview: String,
     val receivedTimeFa: String,
     val suggestedBank: BankType,
-    val messageCount: Int = 1
+    val messageCount: Int = 1,
+    val source: SmsSenderSource = SmsSenderSource.REAL_DEVICE_INBOX
 )
 
 data class BankNotificationItem(
@@ -119,6 +157,7 @@ data class BankSmsParsedResult(
     val direction: SmsTransactionDirection,
     val amountRial: Long,
     val amountToman: Long,
+    val rawExtractedAmount: Long = amountRial,
     val detectedCurrency: DetectedCurrencyUnit = DetectedCurrencyUnit.RIAL,
     val templateId: String = "GENERIC_V1",
     val templateVersion: Int = 1,

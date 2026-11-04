@@ -21,9 +21,11 @@ import java.io.File
         ExpenseEntity::class,
         DebtEntity::class,
         HealthLogEntity::class,
-        VaultNoteEntity::class
+        VaultNoteEntity::class,
+        BankConfigEntity::class,
+        SmsProcessingHistoryEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -110,6 +112,76 @@ abstract class AppDatabase : RoomDatabase() {
         private fun migrateToVersion8(db: SupportSQLiteDatabase) {
             migrateToVersion7(db)
             applyUniqueIdempotencyIndex(db)
+        }
+
+        private fun createBankConfigsAndHistoryTables(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `bank_configs` (
+                    `bankNameKey` TEXT NOT NULL,
+                    `senderNumber` TEXT NOT NULL,
+                    `requireSenderMatch` INTEGER NOT NULL,
+                    `customBankName` TEXT,
+                    `isEnabled` INTEGER NOT NULL,
+                    `verifiedTemplateKeysSerialized` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `verificationEvidence` TEXT,
+                    PRIMARY KEY(`bankNameKey`)
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sms_processing_history` (
+                    `id` TEXT NOT NULL,
+                    `timestampMillis` INTEGER NOT NULL,
+                    `receivedTimeFa` TEXT NOT NULL,
+                    `senderAddress` TEXT NOT NULL,
+                    `senderSource` TEXT NOT NULL,
+                    `detectedBank` TEXT NOT NULL,
+                    `bankFaName` TEXT NOT NULL,
+                    `transactionDirection` TEXT NOT NULL,
+                    `rawExtractedAmount` INTEGER NOT NULL,
+                    `finalAmountToman` INTEGER NOT NULL,
+                    `detectedCurrency` TEXT NOT NULL,
+                    `templateId` TEXT NOT NULL,
+                    `templateVersion` INTEGER NOT NULL,
+                    `verificationStatus` TEXT NOT NULL,
+                    `reviewReasonFa` TEXT,
+                    `processingResult` TEXT NOT NULL,
+                    `errorDetails` TEXT,
+                    `idempotencyKey` TEXT NOT NULL,
+                    `linkedExpenseId` TEXT,
+                    `processingChannel` TEXT NOT NULL,
+                    `maskedCardOrAccount` TEXT,
+                    `trackingCode` TEXT,
+                    `userConfirmedTimestamp` INTEGER,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+
+            safeExec(db, "CREATE INDEX IF NOT EXISTS `index_sms_processing_history_idempotencyKey` ON `sms_processing_history` (`idempotencyKey`)")
+            safeExec(db, "CREATE INDEX IF NOT EXISTS `index_sms_processing_history_timestampMillis` ON `sms_processing_history` (`timestampMillis`)")
+        }
+
+        private fun migrateToVersion9(db: SupportSQLiteDatabase) {
+            migrateToVersion8(db)
+            createBankConfigsAndHistoryTables(db)
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) = createBankConfigsAndHistoryTables(db)
+        }
+
+        val MIGRATION_7_9 = object : Migration(7, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion9(db)
+        }
+
+        val MIGRATION_1_9 = object : Migration(1, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) = migrateToVersion9(db)
         }
 
         val MIGRATION_7_8 = object : Migration(7, 8) {
@@ -216,6 +288,9 @@ abstract class AppDatabase : RoomDatabase() {
                     "personal_life_os.db"
                 )
                     .addMigrations(
+                        MIGRATION_8_9,
+                        MIGRATION_7_9,
+                        MIGRATION_1_9,
                         MIGRATION_7_8,
                         MIGRATION_6_8,
                         MIGRATION_5_8,
